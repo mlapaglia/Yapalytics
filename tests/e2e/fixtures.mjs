@@ -10,7 +10,7 @@ import { test as base, expect } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 
 const nodeModule = (path) => fileURLToPath(new URL(`../../node_modules/${path}`, import.meta.url));
-export const ECHARTS_URL = 'https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js';
+export const ECHARTS_URL = 'https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js';
 export const HEIC_TO_URL = 'https://cdn.jsdelivr.net/npm/heic-to@1.6.5/dist/iife/heic-to.js';
 export const HEIC_TO_PATH = nodeModule('heic-to/dist/iife/heic-to.js');
 const LOCAL = {
