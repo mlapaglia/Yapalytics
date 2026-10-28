@@ -986,6 +986,6 @@ function swearOption(ui, C) {
 
 function platformMixOption(ui, A, names) {
   const months = [...A.sourceMonths.keys()].sort((a, b) => a - b);
-  const present = [0, 1, 2, 3, 4].filter((s) => months.some((mo) => A.sourceMonths.get(mo)[s]));
+  const present = [0, 1, 2, 3, 4, 5].filter((s) => months.some((mo) => A.sourceMonths.get(mo)[s]));
   return monthlyStackOption(ui, months, present.map((s) => ({ name: names[s], color: ui.series[s], get: (mo) => A.sourceMonths.get(mo)[s] })));
 }

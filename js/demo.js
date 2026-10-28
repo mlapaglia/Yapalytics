@@ -2,7 +2,8 @@
  * Synthetic demo backup. Builds a realistic-looking sms-*.xml and calls-*.xml in the
  * same format SMS Backup & Restore writes (including emoji as surrogate entities and
  * base64 attachment data), plus a Google Takeout Google Chat export, WhatsApp
- * chat exports and an imessage-exporter export, so the demo goes through the real parsers.
+ * chat exports, an imessage-exporter export, a Telegram export and an Instagram export,
+ * so the demo goes through the real parsers.
  */
 function buildDemoFiles() {
   let seed = 20240611;
@@ -184,7 +185,117 @@ function buildDemoFiles() {
     ...buildDemoWhatsApp(rand, pick, lines, end.getTime()),
     ...buildDemoIMessage(rand, pick, lines, end.getTime()),
     buildDemoTelegram(rand, pick, lines, end.getTime()),
+    buildDemoInstagram(rand, pick, lines, end.getTime()),
   ];
+}
+
+/*
+ * Synthetic Instagram "Download your information" export (JSON format), zipped as Instagram
+ * delivers it: personal_information.json, a 1-on-1 split over message_1.json and
+ * message_2.json (newest first, like the real thing), a group, an archived chat and a
+ * message request (skipped by the parser). Includes the format's quirks: text written as
+ * UTF-8 bytes escaped one per character, shared reels with an "… sent an attachment."
+ * placeholder, "Liked a message", call and group notices, reactions as a field, and photos.
+ */
+function buildDemoInstagram(rand, pick, lines, endT) {
+  const DAY = 86400000;
+  const me = 'Jamie Park';
+  const noor = 'Noor Haddad';
+  const leo = 'Leo Martins';
+  const priya = 'Priya Shah';
+  const textLines = lines.filter((l) => !/^(?:Liked|Loved|Laughed|\S+ to “)/.test(l));
+  const root = 'your_instagram_activity/messages/';
+  const files = [];
+  let photoN = 1;
+
+  /** One message with the format's variety: text, photos, shared reels, likes, reactions. */
+  const message = (t, who, dir) => {
+    const m = { sender_name: who, timestamp_ms: t };
+    const r = rand();
+    if (r < 0.06) {
+      const uri = `${root}${dir}/photos/${18000000000000000 + photoN++}.jpg`;
+      files.push([uri, demoPng(rand)]);
+      m.photos = [{ uri, creation_timestamp: Math.floor(t / 1000) }];
+    } else if (r < 0.14) {
+      m.content = `${who} sent an attachment.`;
+      m.share = { link: 'https://www.instagram.com/reel/' + Math.floor(rand() * 1e9).toString(36) + '/', share_text: 'POV: you finally found the perfect taco 🌮', original_content_owner: 'tacotuesday' };
+    } else if (r < 0.17) {
+      m.content = pick(['Liked a message', 'Reacted 😂 to your message ', 'Reacted ❤️ to your message ']);
+    } else {
+      m.content = pick(textLines);
+    }
+    if (rand() < 0.06) m.reactions = [{ reaction: pick(['❤️', '😂', '😮']), actor: who === me ? noor : me, timestamp: Math.floor(t / 1000) + 30 }];
+    m.is_geoblocked_for_viewer = false;
+    m.is_unsent_image_by_messenger_kid_parent = false;
+    return m;
+  };
+
+  /** Days of conversation between `people` (the first is the one who usually starts), newest first. */
+  const conversation = (people, dir, perDay, from) => {
+    const msgs = [];
+    for (let day = from; day < endT; day += DAY) {
+      if (rand() > perDay) continue;
+      let t = day + (10 + Math.floor(rand() * 13)) * 3600e3 + Math.floor(rand() * 3600e3);
+      let who = pick(people);
+      for (let i = 0, n = 1 + Math.floor(rand() * rand() * 12); i < n && t < endT; i++) {
+        msgs.push(message(t, who, dir));
+        who = rand() < 0.35 ? who : pick(people.filter((p) => p !== who));
+        t += Math.floor((rand() < 0.8 ? rand() * 6 : 6 + rand() * 120) * 60000) + 1000 + Math.floor(rand() * 1000);
+      }
+    }
+    return msgs.reverse();
+  };
+
+  const thread = (dir, title, people, messages) => ({
+    participants: people.map((name) => ({ name })),
+    messages,
+    title,
+    is_still_participant: true,
+    thread_path: dir,
+    magic_words: [],
+  });
+  /** Meta's encoding: every non-ASCII character as its UTF-8 bytes, each written as \u00XX. */
+  const enc = new TextEncoder();
+  const metaJson = (data) => JSON.stringify(data, null, 2).replace(/[^\x00-\x7f]/gu, (ch) => [...enc.encode(ch)].map((b) => '\\u00' + b.toString(16).padStart(2, '0')).join(''));
+
+  const start = endT - 280 * DAY;
+  const noorDir = 'inbox/noorhaddad_17846200000000001';
+  const noorMsgs = conversation([noor, me], noorDir, 0.6, start);
+  const callT = noorMsgs[5].timestamp_ms + 60000;
+  noorMsgs.splice(5, 0,
+    { sender_name: me, timestamp_ms: callT + 900000, content: 'Video chat ended', call_duration: 840, is_geoblocked_for_viewer: false },
+    { sender_name: me, timestamp_ms: callT, content: `${me} started a video chat`, is_geoblocked_for_viewer: false });
+  const half = Math.floor(noorMsgs.length / 2);
+
+  const groupDir = 'inbox/concertsquad_6512345678901234';
+  const groupStart = start + 40 * DAY;
+  const groupMsgs = conversation([leo, me, noor, priya], groupDir, 0.4, groupStart);
+  groupMsgs.push(
+    { sender_name: leo, timestamp_ms: groupStart + 3600e3, content: `${leo} named the group Concert Squad 🎸.`, is_geoblocked_for_viewer: false },
+    { sender_name: leo, timestamp_ms: groupStart + 3000e3, content: `${leo} added ${priya} to the group.`, is_geoblocked_for_viewer: false });
+
+  const leoDir = 'archived_threads/leomartins_17846200000000002';
+  const requestDir = 'message_requests/freefollowers4u_17846200000000003';
+  const stamp = new Date(endT).toISOString().slice(0, 10);
+  return new File(
+    [buildStoredZip([
+      ['personal_information/personal_information/personal_information.json', metaJson({
+        profile_user: [{ title: '', media_map_data: {}, string_map_data: {
+          Email: { href: '', value: 'jamie@example.com', timestamp: 0 },
+          Username: { href: '', value: 'jamiepark', timestamp: 0 },
+          Name: { href: '', value: me, timestamp: 0 },
+        } }],
+      })],
+      [`${root}${noorDir}/message_1.json`, metaJson(thread(noorDir, noor, [noor, me], noorMsgs.slice(0, half)))],
+      [`${root}${noorDir}/message_2.json`, metaJson(thread(noorDir, noor, [noor, me], noorMsgs.slice(half)))],
+      [`${root}${groupDir}/message_1.json`, metaJson(thread(groupDir, 'Concert Squad 🎸', [leo, me, noor, priya], groupMsgs))],
+      [`${root}${leoDir}/message_1.json`, metaJson(thread(leoDir, leo, [leo, me], conversation([leo, me], leoDir, 0.3, start).slice(-30)))],
+      [`${root}${requestDir}/message_1.json`, metaJson(thread(requestDir, 'Free Followers 4U', ['Free Followers 4U', me], [{ sender_name: 'Free Followers 4U', timestamp_ms: endT - 3 * DAY, content: 'Want 10k followers? DM us 🚀' }]))],
+      ...files,
+    ])],
+    `instagram-jamiepark-${stamp}-dEmO01.zip`,
+    { type: 'application/zip' },
+  );
 }
 
 /*

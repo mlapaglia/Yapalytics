@@ -8,8 +8,8 @@ test.describe('demo data', () => {
       for (const m of S.msgs) n[m.s || 0] = (n[m.s || 0] || 0) + 1;
       return n;
     });
-    // SMS, Google Chat, WhatsApp, iMessage and Telegram demo exports all parse.
-    for (const s of ['0', '1', '2', '3', '4']) expect(bySource[s], `source ${s}`).toBeGreaterThan(100);
+    // SMS, Google Chat, WhatsApp, iMessage, Telegram and Instagram demo exports all parse.
+    for (const s of ['0', '1', '2', '3', '4', '5']) expect(bySource[s], `source ${s}`).toBeGreaterThan(100);
     await expect(page.locator('#kpis .kpi').first()).toBeVisible();
     await expect(page.locator('#sourceSeg')).toBeVisible();
     const timeline = await chartOption(page, 'c-timeline');
