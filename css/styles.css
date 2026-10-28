@@ -226,7 +226,7 @@ code { font-size: 0.92em; background: var(--surface-2); padding: 1px 5px; border
 .source .note { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
 .source .links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 8px; }
 .source .links .btn { text-decoration: none; }
-.source.tips { background: var(--surface-2); border-style: dashed; }
+.source.tips { grid-column: 1 / -1; background: var(--surface-2); border-style: dashed; }
 .nowrap { white-space: nowrap; }
 .source.tips .source-icon { background: var(--surface); }
 

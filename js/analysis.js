@@ -3,12 +3,12 @@
  *
  * Message record (from parser.js / googlechat.js):
  *   t  epoch ms      o  1 = sent, 0 = received      m  1 = MMS, 0 = SMS
- *   s  source: 0 = SMS Backup & Restore, 1 = Google Chat, 2 = WhatsApp, 3 = iMessage, 4 = Telegram
- *   sn sender name (Google Chat: group messages you received; WhatsApp / iMessage / Telegram: every message)
+ *   s  source: 0 = SMS Backup & Restore, 1 = Google Chat, 2 = WhatsApp, 3 = iMessage, 4 = Telegram, 5 = Instagram
+ *   sn sender name (Google Chat: group messages you received; WhatsApp / iMessage / Telegram / Instagram: every message)
  *   sk sender's 1-on-1 thread key (SMS group messages you received)
  *   v  mood: VADER compound score in [-1, 1] (messages with words; not reactions)
  *   sw number of swear words (only set when > 0)
- *   k  thread key ('g:' prefix = group chat; Google Chat keys contain 'gc:', WhatsApp 'wa:', iMessage 'im:', Telegram 'tg:')
+ *   k  thread key ('g:' prefix = group chat; Google Chat keys contain 'gc:', WhatsApp 'wa:', iMessage 'im:', Telegram 'tg:', Instagram 'ig:')
  *   b  text body                   l  length in characters
  *   wc word count    e  array of emoji or null      f  trait bit flags
  *   ph/gf/vd/au/ot   photo / gif / video / audio / other attachment counts
@@ -267,7 +267,7 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
     ym[r.mo % 12]++;
 
     let sm = A.sourceMonths.get(r.mo);
-    if (!sm) A.sourceMonths.set(r.mo, (sm = [0, 0, 0, 0, 0]));
+    if (!sm) A.sourceMonths.set(r.mo, (sm = [0, 0, 0, 0, 0, 0]));
     sm[r.s || 0]++;
 
     let gm = A.groupMonths.get(r.mo);

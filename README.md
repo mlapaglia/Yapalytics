@@ -1,7 +1,7 @@
 # Yapalytics
 <img width="200" height="200" alt="logo" src="https://github.com/user-attachments/assets/aeddef68-a668-4885-8236-212975230a9f" />
 
-What your SMS, Google Chat, WhatsApp, iMessage and Telegram messages reveal about you
+What your SMS, Google Chat, WhatsApp, iMessage, Telegram and Instagram messages reveal about you
 
 1. Export your messages:
    - **SMS / MMS:** back up your Android Google Messages chats using [SMS Backup & Restore](https://play.google.com/store/apps/details?id=com.riteshsahu.SMSBackupRestore).
@@ -9,9 +9,10 @@ What your SMS, Google Chat, WhatsApp, iMessage and Telegram messages reveal abou
    - **WhatsApp:** open a chat, then ⋮ / the contact or group name → **Export chat** (with or without media). Repeat for each chat you want; you get `WhatsApp Chat with ….txt` (Android) or `WhatsApp Chat - ….zip` (iPhone).
    - **iMessage:** on a Mac, install [imessage-exporter](https://github.com/ReagentX/imessage-exporter) (`brew install imessage-exporter`) and run `imessage-exporter -f txt` (add `-c clone` to also copy attachments, `-p <backup folder>` to read an iPhone backup instead). It writes one `.txt` per conversation to `~/imessage_export`; select them all, or zip the folder to include attachment sizes.
    - **Telegram:** in [Telegram Desktop](https://desktop.telegram.org/), open **Settings → Advanced → Export Telegram data** (or a chat's ⋮ menu → **Export chat history** for one chat), and set **Format** to **Machine-readable JSON**. Pick the `result.json` it writes, or zip the whole export folder so photos can be opened too. Channels and Saved Messages are left out; the HTML format can't be read. See Telegram's [export format](https://core.telegram.org/import-export).
+   - **Instagram:** in the app, open **Settings → Accounts Center → Your information and permissions → [Export your information](https://accountscenter.instagram.com/info_and_permissions/dyi/) → Create export → Export to device**. Under **Customize information** pick **Messages** (and **Personal information**, so the app knows which sender is you), set **Date range** to **All time** and **Format** to **JSON**. Download the `.zip` when it's ready; large exports come in several parts, so pick them all together. Message requests you never accepted are left out; the HTML format can't be read.
 2. Navigate to https://yapalytics.online
-3. Import the xml backup(s), Takeout zip(s), WhatsApp exports, iMessage `.txt` files and/or Telegram exports. Pick every part of a split Takeout export together. WhatsApp exports don't say which sender is you; the app guesses, and you can correct it with **You on WhatsApp** (and **You on Telegram**, for a Telegram export of a single group).
-4. Look at fancy graphs! When both kinds are loaded, use the All / SMS / Google Chat / WhatsApp / iMessage / Telegram switch to compare them.
+3. Import the xml backup(s), Takeout zip(s), WhatsApp exports, iMessage `.txt` files, Telegram exports and/or Instagram zips. Pick every part of a split Takeout export together. WhatsApp exports don't say which sender is you; the app guesses, and you can correct it with **You on WhatsApp** (and **You on Telegram** / **You on Instagram**, when those exports don't say).
+4. Look at fancy graphs! When both kinds are loaded, use the All / SMS / Google Chat / WhatsApp / iMessage / Telegram / Instagram switch to compare them.
 
 All processing occurs in the browser, your data is never uploaded anywhere!
 

@@ -614,7 +614,7 @@ function renderGallery(msgs) {
   Gallery.shown = 0;
   $('#galleryCount').textContent = `${fmtNum(all.length)} attachment${all.length === 1 ? '' : 's'} in this selection, newest first. Click one to open it.`;
   $('#galleryNote').textContent = unpreviewable
-    ? `${fmtNum(unpreviewable)} more can't be shown because their files weren't loaded: WhatsApp and iMessage exports are only counted, and for Telegram, zip the whole export folder.`
+    ? `${fmtNum(unpreviewable)} more can't be shown because their files weren't loaded: WhatsApp and iMessage exports are only counted; for Telegram, zip the whole export folder; for Instagram, choose the export's .zip.`
     : '';
 
   const grid = $('#galleryGrid');
