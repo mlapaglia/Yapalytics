@@ -7,6 +7,7 @@
  *   sn sender name (Google Chat: group messages you received; WhatsApp / iMessage / Telegram / Instagram: every message)
  *   sk sender's 1-on-1 thread key (SMS group messages you received)
  *   v  mood: VADER compound score in [-1, 1] (messages with words; not reactions)
+ *   ai mood from the AI model, once scored: [negative, neutral, positive] probabilities (spec 001)
  *   sw number of swear words (only set when > 0)
  *   k  thread key ('g:' prefix = group chat; Google Chat keys contain 'gc:', WhatsApp 'wa:', iMessage 'im:', Telegram 'tg:', Instagram 'ig:')
  *   b  text body                   l  length in characters
@@ -407,6 +408,29 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
 
 const TOKEN_RE = /[\p{L}\p{N}']+/gu;
 const MOOD_THRESHOLD = 0.05; // VADER's standard cut-off for positive / negative
+
+/*
+ * Two mood scorers (spec 001): 'vader' reads r.v, the VADER compound score; 'ai' reads
+ * r.ai = [negative, neutral, positive] probabilities from the sentiment model. The AI
+ * score is positive − negative, and its label is the most likely class.
+ */
+
+/** A message's mood score in [-1, 1] by `scorer`, or null when it has none. */
+function moodScore(r, scorer = 'vader') {
+  if (scorer === 'ai') return r.ai ? Math.round((r.ai[2] - r.ai[0]) * 100) / 100 : null;
+  return r.v == null ? null : r.v;
+}
+
+/** 1 positive, -1 negative, 0 neutral, or null when the message has no score by `scorer`. */
+function moodSign(r, scorer = 'vader') {
+  if (scorer === 'ai') {
+    const p = r.ai;
+    if (!p) return null;
+    return p[2] > p[1] && p[2] > p[0] ? 1 : p[0] > p[1] && p[0] >= p[2] ? -1 : 0;
+  }
+  if (r.v == null) return null;
+  return r.v >= MOOD_THRESHOLD ? 1 : r.v <= -MOOD_THRESHOLD ? -1 : 0;
+}
 const URL_RE = /(?:https?:\/\/|\bwww\.)\S+/gi;
 const VOCAB_NEW_TOP = 30; // new words kept per side per month
 const URL_HOST_RE = /(?:https?:\/\/|\bwww\.)([^\s/?#:<>"')\]]+)/gi;
@@ -438,10 +462,10 @@ let swearFamilyOf = null; // messageLib().swearFamily, created on first use
 
 /**
  * Second pass for the text-heavy views: emoji per month, shared link domains,
- * vocabulary (unique words) per month, mood (positive / negative share) per month
- * and swearing.
+ * vocabulary (unique words) per month, mood (positive / negative share) per month,
+ * scored by `scorer` ('vader' or 'ai'), and swearing.
  */
-function aggregateContent(msgs) {
+function aggregateContent(msgs, scorer = 'vader') {
   const C = {
     emojiMonths: new Map(), // mo -> Map(emoji -> n)
     emojiTotals: new Map(), // emoji -> n
@@ -483,13 +507,14 @@ function aggregateContent(msgs) {
     if (!vc) vocabCounts.set(r.mo, (vc = [new Map(), new Map()]));
     // Words only: leave out the pieces of links.
     for (const tk of r.f & T_LINK ? tokensOf(r.b.replace(URL_RE, ' ')) : tokens) vc[o].set(tk, (vc[o].get(tk) || 0) + 1);
-    if (r.v != null) {
+    const sign = moodSign(r, scorer);
+    if (sign != null) {
       let md = C.mood.get(r.mo);
       if (!md) C.mood.set(r.mo, (md = { pos: [0, 0], neg: [0, 0], n: [0, 0] }));
       md.n[o]++;
       C.moodTotal.n[o]++;
-      if (r.v >= MOOD_THRESHOLD) { md.pos[o]++; C.moodTotal.pos[o]++; }
-      else if (r.v <= -MOOD_THRESHOLD) { md.neg[o]++; C.moodTotal.neg[o]++; }
+      if (sign > 0) { md.pos[o]++; C.moodTotal.pos[o]++; }
+      else if (sign < 0) { md.neg[o]++; C.moodTotal.neg[o]++; }
     }
     let sm = C.swear.get(r.mo);
     if (!sm) C.swear.set(r.mo, (sm = { w: [0, 0], n: [0, 0] }));

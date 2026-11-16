@@ -28,6 +28,7 @@ const S = {
   browserQuery: '',
   browserMood: null, // { mo, o (null = both), kind: 'pos' | 'neg' | 'any' } picked on the mood chart
   showMood: false, // mood scores on the messages
+  moodScorer: 'vader', // 'vader' | 'ai' (spec 001): which scores the mood chart and pills use
   phrase: '', // word tracker query
   phraseGran: 'auto', // word tracker bars: auto / day / week / month
   vocab: null, // aggregateContent result behind the Vocabulary card
@@ -201,6 +202,7 @@ async function loadFiles(fileList) {
   $('#dash').hidden = false;
   populateContacts();
   refresh();
+  AiMood.afterLoad();
 }
 
 function showLoadError(msg) {
@@ -583,7 +585,7 @@ function refresh({ timeline = true } = {}) {
       $('#distinctNote').textContent = `Words that set ${labelFor(S.filter.contact)} apart from your other conversations`;
       Charts.set('c-distinct', rows.length ? distinctiveOption(ui, rows) : emptyOption(ui, 'Not enough words to compare yet'));
     }
-    const C = aggregateContent(msgs);
+    const C = aggregateContent(msgs, S.moodScorer);
     Charts.set('c-emojitrend', C.emojiTotals.size ? emojiTrendOption(ui, C) : emptyOption(ui, 'No emoji in this selection'));
     const dm = domainsOption(ui, C);
     Charts.set('c-domains', dm.empty ? emptyOption(ui, 'No links in this selection') : dm.opt);
@@ -592,7 +594,7 @@ function refresh({ timeline = true } = {}) {
     const mt = C.moodTotal;
     const share = (n, d) => (d ? Math.round((n / d) * 100) + '%' : '–');
     $('#moodNote').textContent = mt.n[0] + mt.n[1]
-      ? `Share of messages that read positive (up) or negative (down), scored with VADER. You: ${share(mt.pos[1], mt.n[1])} positive, ${share(mt.neg[1], mt.n[1])} negative · Them: ${share(mt.pos[0], mt.n[0])} positive, ${share(mt.neg[0], mt.n[0])} negative`
+      ? `Share of messages that read positive (up) or negative (down), scored with ${S.moodScorer === 'ai' ? 'the AI model' : 'VADER'}. You: ${share(mt.pos[1], mt.n[1])} positive, ${share(mt.neg[1], mt.n[1])} negative · Them: ${share(mt.pos[0], mt.n[0])} positive, ${share(mt.neg[0], mt.n[0])} negative`
       : 'Share of messages that read positive (up) or negative (down) each month';
     if (mt.n[0] + mt.n[1]) $('#moodNote').textContent += '. Click a bar to read those messages.';
     wireMoodChart(Charts.set('c-mood', mt.n[0] + mt.n[1] ? moodOption(ui, C) : emptyOption(ui, 'No messages with words in this selection')));
@@ -604,6 +606,9 @@ function refresh({ timeline = true } = {}) {
       : 'Swear words per 1,000 messages';
     Charts.set('c-swear', st.w[0] + st.w[1] ? swearOption(ui, C) : emptyOption(ui, 'No swearing in this selection 😇'));
   });
+
+  // AI analysis (spec 002): the transcript is only built once the card is near the screen.
+  lazyRender('#sec-ai', () => AiAnalysis.render());
 
   // Sources
   const multi = all && S.filter.source === 'all' && [...A.sourceMonths.values()].reduce((set, v) => (v.forEach((n, i) => n && set.add(i)), set), new Set()).size > 1;
@@ -748,15 +753,28 @@ function renderMilestones(A) {
 
 // ------------------------------------------------------------------ mood details
 
-const moodKind = (v) => (v >= MOOD_THRESHOLD ? 'pos' : v <= -MOOD_THRESHOLD ? 'neg' : 'neu');
+/** 'pos' | 'neg' | 'neu' for a message by the chosen scorer, or null when it has no score. */
+function moodKind(m) {
+  const s = moodSign(m, S.moodScorer);
+  return s == null ? null : s > 0 ? 'pos' : s < 0 ? 'neg' : 'neu';
+}
+const MOOD_WORD = { pos: 'positive', neg: 'negative', neu: 'neutral' };
 const fmtScore = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(2);
 /** messageLib with VADER, for explaining scores on the page (built on first use). */
 const moodLib = () => (moodLib.lib = moodLib.lib || messageLib(vaderLib()));
 
+/** Switch the mood chart and pills between VADER and the AI model's scores (spec 001). */
+function setMoodScorer(scorer) {
+  S.moodScorer = scorer;
+  AiMood.render();
+  if (!$('#dash').hidden) refresh({ timeline: false });
+}
+
 /** Whether a message is one of those picked on the mood chart. */
 function moodMatches(m, f) {
-  if (m.mo !== f.mo || m.v == null || (f.o != null && m.o !== f.o)) return false;
-  const k = moodKind(m.v);
+  if (m.mo !== f.mo || (f.o != null && m.o !== f.o)) return false;
+  const k = moodKind(m);
+  if (!k) return false;
   return f.kind === 'any' ? k !== 'neu' : k === f.kind;
 }
 
@@ -799,15 +817,25 @@ function wireMoodChart(chart) {
 
 /** Why a message scored as it did, and what it did to its month's bar. */
 function moodWhyHtml(m) {
-  const e = moodLib().explainMood(m.b);
-  const kind = moodKind(m.v);
+  const kind = moodKind(m);
   const n = (S.moodScored && S.moodScored.get(`${m.mo}|${m.o}`)) || 1;
   const month = monthName(monthToTs(m.mo));
   const whose = m.o ? 'you sent' : 'you received';
-  const word = { pos: 'positive', neg: 'negative', neu: 'neutral' }[kind];
+  const word = MOOD_WORD[kind];
   const effect = kind === 'neu'
     ? `Neutral, so it's in neither bar: one of the ${fmtNum(n)} messages ${whose} in ${month} with a mood score, it makes both bars a little shorter.`
     : `One of the ${fmtNum(n)} messages ${whose} in ${month} with a mood score: worth about ${(100 / n).toFixed(1)} points of the ${word} bar.`;
+  if (S.moodScorer === 'ai') {
+    // The model's three probabilities (spec 001, R9), with VADER's score to compare.
+    const pct = (x) => Math.round(x * 100) + '%';
+    const [neg, neu, pos] = m.ai;
+    return `<div class="mood-why">
+    <div><b>${fmtScore(moodScore(m, 'ai'))} ${word}.</b> ${escapeHtml(effect)}</div>
+    <div class="mood-words"><span class="mw pos">positive <b>${pct(pos)}</b></span><span class="mw">neutral <b>${pct(neu)}</b></span><span class="mw neg">negative <b>${pct(neg)}</b></span><span class="mw">VADER <b>${fmtScore(m.v)}</b></span></div>
+    <div class="mood-note">How sure the AI model is of each reading. It takes the likeliest one; the score is positive minus negative.</div>
+  </div>`;
+  }
+  const e = moodLib().explainMood(m.b);
   const fmtV = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1);
   const words = e ? [...e.words].sort((a, b) => Math.abs(b.valence) - Math.abs(a.valence)) : [];
   const chips = words.map((w) => `<span class="mw ${w.valence > 0 ? 'pos' : 'neg'}">${escapeHtml(w.word)} <b>${fmtV(w.valence)}</b>${w.lexicon !== w.valence ? ` <span class="was">was ${fmtV(w.lexicon)}</span>` : ''}</span>`);
@@ -1062,7 +1090,7 @@ function observeLazySections() {
       }
     }
   }, { rootMargin: '600px 0px' });
-  for (const sel of ['#sec-content', '#sec-wrapped', '#galleryCard']) Lazy.observer.observe($(sel));
+  for (const sel of ['#sec-content', '#sec-ai', '#sec-wrapped', '#galleryCard']) Lazy.observer.observe($(sel));
 }
 
 // ---- year in review (canvas)
@@ -1518,7 +1546,7 @@ function renderBrowser(msgs) {
   // Messages with a mood score per month and side: what one message is worth in the chart.
   if (S.showMood) {
     S.moodScored = new Map();
-    for (const m of msgs) if (m.v != null) S.moodScored.set(`${m.mo}|${m.o}`, (S.moodScored.get(`${m.mo}|${m.o}`) || 0) + 1);
+    for (const m of msgs) if (moodSign(m, S.moodScorer) != null) S.moodScored.set(`${m.mo}|${m.o}`, (S.moodScored.get(`${m.mo}|${m.o}`) || 0) + 1);
   }
   S.browserShown = shown;
 
@@ -1570,13 +1598,15 @@ function renderBrowser(msgs) {
     }
     const time = document.createElement('div');
     time.className = 'time';
-    if (S.showMood && m.v != null) {
+    const kind = S.showMood && moodKind(m);
+    if (kind) {
+      const score = fmtScore(moodScore(m, S.moodScorer));
       const pill = document.createElement('button');
       pill.type = 'button';
-      pill.className = `mood-pill ${moodKind(m.v)}`;
+      pill.className = `mood-pill ${kind}`;
       pill.dataset.i = shown.indexOf(m);
-      pill.textContent = fmtScore(m.v);
-      pill.title = `Mood score ${fmtScore(m.v)} (${moodKind(m.v) === 'neu' ? 'neutral' : moodKind(m.v) === 'pos' ? 'positive' : 'negative'}). Click to see why.`;
+      pill.textContent = score;
+      pill.title = `Mood score ${score} (${MOOD_WORD[kind]}). Click to see why.`;
       time.appendChild(pill);
     }
     time.append(new Date(m.t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }));
@@ -1695,6 +1725,8 @@ function init() {
   $('#wrapSave').onclick = saveWrapped;
   initGlance();
   initMoodDetails();
+  AiMood.init();
+  AiAnalysis.init();
   initViewer();
   initGallery();
   observeLazySections();

@@ -34,7 +34,7 @@
         </div>
         <p class="hint">or drop the files anywhere on this page. Pick several at once, and mix sources: duplicates are merged.</p>
         <p id="loadError" class="error" hidden></p>
-        <p class="privacy"><span aria-hidden="true">🔒</span> Everything runs in this browser tab. Your messages are never uploaded.</p>
+        <p class="privacy"><span aria-hidden="true">🔒</span> Everything runs in this browser tab. Your messages are never uploaded, unless you choose to send a conversation to Claude for analysis with your own API key.</p>
       </div>
 
       <h2 class="guide-title">Get your messages</h2>
@@ -410,7 +410,14 @@
         <div class="vocab-words" id="vocabWords" aria-live="polite"></div>
       </article>
       <article class="card wide">
-        <header><div><h2>Mood over time</h2><p class="sub" id="moodNote">Share of messages that read positive (up) or negative (down) each month</p></div></header>
+        <header>
+          <div><h2>Mood over time</h2><p class="sub" id="moodNote">Share of messages that read positive (up) or negative (down) each month</p></div>
+          <div class="seg" id="moodScorerSeg" role="group" aria-label="Mood scorer">
+            <button data-scorer="vader" class="on" title="A word list: instant and explainable">VADER</button>
+            <button data-scorer="ai" title="A sentiment model that runs in this tab: better with sarcasm and slang">AI model</button>
+          </div>
+        </header>
+        <div class="ai-status" id="aiMoodStatus" aria-live="polite" hidden></div>
         <div class="chart" id="c-mood"></div>
       </article>
       <article class="card wide">
@@ -425,6 +432,56 @@
         <header><div><h2>Attachments over time</h2><p class="sub">Per month, by type</p></div></header>
         <div class="chart" id="c-media-trend"></div>
       </article>
+      </div>
+    </section>
+
+    <section class="dash-section" id="sec-ai">
+      <h2 class="section-title">AI analysis</h2>
+      <div class="grid">
+        <article class="card wide" id="aiCard">
+          <header>
+            <div><h2>Conversation analysis</h2><p class="sub">An AI reads this conversation and sums it up: what it's about, each side's tone and the moments that stand out. Pick where it runs.</p></div>
+            <div class="seg" id="aiBackendSeg" role="group" aria-label="Where the AI runs">
+              <button data-backend="webllm" title="Runs on this computer's GPU in this tab. Nothing leaves this device.">In this browser</button>
+              <button data-backend="ollama" title="Uses Ollama running on this computer. Nothing leaves this device.">Ollama</button>
+              <button data-backend="lmstudio" title="Uses LM Studio's server on this computer. Nothing leaves this device.">LM Studio</button>
+              <button data-backend="claude" title="Sends the conversation to Anthropic with your own API key">Claude</button>
+            </div>
+          </header>
+          <p class="ai-pick" id="aiPick">Pick a conversation above to analyze it.</p>
+          <div class="ai-form" id="aiForm">
+            <div class="ai-settings" data-for="webllm">
+              <label class="field"><span>Model</span><select id="aiWebllmModel"></select></label>
+              <p class="note" id="aiWebllmNote"></p>
+            </div>
+            <div class="ai-settings" data-for="ollama">
+              <label class="field"><span>Ollama server</span><input type="url" id="aiOllamaUrl" spellcheck="false"></label>
+              <label class="field"><span>Model</span><input type="text" id="aiOllamaModel" list="aiOllamaModels" spellcheck="false" placeholder="e.g. llama3.2"><datalist id="aiOllamaModels"></datalist></label>
+              <button class="btn small" type="button" id="aiOllamaConnect">Connect</button>
+              <p class="note" id="aiOllamaNote"></p>
+            </div>
+            <div class="ai-settings" data-for="lmstudio">
+              <label class="field"><span>LM Studio server</span><input type="url" id="aiLmstudioUrl" spellcheck="false"></label>
+              <label class="field"><span>Model</span><input type="text" id="aiLmstudioModel" list="aiLmstudioModels" spellcheck="false" placeholder="Filled in from LM Studio"><datalist id="aiLmstudioModels"></datalist></label>
+              <label class="field"><span>API token (if required)</span><input type="password" id="aiLmstudioToken" autocomplete="off" spellcheck="false"></label>
+              <button class="btn small" type="button" id="aiLmstudioConnect">Connect</button>
+              <p class="note" id="aiLmstudioNote">In LM Studio, start the server (Developer tab → Start server) and turn on Enable CORS in its Server Settings so this page can reach it. Your browser may ask to allow access to your local network. The token stays in this tab's memory and isn't saved.</p>
+            </div>
+            <div class="ai-settings" data-for="claude">
+              <label class="field"><span>API key</span><input type="password" id="aiClaudeKey" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"></label>
+              <label class="field"><span>Model</span><select id="aiClaudeModel"></select></label>
+              <p class="note">The conversation goes from this browser straight to Anthropic under your key; Yapalytics never sees it. The key stays in this tab's memory and isn't saved.</p>
+            </div>
+            <div class="ai-ask">
+              <label class="field grow"><span>Question (optional)</span><input type="text" id="aiQuestion" placeholder="e.g. When did we start planning the trip?"></label>
+              <label class="check"><input type="checkbox" id="aiRedact"> Hide names, numbers, emails and links</label>
+              <button class="btn primary" type="button" id="aiRun">Analyze</button>
+            </div>
+            <p class="sub" id="aiScope"></p>
+          </div>
+          <div class="ai-status" id="aiStatus" aria-live="polite" hidden></div>
+          <div class="ai-report" id="aiReport" hidden></div>
+        </article>
       </div>
     </section>
 
@@ -528,6 +585,8 @@
   <script src="js/insights.js"></script>
   <script src="js/charts.js"></script>
   <script src="js/media.js"></script>
+  <script src="js/ai-mood.js"></script>
+  <script src="js/ai-analysis.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -14,10 +14,23 @@ What your SMS, Google Chat, WhatsApp, iMessage, Telegram and Instagram messages 
 3. Import the xml backup(s), Takeout zip(s), WhatsApp exports, iMessage `.txt` files, Telegram exports and/or Instagram zips. Pick every part of a split Takeout export together. WhatsApp exports don't say which sender is you; the app guesses, and you can correct it with **You on WhatsApp** (and **You on Telegram** / **You on Instagram**, when those exports don't say).
 4. Look at fancy graphs! When both kinds are loaded, use the All / SMS / Google Chat / WhatsApp / iMessage / Telegram / Instagram switch to compare them.
 
-All processing occurs in the browser, your data is never uploaded anywhere!
+All processing occurs in the browser, your data is never uploaded anywhere! The one exception is opt-in: if you choose Claude under **AI analysis** and enter your own Anthropic API key, the conversation you picked goes from your browser straight to Anthropic.
+
+## AI features
+
+Both are off until you ask for them.
+
+- **AI mood scores.** On the **Mood over time** card, switch from **VADER** to **AI model**. A sentiment model (about 126 MB) downloads once and runs in the tab. It reads tone better than VADER's word list, sarcasm included. See [spec 001](specs/001-ai-mood-scoring.md).
+- **Conversation analysis.** Pick a conversation, then under **AI analysis** get a summary, each side's tone, notable moments and topics, or ask a question. Choose where the model runs (see [spec 002](specs/002-ai-conversation-analysis.md)):
+  - **In this browser** with [WebLLM](https://github.com/mlc-ai/web-llm). Needs WebGPU (recent Chrome or Edge) and downloads a 0.9–3.7 GB model once. Nothing leaves your device.
+  - **Ollama** on your computer. Start it with `OLLAMA_ORIGINS=https://yapalytics.online` so the page can reach it. Nothing leaves your device.
+  - **LM Studio** on your computer. Start its server (Developer tab → Start server) and turn on **Enable CORS** in Server Settings. Load the model with a longer context to analyze more of a conversation. Nothing leaves your device.
+  - **Claude** with your own API key. You see what will be sent, and roughly what it costs, before anything is sent. Names, numbers, emails and links can be hidden first. The key is never saved.
 
 ## Credits
 Mood scores come from [VADER](https://github.com/cjhutto/vaderSentiment) (Hutto & Gilbert, 2014) via its JavaScript port [vaderSentiment-js](https://github.com/vaderSentiment/vaderSentiment-js), © Comcast, Apache-2.0. A copy lives in `js/vendor/` with its license and notice.
+
+AI mood scores use [Transformers.js](https://github.com/huggingface/transformers.js) (Apache-2.0) with [twitter-roberta-base-sentiment-latest](https://huggingface.co/cardiffnlp/twitter-roberta-base-sentiment-latest) by Cardiff NLP (Loureiro et al., 2022; CC BY 4.0), in the ONNX conversion by [Xenova](https://huggingface.co/Xenova/twitter-roberta-base-sentiment-latest). Conversation analysis loads [WebLLM](https://github.com/mlc-ai/web-llm) (Apache-2.0) or the [Anthropic TypeScript SDK](https://github.com/anthropics/anthropic-sdk-typescript) (Apache-2.0) from jsDelivr, only when you use them.
 
 HEIC photos are converted in browsers that can't show them by [heic-to](https://github.com/hoppergee/heic-to) (LGPL-3.0), built on [libheif](https://github.com/strukturag/libheif) (LGPL-3.0). It is loaded unmodified from jsDelivr, and only when a HEIC photo needs converting.
 
@@ -27,6 +40,8 @@ Navigate to https://yapalytics.online and click "Try Demo Data".
 <img width="1314" height="1180" alt="Screenshot 2026-10-13 at 10 48 47 AM" src="https://github.com/user-attachments/assets/35c3dd66-bdbe-44b8-85af-024b50aa1150" />
 
 ## Development
+New features start with a spec in [`specs/`](specs/README.md): requirements and acceptance criteria first, then code, with a test for each criterion.
+
 The site is plain HTML, CSS and JavaScript with no build step: serve the folder (`npm run serve`, then open http://127.0.0.1:4173) and edit.
 
 Tests need Node 22 or newer:
