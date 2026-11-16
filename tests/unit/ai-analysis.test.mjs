@@ -6,11 +6,11 @@ import { loadScripts, makeMessage, messageLib } from '../helpers/load.mjs';
 const {
   buildTranscript, redactText, aliasMap, parseAnalysis, estimateClaude, ollamaRequest, claudeRequest,
   analysisPrompt, ollamaUnreachable, ANALYSIS_SCHEMA, AiError,
-  lmstudioRequest, lmstudioModels, lmstudioBudget, lmstudioHeaders, lmstudioUnreachable, AI_BACKENDS, lmstudioReplyText,
+  lmstudioRequest, lmstudioModels, lmstudioBudget, lmstudioHeaders, lmstudioUnreachable, AI_BACKENDS, lmstudioReplyText, lmstudioMeasuredRatio, lmstudioFind, lmstudioScopeNote,
 } = loadScripts(['ai-analysis.js'], [
   'buildTranscript', 'redactText', 'aliasMap', 'parseAnalysis', 'estimateClaude', 'ollamaRequest', 'claudeRequest',
   'analysisPrompt', 'ollamaUnreachable', 'ANALYSIS_SCHEMA', 'AiError',
-  'lmstudioRequest', 'lmstudioModels', 'lmstudioBudget', 'lmstudioHeaders', 'lmstudioUnreachable', 'AI_BACKENDS', 'lmstudioReplyText',
+  'lmstudioRequest', 'lmstudioModels', 'lmstudioBudget', 'lmstudioHeaders', 'lmstudioUnreachable', 'AI_BACKENDS', 'lmstudioReplyText', 'lmstudioMeasuredRatio', 'lmstudioFind', 'lmstudioScopeNote',
 ]);
 const lib = messageLib();
 const msg = (at, body, o = 0, rest = {}) => makeMessage(lib, { at, body, o, ...rest });
@@ -197,26 +197,43 @@ describe('spec 002: LM Studio', () => {
         { type: 'llm', key: 'odd/no-config', loaded_instances: [{ id: 'c' }] },
       ],
     });
-    assert.deepEqual(models, [
+    assert.deepEqual(models.map(({ names, ...m }) => m), [
       { key: 'qwen/qwen3-8b', loaded: true, context: 32768, thinks: false },
       { key: 'odd/no-config', loaded: true, context: null, thinks: false },
       { key: 'google/gemma-3-4b', loaded: false, context: null, thinks: false },
     ]);
+    assert.deepEqual(models[0].names, ['qwen/qwen3-8b', 'a', 'b'], 'the key and loaded instance ids');
   });
 
   it('AC16: lmstudioModels reads the OpenAI-compatible list from older servers', () => {
     assert.deepEqual(lmstudioModels({ object: 'list', data: [{ id: 'llama-3.2-3b-instruct' }, { id: 'text-embedding-nomic-embed-text-v1.5' }] }), [
-      { key: 'llama-3.2-3b-instruct', loaded: false, context: null, thinks: false },
+      { key: 'llama-3.2-3b-instruct', loaded: false, context: null, thinks: false, names: ['llama-3.2-3b-instruct'] },
     ]);
     assert.deepEqual(lmstudioModels(null), []);
   });
 
-  it('AC16: lmstudioBudget leaves room for the instructions and reply, within bounds', () => {
-    assert.equal(lmstudioBudget(4096), 6288);
-    assert.equal(lmstudioBudget(16384), 43152);
-    assert.equal(lmstudioBudget(2048), 4000, 'never below 4,000 characters');
-    assert.equal(lmstudioBudget(1048576), 400000, 'never above 400,000 characters');
+  it('AC16, AC18: lmstudioBudget keeps 2,500 tokens free and a 5% margin, with no cap but the context', () => {
+    assert.equal(lmstudioBudget(4096), 3638); // ~1,516 tokens at 2.4 characters a token
+    assert.equal(lmstudioBudget(16384), 31655);
+    assert.equal(lmstudioBudget(207104), 466497, 'a 207K context: ~194K tokens of transcript');
+    assert.equal(lmstudioBudget(207104, 2.44), 474272, 'a measured ratio');
+    assert.equal(lmstudioBudget(1048576), 2385053, 'no 400,000-character cap any more');
+    assert.equal(lmstudioBudget(2048), 2000, 'never below 2,000 characters');
     assert.equal(AI_BACKENDS.lmstudio.budgetChars, lmstudioBudget(4096), 'assumes 4,096 tokens until the server says otherwise');
+  });
+
+  it('R3: the browser and Ollama budgets fit their contexts at 2.4 characters a token', () => {
+    const fits = (chars, context, reply) => chars / 2.4 + 600 + reply < context; // 600: instructions and wrapper
+    assert.ok(fits(AI_BACKENDS.webllm.budgetChars, 4096, 1000));
+    assert.ok(fits(AI_BACKENDS.ollama.budgetChars, 16384, 1500));
+  });
+
+  it('AC19: lmstudioMeasuredRatio reads characters per token from usage, only when the transcript dominates', () => {
+    assert.equal(lmstudioMeasuredRatio(1300, 49720, 20899), 2.44); // the real 51K-character run
+    assert.equal(lmstudioMeasuredRatio(1300, 3000, 1500), null, 'mostly instructions: says little about chat');
+    assert.equal(lmstudioMeasuredRatio(1300, 49720, undefined), null);
+    assert.equal(lmstudioMeasuredRatio(1300, 49720, 0), null);
+    assert.equal(lmstudioMeasuredRatio(1300, 49720, 2), null, 'nonsense counts are ignored');
   });
 
   it('AC15: the token goes in a Bearer header only when given', () => {
@@ -250,5 +267,31 @@ describe('spec 002: LM Studio', () => {
     assert.equal(lmstudioReplyText({ message: { content: json, reasoning_content: 'thinking about {it}' } }), json, 'content wins when it has JSON');
     assert.equal(lmstudioReplyText({ message: { content: 'no idea', reasoning_content: 'hmm' } }), 'no idea');
     assert.equal(lmstudioReplyText(undefined), '');
+  });
+
+  // The real server's entry for Qwen3.8 27B (LM Studio 0.4, MLX), trimmed.
+  const REAL = lmstudioModels({ models: [
+    { type: 'llm', key: 'qwen/qwen3.8-27b', variants: ['qwen/qwen3.8-27b@4bit'], selected_variant: 'qwen/qwen3.8-27b@4bit',
+      loaded_instances: [{ id: 'qwen/qwen3.8-27b', config: { context_length: 207104, parallel: 4 } }],
+      capabilities: { reasoning: { allowed_options: ['off', 'low', 'medium', 'xhigh', 'on'], default: 'xhigh' } } },
+    { type: 'llm', key: 'google/gemma-3-4b', loaded_instances: [] },
+    { type: 'embedding', key: 'text-embedding-nomic-embed-text-v1.5', loaded_instances: [] },
+  ] });
+
+  it('AC20: lmstudioFind matches the key, a variant or an instance id, in any capitalization', () => {
+    for (const name of ['qwen/qwen3.8-27b', 'qwen/qwen3.8-27b@4bit', 'Qwen/Qwen3.8-27B', ' QWEN/QWEN3.8-27B@4BIT ', 'qwen/qwen3.8-27b@8bit']) {
+      assert.equal(lmstudioFind(REAL, name)?.key, 'qwen/qwen3.8-27b', name);
+    }
+    assert.equal(lmstudioFind(REAL, 'qwen3.8-27b'), null, 'LM Studio rejects this too');
+    assert.equal(lmstudioFind(REAL, ''), null);
+    assert.equal(lmstudioFind(null, 'qwen/qwen3.8-27b'), null);
+  });
+
+  it('AC20: lmstudioScopeNote names the context, or says why it can’t use it', () => {
+    assert.equal(lmstudioScopeNote(REAL, 'qwen/qwen3.8-27b@4bit'), "as much as fits the model's 207,104-token context in LM Studio");
+    assert.match(lmstudioScopeNote(REAL, 'google/gemma-3-4b'), /"google\/gemma-3-4b" isn't loaded.*\(loaded now: qwen\/qwen3\.8-27b\)$/);
+    assert.match(lmstudioScopeNote(REAL, 'llama3'), /LM Studio doesn't list a model called "llama3" \(loaded now: qwen\/qwen3\.8-27b\)$/);
+    assert.match(lmstudioScopeNote(REAL, ''), /Pick a model/);
+    assert.match(lmstudioScopeNote(null, 'qwen/qwen3.8-27b'), /^as much as fits LM Studio's usual 4,096-token context\. Load the model/);
   });
 });

@@ -14,18 +14,37 @@ const ANTHROPIC_SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@1.1.0/
 
 // LM Studio sets the context when a model loads; 4,096 tokens is its usual default.
 const LMSTUDIO_DEFAULT_CONTEXT = 4096;
+// Chat transcripts tokenize at about 2.4 characters a token (2.44–2.48 measured with
+// Qwen3.8 27B): timestamps, names and emoji cost more than prose. Until LM Studio
+// reports the real ratio for a model, budgets use this (spec 002, R16).
+const LMSTUDIO_CHARS_PER_TOKEN = 2.4;
+// Kept free in the context: the instructions (~450 tokens), the question, the
+// 1,500-token reply and some slack.
+const LMSTUDIO_RESERVED_TOKENS = 2500;
 
 /**
- * Transcript budget for an LM Studio model loaded with `context` tokens: what's left
- * after ~2,000 tokens of instructions and reply, at a cautious 3 characters a token.
+ * Transcript budget in characters for an LM Studio model loaded with `context` tokens,
+ * at `charsPerToken`, with a 5% margin so the prompt never overflows the context.
  */
-function lmstudioBudget(context) {
-  return Math.max(4000, Math.min(400000, Math.floor((context - 2000) * 3)));
+function lmstudioBudget(context, charsPerToken = LMSTUDIO_CHARS_PER_TOKEN) {
+  return Math.max(2000, Math.floor((context - LMSTUDIO_RESERVED_TOKENS) * charsPerToken * 0.95));
 }
 
+/**
+ * Characters per token measured from one LM Studio reply's usage, or null when the
+ * transcript was too small a part of the prompt for the number to describe it.
+ */
+function lmstudioMeasuredRatio(systemChars, userChars, promptTokens) {
+  if (!(promptTokens > 0) || userChars < systemChars * 4) return null;
+  const r = (systemChars + userChars) / promptTokens;
+  return r > 0.5 && r < 10 ? Math.round(r * 100) / 100 : null;
+}
+
+// Budgets assume ~2.4 characters a token too, leaving room for the instructions and
+// the reply: WebLLM's models have 4,096 tokens, Ollama gets num_ctx 16,384.
 const AI_BACKENDS = {
-  webllm: { label: 'In this browser', budgetChars: 8000 },
-  ollama: { label: 'Ollama', budgetChars: 36000 },
+  webllm: { label: 'In this browser', budgetChars: 5500 },
+  ollama: { label: 'Ollama', budgetChars: 30000 },
   lmstudio: { label: 'LM Studio', budgetChars: lmstudioBudget(LMSTUDIO_DEFAULT_CONTEXT) }, // until the loaded context is known
   claude: { label: 'Claude', budgetChars: 400000 },
 };
@@ -348,14 +367,48 @@ function lmstudioModels(json) {
         // A reasoning model that lets reasoning be turned off (spec 002, R15).
         const r = m.capabilities && m.capabilities.reasoning;
         const thinks = !!r && (!Array.isArray(r.allowed_options) || r.allowed_options.includes('off'));
-        return { key: m.key, loaded, context: contexts.length ? Math.max(...contexts) : null, thinks };
+        // Every name LM Studio answers to for this model (spec 002, R17), lowercased.
+        const names = [m.key, ...(Array.isArray(m.variants) ? m.variants : []), ...(loaded ? m.loaded_instances.map((i) => i && i.id) : [])]
+          .filter((n) => typeof n === 'string' && n)
+          .map((n) => n.toLowerCase());
+        return { key: m.key, loaded, context: contexts.length ? Math.max(...contexts) : null, thinks, names: [...new Set(names)] };
       })
       .sort((a, b) => b.loaded - a.loaded);
   }
   if (json && Array.isArray(json.data)) {
-    return json.data.filter((m) => m && m.id && !/embed/i.test(m.id)).map((m) => ({ key: m.id, loaded: false, context: null, thinks: false }));
+    return json.data.filter((m) => m && m.id && !/embed/i.test(m.id)).map((m) => ({ key: m.id, loaded: false, context: null, thinks: false, names: [m.id.toLowerCase()] }));
   }
   return [];
+}
+
+/**
+ * The listed model a name in the model field means, matched the way LM Studio matches
+ * it: the key, a variant ("qwen/qwen3.8-27b@4bit") or a loaded instance id, in any
+ * capitalization (spec 002, R17). Null when none matches.
+ */
+function lmstudioFind(models, name) {
+  const n = String(name || '').trim().toLowerCase();
+  if (!n || !Array.isArray(models)) return null;
+  const base = n.replace(/@[^/@]*$/, ''); // "key@4bit" -> "key", for variants the list doesn't name
+  return models.find((m) => m.names.includes(n)) || models.find((m) => m.names.includes(base)) || null;
+}
+
+/**
+ * Why the transcript stops where it does with LM Studio (spec 002, R17): the chosen
+ * model's loaded context, or why the usual 4,096 tokens are assumed instead.
+ * `models` is null until the server has been listed.
+ */
+function lmstudioScopeNote(models, name) {
+  const usual = `LM Studio's usual ${LMSTUDIO_DEFAULT_CONTEXT.toLocaleString('en-US')}-token context`;
+  const m = lmstudioFind(models, name);
+  if (m && m.context) return `as much as fits the model's ${m.context.toLocaleString('en-US')}-token context in LM Studio`;
+  const loaded = (models || []).filter((x) => x.loaded).map((x) => x.key);
+  const pick = loaded.length ? ` (loaded now: ${loaded.join(', ')})` : '';
+  if (!models) return `as much as fits ${usual}. Load the model with a longer context in LM Studio to read more`;
+  if (!String(name || '').trim()) return `as much as fits ${usual}. Pick a model${pick}`;
+  if (!m) return `as much as fits ${usual}: LM Studio doesn't list a model called "${String(name).trim()}"${pick}`;
+  if (!m.loaded) return `as much as fits ${usual}: "${m.key}" isn't loaded, so LM Studio will load it at its default context. Load it with a longer context to read more${pick}`;
+  return `as much as fits ${usual}. Load the model with a longer context in LM Studio to read more`;
 }
 
 /** What to tell the user when LM Studio can't be reached (spec 002, R14). */
@@ -435,7 +488,7 @@ const AiRunners = {
     const base = settings.lmstudioUrl.replace(/\/+$/, '');
     const model = settings.lmstudioModel.trim();
     if (!model) throw new AiError('Enter an LM Studio model, or click Connect to pick one.');
-    const { path, body } = lmstudioRequest({ model, system, user, schema, reasoningOff: AiAnalysis.lmThinks.has(model) });
+    const { path, body } = lmstudioRequest({ model, system, user, schema, reasoningOff: !!(AiAnalysis.lmModel(model) || {}).thinks });
     onStatus(`Reading the conversation with ${model}… (LM Studio loads the model first if it isn't loaded)`);
     let res;
     try {
@@ -456,6 +509,9 @@ const AiRunners = {
       throw new AiError(`LM Studio returned an error (${res.status})${detail ? `: ${detail.slice(0, 300)}` : ''}`);
     }
     const data = await res.json();
+    // Learn this model's characters per token from what LM Studio counted (spec 002, R16).
+    const ratio = lmstudioMeasuredRatio(system.length, user.length, data.usage && data.usage.prompt_tokens);
+    if (ratio) AiAnalysis.noteLmRatio(model, ratio);
     const choice = data.choices && data.choices[0];
     if (choice && choice.finish_reason === 'length') throw new AiError("The model's reply ran out of room and was cut off. Load the model with a longer context in LM Studio, or pick a shorter date range.");
     return lmstudioReplyText(choice);
@@ -501,11 +557,13 @@ const AiAnalysis = {
     lmstudioUrl: 'http://localhost:1234',
     lmstudioModel: '',
     lmstudioToken: '', // memory only: never saved
+    lmRatios: {}, // LM Studio model key -> measured characters per token
     claudeModel: CLAUDE_MODELS[0].id,
     claudeKey: '', // memory only: never saved
   },
-  lmContext: new Map(), // LM Studio model key -> loaded context length (tokens)
-  lmThinks: new Set(), // LM Studio model keys that reason, with reasoning that can be turned off
+  lmModels: null, // LM Studio's language models from the last listing ({ key, loaded, context, thinks, names })
+  lmDetected: null, // { url, at } of the last automatic model listing
+  lmDetecting: false,
   redactTouched: false,
   busy: false,
   run: 0,
@@ -546,12 +604,40 @@ const AiAnalysis = {
   },
 
   /** LM Studio's loaded context for the chosen model, or null when the server hasn't said. */
+  /** The listed LM Studio model `name` (default: the model field) means, or null. */
+  lmModel(name = this.settings.lmstudioModel) {
+    return lmstudioFind(this.lmModels, name);
+  },
+
   lmstudioContext() {
-    return this.lmContext.get(this.settings.lmstudioModel.trim()) || null;
+    const m = this.lmModel();
+    return (m && m.context) || null;
+  },
+
+  /** Characters per token for the chosen LM Studio model: measured, or the default. */
+  lmstudioRatio() {
+    const m = this.lmModel();
+    return this.settings.lmRatios[m ? m.key : this.settings.lmstudioModel.trim()] || LMSTUDIO_CHARS_PER_TOKEN;
+  },
+
+  noteLmRatio(model, ratio) {
+    const m = this.lmModel(model);
+    this.settings.lmRatios[m ? m.key : model] = ratio;
+    this.save();
+  },
+
+  /** List LM Studio's models without a click (spec 002, R12): at most every 30 s per server. */
+  autoDetectLm() {
+    const url = this.settings.lmstudioUrl;
+    const last = this.lmDetected;
+    if (this.lmDetecting || (last && last.url === url && Date.now() - last.at < 30000)) return;
+    this.lmDetecting = true;
+    this.lmDetected = { url, at: Date.now() };
+    this.connectLmStudio({ quiet: true }).finally(() => { this.lmDetecting = false; });
   },
 
   budget() {
-    if (this.backend === 'lmstudio') return lmstudioBudget(this.lmstudioContext() || LMSTUDIO_DEFAULT_CONTEXT);
+    if (this.backend === 'lmstudio') return lmstudioBudget(this.lmstudioContext() || LMSTUDIO_DEFAULT_CONTEXT, this.lmstudioRatio());
     return AI_BACKENDS[this.backend].budgetChars;
   },
 
@@ -587,11 +673,14 @@ const AiAnalysis = {
     if (t.count < t.total) {
       if (this.backend === 'webllm') fits = ': as much as fits a model in this browser';
       else if (this.backend === 'lmstudio') {
-        const ctx = this.lmstudioContext();
-        fits = ctx
-          ? `: as much as fits the model's ${fmtNum(ctx)}-token context in LM Studio`
-          : `: as much as fits LM Studio's usual ${fmtNum(LMSTUDIO_DEFAULT_CONTEXT)}-token context. Load the model with a longer context in LM Studio, then click Connect, to read more`;
+        fits = `: ${lmstudioScopeNote(this.lmModels, this.settings.lmstudioModel)}`;
       } else fits = `: as much as fits in one request to ${AI_BACKENDS[this.backend].label}`;
+    }
+    if (this.backend === 'lmstudio') {
+      // Big prompts take a while to read: ~470 tokens a second for a 27B model on a Mac.
+      const tokens = Math.round(t.text.length / this.lmstudioRatio() / 1000) * 1000;
+      if (tokens >= 20000) fits += `. That's about ${fmtNum(tokens)} tokens, so the model may take several minutes to read it`;
+      this.autoDetectLm();
     }
     $('#aiScope').textContent = !t.count
       ? 'No messages with text in this date range.'
@@ -622,9 +711,9 @@ const AiAnalysis = {
     if (!conv || this.busy) return;
     this.readSettings();
     if (this.backend === 'lmstudio') {
-      // The budget follows the model's loaded context (spec 002, R12): ask again, it may have changed.
-      await this.fetchLmModels().catch(() => {});
-      this.render();
+      // The budget follows the model's loaded context (spec 002, R12): ask again, it may
+      // have changed. This also swaps out a model the server doesn't have (AC21).
+      await this.connectLmStudio({ quiet: true });
     }
     const t = this.transcript(conv);
     if (!t.count) return;
@@ -770,33 +859,41 @@ const AiAnalysis = {
     if (res.status === 404) res = await get('/v1/models');
     if (!res.ok) throw new AiError(`LM Studio returned an error (${res.status}) listing its models.`);
     const models = lmstudioModels(await res.json());
-    for (const m of models) {
-      if (m.context) this.lmContext.set(m.key, m.context);
-      else this.lmContext.delete(m.key);
-      if (m.thinks) this.lmThinks.add(m.key);
-      else this.lmThinks.delete(m.key);
-    }
+    this.lmModels = models;
     return models;
   },
 
-  async connectLmStudio() {
+  /** Connect clicked, or (quiet) the automatic listing: a failure then leaves the note as it was. */
+  async connectLmStudio({ quiet = false } = {}) {
     this.readSettings();
     const note = $('#aiLmstudioNote');
-    note.classList.remove('ai-error');
-    note.textContent = 'Connecting…';
+    if (!quiet) {
+      note.classList.remove('ai-error');
+      note.textContent = 'Connecting…';
+    }
     try {
       const models = await this.fetchLmModels();
       $('#aiLmstudioModels').innerHTML = models.map((m) => `<option value="${escapeHtml(m.key)}">`).join('');
+      // Fill in a model if there's none, and replace one the server doesn't list, which
+      // LM Studio would reject (spec 002, R12). A listed, unloaded model is kept.
       const field = $('#aiLmstudioModel');
-      if (models.length && !field.value.trim()) field.value = models[0].key;
+      const typed = field.value.trim();
+      let switched = '';
+      if (models.length && (!typed || !lmstudioFind(models, typed))) {
+        const pick = (models.find((m) => m.loaded) || models[0]).key;
+        if (typed) switched = `LM Studio doesn't have "${typed}", so switched to ${pick}. `;
+        field.value = pick;
+      }
       this.readSettings();
       this.save();
       const loaded = models.filter((m) => m.loaded);
       const rest = models.filter((m) => !m.loaded);
       note.textContent = !models.length
         ? 'Connected, but LM Studio has no language models yet. Download one in LM Studio first.'
-        : `Connected. ${loaded.length ? `Loaded: ${loaded.map((m) => (m.context ? `${m.key} (${fmtNum(m.context)}-token context)` : m.key)).join(', ')}. ` : ''}${rest.length ? `${loaded.length ? 'Also downloaded' : 'Downloaded'}: ${rest.map((m) => m.key).join(', ')}.` : ''}`.trim();
+        : `${switched}Connected. ${loaded.length ? `Loaded: ${loaded.map((m) => (m.context ? `${m.key} (${fmtNum(m.context)}-token context)` : m.key)).join(', ')}. ` : ''}${rest.length ? `${loaded.length ? 'Also downloaded' : 'Downloaded'}: ${rest.map((m) => m.key).join(', ')}.` : ''}`.trim();
+      note.classList.remove('ai-error');
     } catch (e) {
+      if (quiet) return;
       note.textContent = e instanceof AiError ? e.message : lmstudioUnreachable(this.settings.lmstudioUrl);
       note.classList.add('ai-error');
     }
@@ -825,6 +922,9 @@ const AiAnalysis = {
       if (saved) {
         if (AI_BACKENDS[saved.backend]) this.backend = saved.backend;
         for (const k of ['webllmModel', 'ollamaUrl', 'ollamaModel', 'lmstudioUrl', 'lmstudioModel', 'claudeModel']) if (typeof saved[k] === 'string') this.settings[k] = saved[k];
+        if (saved.lmRatios && typeof saved.lmRatios === 'object') {
+          for (const [k, v] of Object.entries(saved.lmRatios)) if (typeof v === 'number' && v > 0.5 && v < 10) this.settings.lmRatios[k] = v;
+        }
       }
     } catch (e) { /* storage unavailable or corrupt: defaults */ }
     if (!WEBLLM_MODELS.some((m) => m.id === this.settings.webllmModel)) this.settings.webllmModel = WEBLLM_MODELS[0].id;

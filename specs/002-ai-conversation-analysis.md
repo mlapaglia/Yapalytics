@@ -28,8 +28,11 @@ user should choose where the model runs.
 - **R2** The user picks a backend: **In this browser** (WebLLM), **Ollama**,
   **LM Studio** or **Claude**. Nothing is downloaded or sent until they click **Analyze**.
 - **R3** The transcript holds the latest messages that fit the backend's budget (about
-  8,000 characters in the browser, 36,000 with Ollama, 400,000 with Claude; for LM
-  Studio see R12). The panel
+  5,500 characters in the browser, 30,000 with Ollama, 400,000 with Claude; for LM
+  Studio see R12). These were 8,000 and 36,000 until a real tokenizer showed chat runs
+  about 2.45 characters a token, not 3 to 3.5. At that rate the old budgets could
+  overflow a 4,096- or 16,384-token context once the instructions and reply were
+  added, and the server would then cut part of the conversation without saying so. The panel
   says how many messages and which dates it covers.
 - **R4** An option hides names, phone numbers, email addresses and links. People become
   "You", "Them", or "Person A, B…" in groups. It is on by default for Claude and off
@@ -52,10 +55,31 @@ user should choose where the model runs.
 - **R11** LM Studio (added after the first build): **Connect** lists the server's
   language models, marking the loaded ones, and fills the model field. Analysis
   requests are constrained to the report schema like the other backends.
-- **R12** LM Studio's context length is set when a model is loaded, not per request.
-  So the transcript budget follows the chosen model's loaded context when the server
-  reports one (refreshed on Connect and on every **Analyze**). Otherwise it assumes
-  LM Studio's common 4,096-token default, and the scope line says so.
+- **R12** (revised) LM Studio's context length is set when a model is loaded, not per
+  request. The transcript uses as much of the chosen model's loaded context as it
+  can, with no other cap, and assumes LM Studio's common 4,096-token default until
+  the server reports one. The app learns the context without a click: it lists the
+  server's models when the LM Studio backend is shown (at most every 30 seconds, and
+  again on **Connect** and every **Analyze**). That request carries no message text.
+  It also fills in the model if none is set. If the field names a model the server
+  doesn't list at all, which LM Studio would reject, it switches to a loaded model (or
+  the first listed one) and says so in the note. A listed model that isn't loaded is
+  left alone, because LM Studio loads it on request. Found on a real server: a model
+  name copied from the field's placeholder sat in the field and every request failed.
+- **R17** The LM Studio model field matches models the way LM Studio does: the key, any
+  of its variants (`qwen/qwen3.8-27b@4bit`, the form LM Studio's own UI shows) and its
+  loaded instance ids, in any capitalization. Found on a real server: with `@4bit` in
+  the field, requests worked but the context lookup (exact key only) missed, and the
+  card fell back to 4,096 tokens while saying the model was loaded. When the field
+  names a model that isn't loaded, or one LM Studio doesn't list, the scope line says
+  that rather than giving generic advice.
+- **R16** The LM Studio budget converts tokens to characters with a measured ratio. It
+  starts at 2.4 characters a token, measured on the demo with Qwen3.8 27B (2.44–2.48
+  on 9K- and 51K-character transcripts). After each analysis it uses the ratio LM
+  Studio's `usage.prompt_tokens` shows for that model, once the transcript is most of
+  the prompt. Ratios are remembered per model in localStorage, as numbers only. The
+  budget keeps 2,500 tokens free for the instructions, question and reply, plus a 5%
+  margin, so the prompt never overflows the loaded context.
 - **R13** An optional LM Studio API token (for servers with **Require Authentication**
   on) is sent as `Authorization: Bearer …`, kept in memory only and never stored. A
   missing or wrong token gets its own error.
@@ -135,7 +159,7 @@ field required, so every backend can constrain to it):
 - `webllm`: `CreateMLCEngine(model, { initProgressCallback })`, then
   `chat.completions.create` with `response_format: { type: 'json_object', schema }`
   and `max_tokens: 1000`. The prebuilt models have a 4,096-token context: the
-  8,000-character transcript (~2,300 tokens), the instructions and the reply have to
+  5,500-character transcript (~2,300 tokens), the instructions and the reply have to
   fit in it.
   The engine is kept for the next run with the same model.
 - `ollama`: `POST {url}/api/chat` with `format: schema`, `stream: false`,
@@ -153,8 +177,11 @@ field required, so every backend can constrain to it):
   `chat_template_kwargs.enable_thinking: false` were ignored). LM Studio's docs say
   asking a model for a reasoning setting it doesn't support is an error, so it's only
   sent to models that allow `off`.
-  Budget: `(context − 2,000) × 3` characters, at least 4,000, at most 400,000 (2,000
-  tokens for the instructions and the reply; ~3 characters a token to stay safe).
+  Budget (R12, R16): `(context − 2,500) × ratio × 0.95` characters, at least 2,000.
+  Your 207,104-token context gives about 466,000 characters, ~194,000 tokens.
+  Reading that much is slow: on the real server, prompt processing ran at about 470
+  tokens a second (20,899 tokens in 44.5 s), so a full context takes several minutes
+  before the reply starts.
 - `claude`: the Anthropic SDK with `dangerouslyAllowBrowser: true`, then
   `messages.create` with `output_config: { effort: 'medium', format: { type:
   'json_schema', schema } }` and `max_tokens: 16000`. Claude Opus 5.5 and Sonnet 5.5
@@ -203,6 +230,21 @@ Pure helpers, unit tested: `buildTranscript`, `redactText`, `parseAnalysis`,
 - **AC17** LM Studio with a reasoning model: the request carries `reasoning_effort:
   "none"` (only for models that allow `off`), and a reply whose JSON is in
   `reasoning_content` with an empty `content` still renders the report.
+- **AC18** LM Studio: with the backend shown, the model list is fetched without a
+  click. The scope line then names the loaded context, the model field is filled if it
+  was empty, and the budget isn't capped below the context.
+- **AC19** LM Studio: after an analysis whose transcript is most of the prompt, the
+  budget uses the measured characters-per-token for that model, remembered across
+  visits. Small prompts don't change it.
+
+- **AC20** LM Studio: a model typed as a variant (`key@4bit`) or in other capitals gets
+  the loaded model's context, reasoning setting and measured ratio. A model that isn't
+  loaded, or isn't listed, is named in the scope line.
+
+- **AC21** LM Studio: with a model in the field that the server doesn't list, the next
+  automatic listing (or **Connect**, or **Analyze**) switches to the loaded model, says
+  so, and the analysis runs with the loaded context. A listed but unloaded model is
+  kept.
 
 ## Open questions
 

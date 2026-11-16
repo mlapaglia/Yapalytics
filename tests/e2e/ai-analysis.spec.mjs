@@ -298,7 +298,7 @@ const LMSTUDIO = 'http://localhost:1234';
  * 32K context) and an embedding model; /v1/chat/completions replies with `content`.
  * With `token`, requests without "Bearer <token>" get a 401. Records chat requests.
  */
-async function fakeLmStudio(page, { content, token = null, thinking = false } = {}) {
+async function fakeLmStudio(page, { content, token = null, thinking = false, charsPerToken = null } = {}) {
   const chats = [];
   await page.route(`${LMSTUDIO}/**`, async (route) => {
     const req = route.request();
@@ -310,7 +310,7 @@ async function fakeLmStudio(page, { content, token = null, thinking = false } = 
       return route.fulfill({ headers: CORS, json: { models: [
         { type: 'llm', key: 'google/gemma-3-4b', loaded_instances: [], max_context_length: 131072 },
         { type: 'embedding', key: 'nomic-ai/nomic-embed-text-v1.5', loaded_instances: [] },
-        { type: 'llm', key: 'qwen/qwen3-8b', loaded_instances: [{ id: 'qwen/qwen3-8b', config: { context_length: 32768 } }], max_context_length: 40960,
+        { type: 'llm', key: 'qwen/qwen3-8b', variants: ['qwen/qwen3-8b@q4_k_m'], loaded_instances: [{ id: 'qwen/qwen3-8b', config: { context_length: 32768 } }], max_context_length: 40960,
           ...(thinking ? { capabilities: { reasoning: { allowed_options: ['off', 'low', 'medium', 'xhigh', 'on'], default: 'xhigh' } } } : {}) },
       ] } });
     }
@@ -320,7 +320,10 @@ async function fakeLmStudio(page, { content, token = null, thinking = false } = 
     // reasoning_content and leaves content empty: what a real LM Studio server does.
     const inThinking = thinking === 'always' || (thinking && body.reasoning_effort !== 'none');
     const message = inThinking ? { role: 'assistant', content: '', reasoning_content: content() } : { role: 'assistant', content: content() };
-    return route.fulfill({ headers: CORS, json: { choices: [{ index: 0, finish_reason: 'stop', message }] } });
+    // With charsPerToken, report usage the way LM Studio does, so the app can calibrate.
+    const chars = body.messages.reduce((n, m) => n + m.content.length, 0);
+    const usage = charsPerToken ? { prompt_tokens: Math.round(chars / charsPerToken), completion_tokens: 300 } : undefined;
+    return route.fulfill({ headers: CORS, json: { choices: [{ index: 0, finish_reason: 'stop', message }], usage } });
   });
   return chats;
 }
@@ -329,19 +332,97 @@ test.describe('spec 002: LM Studio', () => {
   test('AC13: Connect lists the language models, loaded first, and a bigger context reads more', async ({ page }) => {
     await fakeLmStudio(page, { content: () => '{}' });
     await openCard(page, 'lmstudio');
-    await expect(page.locator('#aiScope')).toContainText("LM Studio's usual 4,096-token context");
-    const before = await page.evaluate(() => AiAnalysis.transcript(AiAnalysis.conversation()).count);
     await page.click('#aiLmstudioConnect');
     await expect(page.locator('#aiLmstudioNote')).toHaveText('Connected. Loaded: qwen/qwen3-8b (32,768-token context). Also downloaded: google/gemma-3-4b.');
     await expect(page.locator('#aiLmstudioModel')).toHaveValue('qwen/qwen3-8b');
     expect(await page.locator('#aiLmstudioModels option').evaluateAll((os) => os.map((o) => o.value))).toEqual(['qwen/qwen3-8b', 'google/gemma-3-4b']);
     await expect(page.locator('#aiScope')).toContainText("the model's 32,768-token context in LM Studio");
-    const after = await page.evaluate(() => AiAnalysis.transcript(AiAnalysis.conversation()).count);
-    expect(after).toBeGreaterThan(before);
-    // Picking the unloaded model goes back to the default budget.
+    const loaded = await page.evaluate(() => AiAnalysis.transcript(AiAnalysis.conversation()).count);
+    // Picking the unloaded model goes back to the default budget, which reads less.
     await page.fill('#aiLmstudioModel', 'google/gemma-3-4b');
     await page.locator('#aiLmstudioModel').blur();
     await expect(page.locator('#aiScope')).toContainText("LM Studio's usual 4,096-token context");
+    const unloaded = await page.evaluate(() => AiAnalysis.transcript(AiAnalysis.conversation()).count);
+    expect(loaded).toBeGreaterThan(unloaded);
+  });
+
+  test('AC18: showing the LM Studio backend finds the loaded context without a click', async ({ page }) => {
+    await fakeLmStudio(page, { content: () => '{}' });
+    await openCard(page, 'lmstudio');
+    await expect(page.locator('#aiLmstudioModel')).toHaveValue('qwen/qwen3-8b'); // filled in, since it was empty
+    await expect(page.locator('#aiScope')).toContainText("the model's 32,768-token context in LM Studio");
+    await expect(page.locator('#aiLmstudioNote')).toContainText('Loaded: qwen/qwen3-8b (32,768-token context)');
+    const budget = await page.evaluate(() => AiAnalysis.budget());
+    expect(budget).toBe(await page.evaluate(() => lmstudioBudget(32768)));
+  });
+
+  test('AC20: a variant or other capitals still get the loaded context, reasoning setting and ratio', async ({ page }) => {
+    let c;
+    const chats = await fakeLmStudio(page, { thinking: true, charsPerToken: 3.1, content: () => JSON.stringify(report(c.first, c.last)) });
+    c = await openCard(page, 'lmstudio');
+    await expect(page.locator('#aiLmstudioModel')).toHaveValue('qwen/qwen3-8b');
+    await page.fill('#aiLmstudioModel', 'QWEN/qwen3-8b@Q4_K_M'); // as LM Studio's UI shows it, typed loosely
+    await page.locator('#aiLmstudioModel').blur();
+    await expect(page.locator('#aiScope')).toContainText("the model's 32,768-token context in LM Studio");
+    await page.click('#aiRun');
+    await expect(reportText(page)).toContainText('Mostly weekend plans and running jokes.');
+    expect(chats[0].body.model).toBe('QWEN/qwen3-8b@Q4_K_M'); // sent as typed: LM Studio accepts it
+    expect(chats[0].body.reasoning_effort).toBe('none');
+    expect(await page.evaluate(() => Object.keys(AiAnalysis.settings.lmRatios))).toEqual(['qwen/qwen3-8b']);
+
+    // Names that don't match a loaded model say so.
+    await page.fill('#aiLmstudioModel', 'llama3');
+    await page.locator('#aiLmstudioModel').blur();
+    await expect(page.locator('#aiScope')).toContainText('LM Studio doesn\'t list a model called "llama3" (loaded now: qwen/qwen3-8b)');
+    await page.fill('#aiLmstudioModel', 'google/gemma-3-4b');
+    await page.locator('#aiLmstudioModel').blur();
+    await expect(page.locator('#aiScope')).toContainText('"google/gemma-3-4b" isn\'t loaded');
+  });
+
+  test('AC21: a model the server doesn’t have is swapped for the loaded one; an unloaded listed one is kept', async ({ page }) => {
+    let c;
+    const chats = await fakeLmStudio(page, { content: () => JSON.stringify(report(c.first, c.last)) });
+    // Saved from an earlier visit: a model this server doesn't have.
+    await page.addInitScript(() => {
+      if (!sessionStorage.getItem('seeded')) {
+        localStorage.setItem('yapa-ai', JSON.stringify({ backend: 'lmstudio', lmstudioModel: 'old/gone-model' }));
+        sessionStorage.setItem('seeded', '1');
+      }
+    });
+    c = await openCard(page);
+    await expect(page.locator('#aiLmstudioModel')).toHaveValue('qwen/qwen3-8b');
+    await expect(page.locator('#aiLmstudioNote')).toContainText('LM Studio doesn\'t have "old/gone-model", so switched to qwen/qwen3-8b.');
+    await expect(page.locator('#aiScope')).toContainText("the model's 32,768-token context in LM Studio");
+
+    // Typed just before Analyze (the automatic listing is throttled): Analyze checks again.
+    await page.fill('#aiLmstudioModel', 'qwen/qwen3-8b-typo');
+    await page.click('#aiRun');
+    await expect(reportText(page)).toContainText('By LM Studio (qwen/qwen3-8b)');
+    expect(chats.at(-1).body.model).toBe('qwen/qwen3-8b');
+
+    // Listed but not loaded: LM Studio loads it on request, so it stays.
+    await page.fill('#aiLmstudioModel', 'google/gemma-3-4b');
+    await page.click('#aiRun');
+    await expect.poll(() => chats.length).toBe(2);
+    expect(chats.at(-1).body.model).toBe('google/gemma-3-4b');
+    await expect(page.locator('#aiLmstudioModel')).toHaveValue('google/gemma-3-4b');
+  });
+
+  test('AC19: after an analysis the budget uses the measured characters per token, remembered across visits', async ({ page }) => {
+    let c;
+    await fakeLmStudio(page, { charsPerToken: 3.1, content: () => JSON.stringify(report(c.first, c.last)) });
+    c = await openCard(page, 'lmstudio');
+    await expect(page.locator('#aiScope')).toContainText('32,768-token context');
+    const before = await page.evaluate(() => AiAnalysis.budget());
+    await page.click('#aiRun');
+    await expect(reportText(page)).toContainText('Mostly weekend plans and running jokes.');
+    const after = await page.evaluate(() => ({ budget: AiAnalysis.budget(), ratio: AiAnalysis.lmstudioRatio(), expected: lmstudioBudget(32768, AiAnalysis.lmstudioRatio()) }));
+    expect(after.ratio).toBeCloseTo(3.1, 1);
+    expect(after.budget).toBe(after.expected);
+    expect(after.budget).toBeGreaterThan(before);
+    // A new visit starts from the measured ratio.
+    await page.reload();
+    expect(await page.evaluate(() => AiAnalysis.settings.lmRatios['qwen/qwen3-8b'])).toBeCloseTo(3.1, 1);
   });
 
   test('AC14: Analyze posts the transcript with the schema as response_format, and the report renders', async ({ page }) => {
