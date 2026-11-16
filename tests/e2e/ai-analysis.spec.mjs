@@ -139,7 +139,11 @@ test.describe('spec 002: AI conversation analysis', () => {
     const [y, m, d] = c.first.split('-').map(Number);
     expect(range.from).toBe(await page.evaluate(([yy, mm, dd]) => new Date(yy, mm - 1, dd).getTime(), [y, m, d]));
     expect(range.to - range.from).toBeLessThan(86400000);
-    await expect(page.locator('#browserCount')).toContainText('messages');
+    // The list shows exactly that day's messages. The demo is dated from today, so the
+    // first day may hold a single message: "1 message".
+    const onDay = await page.evaluate(() => inRange(baseMessages()).length);
+    expect(onDay).toBeGreaterThan(0);
+    await expect(page.locator('#browserCount')).toHaveText(new RegExp(`^${onDay.toLocaleString('en-US')} messages? · showing latest`));
     await expect(reportText(page)).toBeVisible(); // same conversation, so the report stays
   });
 
