@@ -1,6 +1,6 @@
 # 004 Shared posts and reactions on messages
 
-Status: Draft (built, awaiting review) · PR:
+Status: Draft (built, awaiting review) · PR: [#10](https://github.com/mlapaglia/Yapalytics/pull/10)
 
 ## Problem
 
