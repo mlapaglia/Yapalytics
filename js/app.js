@@ -601,6 +601,16 @@ function initPeople() {
     changeLinks(() => linkThreads(keys));
   };
   $('#peopleForget').onclick = () => changeLinks(() => { S.people.clear(); S.dismissed.clear(); });
+  // Another tab changed the links (R10): take its version, so this tab's next change
+  // can't write back links that were forgotten there.
+  window.addEventListener('storage', (e) => {
+    if (e.key !== PEOPLE_STORE && e.key !== null) return; // null: all of the site's storage was cleared
+    readPeopleStore();
+    if ($('#dash').hidden) return;
+    applyLinks();
+    populateContacts();
+    refresh();
+  });
 }
 
 // ------------------------------------------------------------------ filters
@@ -1668,7 +1678,7 @@ function renderCalls(ui) {
     kpi('Calls', fmtNum(C.n), `${fmtNum(C.byType[0])} out · ${fmtNum(C.byType[1])} in`),
     kpi('Talk time', fmtDuration(talk * 1000), `${fmtDuration(C.talk[1] * 1000)} out · ${fmtDuration(C.talk[0] * 1000)} in`),
     kpi('Average call', answeredDur ? fmtDuration((talk / answeredDur) * 1000) : '–', `across ${fmtNum(connected)} connected calls`),
-    kpi('Longest call', C.longest ? fmtDuration(C.longest.du * 1000) : '–', C.longest ? `${labelFor(C.longest.k)} · ${new Date(C.longest.t).toLocaleDateString()}` : ''),
+    kpi('Longest call', C.longest ? fmtDuration(C.longest.du * 1000) : '–', C.longest ? `${escapeHtml(labelFor(C.longest.k))} · ${new Date(C.longest.t).toLocaleDateString()}` : ''),
     kpi('Missed', fmtNum(C.byType[2]), `${fmtNum(C.byType[3])} voicemail · ${fmtNum(C.byType[4])} declined`),
   ].join('');
 

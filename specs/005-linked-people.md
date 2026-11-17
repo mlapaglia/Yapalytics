@@ -53,6 +53,10 @@ you talk to someone on several apps, no view shows how much you actually talk to
   (`localStorage` key `ms-people`) and apply again when the same conversations are
   loaded. A link applies only when at least two of its conversations are loaded.
   "Forget all links" clears all of it.
+- **R10** A change to the links in one tab applies in the app's other open tabs, so a
+  tab that's still open can't write back links that were forgotten in another.
+- **R11** An AI analysis of a linked person belongs to the conversations it read. Adding
+  or removing one clears the report, and a result that arrives after that isn't shown.
 
 ## Privacy
 
@@ -64,6 +68,13 @@ keys (contact names, the last 8 digits of SMS numbers, Instagram thread folder i
 Telegram chat ids, Google Chat DM ids, iMessage and WhatsApp conversation names),
 each person's chosen name, and the dismissed suggestions. It stays until the user
 clicks "Forget all links" or clears the site's data. Nothing leaves the browser.
+
+A saved link is tied to conversation keys, the same keys the app uses to recognise a
+conversation when files are loaded again. An unrelated conversation that gets the same
+key in a later export joins the link: a WhatsApp chat with the same title, or an SMS
+number with the same last 8 digits. The app already treats those as one conversation
+when they're loaded together, so links follow that rule rather than adding a stricter
+one.
 
 ## Design
 
@@ -133,6 +144,10 @@ picked.
 - **AC13** The People filter finds a person by any of its conversations' names.
 - **AC14** The person's name defaults to the contact-book name over an Instagram handle,
   and can be changed to another of its conversations' names.
+- **AC15** Forgetting all links in one tab removes them from another open tab, and a
+  later change in that tab doesn't bring them back.
+- **AC16** Adding a conversation to an analyzed person clears its AI report, even though
+  the person's key stays the same.
 
 ## Open questions
 

@@ -1,6 +1,6 @@
 import { test, expect, loadFiles, openTab, scrollTo } from './fixtures.mjs';
 import { zippedExport } from '../helpers/instagram.mjs';
-import { smsBackup } from '../helpers/sms.mjs';
+import { callLog, smsBackup } from '../helpers/sms.mjs';
 
 // The Instagram export has 1-on-1s with Alex Rivera (5 messages) and Sam Patel (1), and
 // the group Road Trip 🚗. The SMS backup adds Alex Rivera (3) and Pat Lee (2).
@@ -174,5 +174,55 @@ test.describe('spec 005 linked people', () => {
     await expect.poll(() => options(page)).toContain('🔗 Sam Patel (3)');
     await loadFiles(page, files());
     expect(await options(page)).toContain('🔗 Sam Patel (3)');
+  });
+
+  test('AC15: forgetting links in one tab forgets them in another', async ({ page, context }) => {
+    await openDialog(page);
+    await page.click('#peopleSuggest [data-accept="0"]');
+    await page.locator('#peopleDlg .profile-close').click();
+    const other = await context.newPage();
+    await loadFiles(other, files());
+    expect(await options(other)).toContain('🔗 Alex Rivera (8)');
+    await openDialog(other);
+    await other.click('#peopleForget');
+    // The first tab picks that up, and its next change doesn't write the link back.
+    await expect.poll(() => options(page)).not.toContain('🔗 Alex Rivera (8)');
+    await openDialog(page);
+    await page.click('#peopleSuggest [data-dismiss="0"]');
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('ms-people')));
+    expect(saved.people).toEqual([]);
+    await other.close();
+  });
+
+  test('AC16: adding a conversation to an analyzed person clears its AI report', async ({ page }) => {
+    await openDialog(page);
+    await page.click('#peopleSuggest [data-accept="0"]');
+    await page.locator('#peopleDlg .profile-close').click();
+    const key = await personKey(page, IG_ALEX);
+    await page.selectOption('#contactSel', key);
+    await openTab(page, 'sec-ai');
+    // Stand in for a finished analysis of SMS + Instagram Alex.
+    await page.evaluate(() => AiAnalysis.showReport(AiAnalysis.conversation().id, { summary: 'about Alex', tone: [], moments: [], topics: [] }, { backend: 'ollama', t: { count: 1, total: 1, first: 0, last: 0 }, question: '' }));
+    await expect(page.locator('#aiReport')).toBeVisible();
+    await linkByHand(page, SMS_PAT, IG_ALEX);
+    expect(await personKey(page, SMS_PAT)).toBe(key); // same person key, one more conversation
+    await page.locator('#peopleDlg .profile-close').click();
+    await expect(page.locator('#aiReport')).toBeHidden();
+    expect(await page.evaluate(() => AiAnalysis.report)).toBeNull();
+  });
+});
+
+test.describe('linked people: escaping', () => {
+  test('a contact name with HTML shows as text in the Longest call KPI', async ({ page }) => {
+    const name = '<img src=x onerror="window.__xss = 1">';
+    await loadFiles(page, [
+      smsBackup([{ address: '+15551112222', name, at: '2024-08-19T09:00:00Z', body: 'hi' }]),
+      callLog([{ number: '+15551112222', name, at: '2024-08-19T08:00:00Z', type: 1, duration: 300 }]),
+    ]);
+    await openTab(page, 'callsSection');
+    const kpis = page.locator('#callKpis');
+    await expect(kpis).toContainText(name);
+    await expect(kpis.locator('img')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__xss)).toBeUndefined();
   });
 });
