@@ -705,11 +705,6 @@ table.leader .muted { color: var(--muted); }
   .otd-nav #otdDate { min-width: 0; }
 }
 
-/* ------------------------------------------------------------------ mood details */
-.browser-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
-.browser-tools .check { font-size: 13px; padding-bottom: 0; }
-.browser-tools input[type="search"] { width: 280px; max-width: 100%; }
-.browser-filter {
 /* ------------------------------------------------------------------ linked people (spec 005) */
 .people-btn { padding: 7px 12px; }
 .profile-linked { overflow-wrap: anywhere; }
@@ -729,6 +724,11 @@ table.leader .muted { color: var(--muted); }
 .people-pick select { flex: 1 1 200px; width: auto; }
 .people-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border); }
 
+/* ------------------------------------------------------------------ mood details */
+.browser-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.browser-tools .check { font-size: 13px; padding-bottom: 0; }
+.browser-tools input[type="search"] { width: 280px; max-width: 100%; }
+.browser-filter {
   display: inline-flex;
   align-items: center;
   gap: 4px;
