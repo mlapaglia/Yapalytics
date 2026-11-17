@@ -3,7 +3,11 @@
 const S = {
   msgs: [],
   calls: [],
-  contacts: new Map(), // key -> { key, name, addr, group, lastT, s, label }
+  contacts: new Map(), // key -> { key, name, addr, group, lastT, s, label }; linked people (spec 005) add { person: true, threads, sources }
+  people: new Map(), // person key -> { key, name, threads }: saved links (spec 005), loaded or not; name '' = the default
+  personOf: new Map(), // conversation key -> person key, for the links that apply to what's loaded
+  dismissed: new Set(), // signatures (linkSignature) of dismissed link suggestions
+  suggestions: [], // suggestLinks result behind the People dialog
   seenMsgs: new Map(), // dedupe key -> the message kept (null for reactions sent as texts)
   seenCalls: new Set(),
   reactions: 0, // reactions sent as texts, left out of the messages
@@ -205,6 +209,7 @@ async function loadFiles(fileList) {
   for (const c of S.contacts.values()) c.label = contactLabel(c);
   for (const s of Object.keys(S.owners)) if (S.owners[s].auto) S.owners[s].name = guessOwner(+s);
   applyOwners();
+  applyLinks();
   $('#landing').hidden = true;
   $('#dash').hidden = false;
   populateContacts();
@@ -232,6 +237,7 @@ function formatAddr(a) {
 }
 
 function contactLabel(c) {
+  if (c.person) return '🔗 ' + (formatAddr(c.name) || c.key);
   const chat = SOURCE_MARK[c.s] || '';
   if (c.group) {
     if (c.name) return chat + '👥 ' + c.name.split(', ').map(formatAddr).join(', ');
@@ -240,14 +246,17 @@ function contactLabel(c) {
   return (chat ? chat + ' ' : '') + (formatAddr(c.name) || formatAddr(c.addr) || c.key);
 }
 
-/** Message source of a thread key: 0 = SMS, 1 = Google Chat, 2 = WhatsApp, 3 = iMessage, 4 = Telegram, 5 = Instagram. */
-function keySource(key) {
-  const c = S.contacts.get(key);
-  return (c && c.s) || 0;
+function loadedSources() {
+  return new Set([...S.contacts.values()].filter((c) => !c.person).map((c) => c.s || 0));
 }
 
-function loadedSources() {
-  return new Set([...S.contacts.values()].map((c) => c.s || 0));
+/**
+ * Message sources of a conversation key (0 = SMS, 1 = Google Chat, 2 = WhatsApp,
+ * 3 = iMessage, 4 = Telegram, 5 = Instagram): one, or several for a linked person.
+ */
+function keySources(key) {
+  const c = S.contacts.get(key);
+  return c && c.person ? c.sources : [(c && c.s) || 0];
 }
 
 // ------------------------------------------------------------------ export owner (WhatsApp, iMessage, Telegram, Instagram)
@@ -324,6 +333,9 @@ function setOwner(source, name) {
  * members' 1-on-1 keys, so members' names come from their own contacts.
  */
 function contactSearchText(c) {
+  if (c.person) {
+    return [c.label, c.name, ...c.threads.map((k) => S.contacts.get(k)).filter(Boolean).map(contactSearchText)].filter(Boolean).join('\n').toLowerCase();
+  }
   const parts = [c.label, c.name, ...c.addr.split('~').filter((n) => !hasOwner(c.s) || (n !== S.owners[c.s].name && !isDefaultOwner(c.s, n)))];
   if (c.group && !c.s) {
     for (const k of c.key.slice(2).split('~')) {
@@ -358,17 +370,261 @@ function labelFor(key) {
   return c ? c.label : key;
 }
 
+// ------------------------------------------------------------------ linked people (spec 005)
+
+const PEOPLE_STORE = 'ms-people';
+/** A person's key: 'p:' + the first of its conversation keys, so it stays the same across reloads. */
+const personKeyOf = (threads) => 'p:' + [...threads].sort()[0];
+/** A conversation's own name, formatted: what its person can be called. */
+const threadName = (c) => formatAddr(c.name) || formatAddr(c.addr) || c.key;
+const isLinkable = (c) => !!c && !c.group && !c.person && c.key !== 'unknown';
+const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+const REASON_TEXT = { name: 'name', phone: 'phone number', email: 'email' };
+
+function readPeopleStore() {
+  S.people = new Map();
+  S.dismissed = new Set();
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem(PEOPLE_STORE) || 'null'); } catch (e) { /* storage unavailable, or not ours */ }
+  if (!data || data.v !== 1) return;
+  for (const p of Array.isArray(data.people) ? data.people : []) {
+    const threads = Array.isArray(p && p.threads) ? [...new Set(p.threads.filter((k) => typeof k === 'string'))] : [];
+    if (threads.length > 1) putPerson(threads, typeof p.name === 'string' ? p.name : '');
+  }
+  for (const d of Array.isArray(data.dismissed) ? data.dismissed : []) if (typeof d === 'string') S.dismissed.add(d);
+}
+
+function writePeopleStore() {
+  const people = [...S.people.values()].map(({ name, threads }) => ({ name, threads }));
+  try {
+    if (people.length || S.dismissed.size) localStorage.setItem(PEOPLE_STORE, JSON.stringify({ v: 1, people, dismissed: [...S.dismissed] }));
+    else localStorage.removeItem(PEOPLE_STORE);
+  } catch (e) { /* storage unavailable: links last until the page closes */ }
+}
+
+function putPerson(threads, name) {
+  const key = personKeyOf(threads);
+  S.people.set(key, { key, name, threads: [...threads].sort() });
+}
+
+/** The saved person a conversation belongs to, loaded or not. */
+function savedPersonOf(threadKey) {
+  for (const p of S.people.values()) if (p.threads.includes(threadKey)) return p;
+  return null;
+}
+
+/** Messages per conversation, by the key each had before any link (calls-only conversations count 0). */
+function threadCounts() {
+  const n = new Map();
+  for (const m of S.msgs) { const k = m.tk || m.k; n.set(k, (n.get(k) || 0) + 1); }
+  for (const c of S.calls) { const k = c.tk || c.k; if (!n.has(k)) n.set(k, 0); }
+  return n;
+}
+
+/**
+ * Apply the saved links to what's loaded: a person with 2+ loaded conversations gets a
+ * contact, and its messages and calls carry its key in `k` (the conversation's own key
+ * moves to `tk`). Everything that groups by `k` then sees one conversation.
+ */
+function applyLinks() {
+  for (const [k, c] of S.contacts) if (c.person) S.contacts.delete(k);
+  const counts = threadCounts();
+  S.personOf = new Map();
+  for (const p of S.people.values()) {
+    const parts = p.threads.filter((k) => counts.has(k)).map((k) => S.contacts.get(k)).filter(isLinkable);
+    if (parts.length < 2) continue;
+    const names = parts.map(threadName);
+    const name = p.name && names.includes(p.name) ? p.name : defaultPersonName(parts.map((c) => ({ s: c.s, name: threadName(c), n: counts.get(c.key) })));
+    for (const c of parts) S.personOf.set(c.key, p.key);
+    S.contacts.set(p.key, {
+      key: p.key, name, addr: '', group: false, person: true, members: [],
+      threads: parts.map((c) => c.key),
+      sources: [...new Set(parts.map((c) => c.s || 0))].sort((a, b) => a - b),
+      lastT: Math.max(...parts.map((c) => c.lastT || 0)),
+    });
+  }
+  const relink = (r) => {
+    const own = r.tk || r.k;
+    const p = S.personOf.get(own);
+    if (p) { r.tk = own; r.k = p; } else if (r.tk) { r.k = r.tk; delete r.tk; }
+  };
+  for (const m of S.msgs) relink(m);
+  for (const c of S.calls) relink(c);
+  for (const c of S.contacts.values()) if (c.person) c.label = contactLabel(c);
+  for (const c of S.contacts.values()) c.search = contactSearchText(c);
+  matchPeople();
+  S.firstSeen = computeFirstSeen();
+  S.docFreq = null;
+  const sel = S.filter.contact;
+  if (S.personOf.has(sel)) S.filter.contact = S.personOf.get(sel);
+  else if (sel.startsWith('p:') && !S.contacts.has(sel)) S.filter.contact = 'all';
+}
+
+/** Loaded 1-on-1 conversations, their message counts, and the links worth suggesting. */
+function computeSuggestions() {
+  S.threadN = threadCounts();
+  S.linkable = [...S.threadN.keys()].map((k) => S.contacts.get(k)).filter(isLinkable);
+  S.suggestions = suggestLinks(S.linkable, {
+    personOf: S.personOf,
+    dismissed: S.dismissed,
+    ownNames: (s) => (hasOwner(s) ? [S.owners[s].name] : []),
+  });
+}
+
+function updatePeopleButton() {
+  computeSuggestions();
+  const btn = $('#peopleBtn');
+  const n = S.suggestions.length;
+  btn.hidden = S.linkable.length < 2;
+  btn.textContent = n ? `🔗 Link people (${n})` : '🔗 Link people';
+  btn.title = n ? `${n} possible link${n === 1 ? '' : 's'} between conversations with the same person` : "Tie one person's conversations on different apps together";
+  if ($('#peopleDlg').open) renderPeopleDialog();
+}
+
+/** Change the saved links, then show the dashboard with them. */
+function changeLinks(fn) {
+  fn();
+  writePeopleStore();
+  applyLinks();
+  populateContacts(); // also re-renders the People dialog
+  refresh();
+}
+
+/** One person out of these conversations and any people they already belong to. */
+function linkThreads(keys) {
+  const all = new Set(keys);
+  let name = '';
+  for (const k of keys) {
+    const p = savedPersonOf(k);
+    if (!p) continue;
+    for (const t of p.threads) all.add(t);
+    name = name || p.name;
+    S.people.delete(p.key);
+  }
+  if (all.size > 1) putPerson([...all], name);
+}
+
+function unlinkThread(key) {
+  const p = savedPersonOf(key);
+  if (!p) return;
+  S.people.delete(p.key);
+  const rest = p.threads.filter((k) => k !== key);
+  if (rest.length > 1) putPerson(rest, p.name);
+}
+
+function threadChip(key, extra = '') {
+  const c = S.contacts.get(key);
+  return `<span class="chip person-chip">${escapeHtml(threadName(c))} <small>${escapeHtml(SOURCES[c.s || 0])} · ${fmtNum(S.threadN.get(key) || 0)}</small>${extra}</span>`;
+}
+
+function renderPeopleDialog() {
+  const sug = S.suggestions;
+  $('#peopleSuggest').innerHTML = '<h3 class="profile-h">Suggestions</h3>' + (sug.length
+    ? `<ul class="people-list">${sug.map((x, i) => `<li>
+        <div class="chips">${x.keys.map((k) => threadChip(k)).join('')}</div>
+        <span class="meta">Same ${escapeHtml(x.reasons.map((r) => REASON_TEXT[r]).join(' and '))}</span>
+        <span class="people-actions"><button class="btn small primary" type="button" data-accept="${i}">Link</button><button class="btn small ghost" type="button" data-dismiss="${i}">Dismiss</button></span>
+      </li>`).join('')}</ul>`
+    : '<p class="sub">Nothing to suggest. Conversations that share a name, phone number or email show up here.</p>');
+
+  const linked = [...S.contacts.values()].filter((c) => c.person).sort((a, b) => a.name.localeCompare(b.name));
+  const unloaded = S.people.size - linked.length;
+  $('#peopleLinked').innerHTML = '<h3 class="profile-h">Linked people</h3>' + (linked.length
+    ? `<ul class="people-list">${linked.map((p) => {
+      const names = [...new Set(p.threads.map((k) => threadName(S.contacts.get(k))))];
+      return `<li data-person="${escapeHtml(p.key)}">
+        <select class="person-name" aria-label="Name for this person">${names.map((n) => `<option${n === p.name ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('')}</select>
+        <div class="chips">${p.threads.map((k) => threadChip(k, `<button type="button" class="chip-x" data-unlink="${escapeHtml(k)}" aria-label="Unlink ${escapeHtml(threadName(S.contacts.get(k)))}" title="Unlink">✕</button>`)).join('')}</div>
+        <button class="btn small ghost" type="button" data-unlink-all="${escapeHtml(p.key)}">Unlink all</button>
+      </li>`;
+    }).join('')}</ul>`
+    : '<p class="sub">None yet.</p>') +
+    (unloaded > 0 ? `<p class="sub">${fmtNum(unloaded)} more saved link${unloaded === 1 ? ' is' : 's are'} for conversations that aren't loaded.</p>` : '');
+
+  const opts = [...S.linkable].sort((a, b) => threadName(a).localeCompare(threadName(b)))
+    .map((c) => `<option value="${escapeHtml(c.key)}">${escapeHtml(`${threadName(c)} (${SOURCES[c.s || 0]}, ${fmtNum(S.threadN.get(c.key) || 0)})`)}</option>`).join('');
+  for (const sel of [$('#peopleA'), $('#peopleB')]) {
+    const keep = sel.value;
+    sel.innerHTML = '<option value="">Choose a conversation…</option>' + opts;
+    sel.value = S.linkable.some((c) => c.key === keep) ? keep : '';
+  }
+  syncPeopleLink();
+}
+
+function syncPeopleLink() {
+  const a = $('#peopleA').value;
+  const b = $('#peopleB').value;
+  const same = a && S.personOf.has(a) && S.personOf.get(a) === S.personOf.get(b);
+  $('#peopleLink').disabled = !a || !b || a === b || !!same;
+}
+
+/** Open the People dialog, with `preselect` (a conversation key) picked for linking by hand. */
+function openPeopleDialog(preselect) {
+  computeSuggestions();
+  renderPeopleDialog();
+  if (preselect && S.linkable.some((c) => c.key === preselect)) {
+    $('#peopleA').value = preselect;
+    syncPeopleLink();
+  }
+  const dlg = $('#peopleDlg');
+  if (!dlg.open) dlg.showModal();
+}
+
+function initPeople() {
+  readPeopleStore();
+  const dlg = $('#peopleDlg');
+  $('#peopleBtn').onclick = () => openPeopleDialog();
+  dlg.querySelector('.profile-close').onclick = () => dlg.close();
+  dlg.addEventListener('click', (e) => {
+    if (e.target === dlg) { dlg.close(); return; } // the backdrop
+    const t = e.target.closest('[data-accept], [data-dismiss], [data-unlink], [data-unlink-all]');
+    if (!t) return;
+    const d = t.dataset;
+    if (d.accept != null) {
+      const x = S.suggestions[+d.accept];
+      if (x) changeLinks(() => linkThreads(x.keys));
+    } else if (d.dismiss != null) {
+      const x = S.suggestions[+d.dismiss];
+      if (x) changeLinks(() => S.dismissed.add(linkSignature(x.keys)));
+    } else if (d.unlink) changeLinks(() => unlinkThread(d.unlink));
+    else if (d.unlinkAll) changeLinks(() => S.people.delete(d.unlinkAll));
+  });
+  dlg.addEventListener('change', (e) => {
+    if (e.target.matches('select.person-name')) {
+      const p = S.people.get(e.target.closest('[data-person]').dataset.person);
+      if (p) changeLinks(() => { p.name = e.target.value; });
+    } else if (e.target.id === 'peopleA' || e.target.id === 'peopleB') syncPeopleLink();
+  });
+  $('#peopleLink').onclick = () => {
+    const keys = [$('#peopleA').value, $('#peopleB').value];
+    $('#peopleA').value = $('#peopleB').value = '';
+    changeLinks(() => linkThreads(keys));
+  };
+  $('#peopleForget').onclick = () => changeLinks(() => { S.people.clear(); S.dismissed.clear(); });
+  // Another tab changed the links (R10): take its version, so this tab's next change
+  // can't write back links that were forgotten there.
+  window.addEventListener('storage', (e) => {
+    if (e.key !== PEOPLE_STORE && e.key !== null) return; // null: all of the site's storage was cleared
+    readPeopleStore();
+    if ($('#dash').hidden) return;
+    applyLinks();
+    populateContacts();
+    refresh();
+  });
+}
+
 // ------------------------------------------------------------------ filters
 
 function populateContacts() {
-  const totals = new Map();
-  for (const m of S.msgs) totals.set(m.k, (totals.get(m.k) || 0) + 1);
-  const callTotals = new Map();
-  for (const c of S.calls) callTotals.set(c.k, (callTotals.get(c.k) || 0) + 1);
   const { source } = S.filter;
+  // A linked person spans apps, so with an app picked only that app's messages count (spec 005 R6).
+  const totals = new Map();
+  for (const m of S.msgs) if (source === 'all' || (m.s || 0) === source) totals.set(m.k, (totals.get(m.k) || 0) + 1);
+  const callTotals = new Map();
+  if (source === 'all' || source === 0) for (const c of S.calls) callTotals.set(c.k, (callTotals.get(c.k) || 0) + 1);
   const people = S.peopleKeys;
   const keys = [...new Set([...totals.keys(), ...callTotals.keys()])]
-    .filter((k) => (source === 'all' || keySource(k) === source) && (!people || people.has(k)));
+    .filter((k) => (source === 'all' || keySources(k).includes(source)) && (!people || people.has(k)));
   keys.sort((a, b) => (totals.get(b) || 0) - (totals.get(a) || 0) || (callTotals.get(b) || 0) - (callTotals.get(a) || 0));
 
   const sel = $('#contactSel');
@@ -391,6 +647,7 @@ function populateContacts() {
     b.hidden = b.dataset.source !== 'all' && !present.has(+b.dataset.source);
     b.classList.toggle('on', b.dataset.source === String(source));
   });
+  updatePeopleButton();
   $('#fileInfo').textContent = S.files.map((f) => f.name).join(', ') +
     (S.reactions ? ` · ${fmtNum(S.reactions)} reaction${S.reactions === 1 ? '' : 's'} (like “😂 to …” or “Loved an image”) not counted as messages` : '');
 }
@@ -406,7 +663,8 @@ function setContact(key) {
 /** Messages matching the filters (not the date range); `contact` overrides the selected conversation. */
 function baseMessages(contact = S.filter.contact) {
   const { groups, source } = S.filter;
-  if (contact !== 'all') return S.msgs.filter((m) => m.k === contact);
+  // A linked person (spec 005) spans apps, so the app filter still applies to it.
+  if (contact !== 'all') return S.msgs.filter((m) => m.k === contact && (source === 'all' || (m.s || 0) === source));
   const people = S.peopleKeys;
   if (source === 'all' && groups && !people) return S.msgs;
   return S.msgs.filter((m) =>
@@ -893,6 +1151,7 @@ function initMoodDetails() {
 function plainName(key) {
   const c = S.contacts.get(key);
   if (!c) return key;
+  if (c.person) return formatAddr(c.name) || key;
   if (c.group) return c.name ? c.name.split(', ').map(formatAddr).join(', ') : c.addr.split('~').map(formatAddr).join(', ') || 'Group chat';
   return formatAddr(c.name) || formatAddr(c.addr) || key;
 }
@@ -1022,7 +1281,8 @@ function openProfile(key) {
       <div class="avatar" style="background: var(--series-${hue + 1})" aria-hidden="true">${escapeHtml(initials)}</div>
       <div>
         <h2 id="profileName">${escapeHtml(name)}</h2>
-        <p class="sub">${group ? `Group chat · ${fmtNum(members)} people` : '1-on-1'} on ${escapeHtml(SOURCES[c.s || 0])} · all time</p>
+        <p class="sub">${group ? `Group chat · ${fmtNum(members)} people` : '1-on-1'} on ${escapeHtml(c.person ? andList(c.sources.map((s) => SOURCES[s])) : SOURCES[c.s || 0])} · all time</p>
+        ${c.person ? `<p class="sub profile-linked">Linked: ${escapeHtml(c.threads.map((k) => `${threadName(S.contacts.get(k))} (${SOURCES[S.contacts.get(k).s || 0]})`).join(', '))}</p>` : ''}
       </div>
     </header>
     <div class="kpis profile-kpis">${tiles.join('')}</div>
@@ -1043,7 +1303,9 @@ function openProfile(key) {
   if (started) {
     bottom.push(`<h3 class="profile-h">How it started</h3><blockquote class="first-msg"><p>${escapeHtml(clip(started.b, 280))}</p><footer>${escapeHtml(started.o ? 'You' : momentSender(started))}, ${escapeHtml(longDate(started.t))}</footer></blockquote>`);
   }
-  bottom.push(`<div class="profile-actions"><button class="btn primary" type="button" data-focus="${escapeHtml(key)}">Focus the dashboard on ${escapeHtml(name)}</button></div>`);
+  const linkLabel = c.person ? 'Manage links…' : isLinkable(c) ? 'Same person on another app? Link…' : '';
+  const linkBtn = linkLabel ? `<button class="btn" type="button" data-link-people="${escapeHtml(key)}">${linkLabel}</button>` : '';
+  bottom.push(`<div class="profile-actions">${linkBtn}<button class="btn primary" type="button" data-focus="${escapeHtml(key)}">Focus the dashboard on ${escapeHtml(name)}</button></div>`);
   $('#profileBottom').innerHTML = bottom.join('');
 
   const dlg = $('#profile');
@@ -1067,7 +1329,7 @@ function initGlance() {
   dlg.querySelector('.profile-close').onclick = () => dlg.close();
   dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // the backdrop
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-profile], [data-otd-day], [data-otd-goto], [data-focus]');
+    const t = e.target.closest('[data-profile], [data-otd-day], [data-otd-goto], [data-focus], [data-link-people]');
     if (!t) return;
     if (t.dataset.profile) openProfile(t.dataset.profile);
     else if (t.dataset.otdDay) readDay(+t.dataset.otdDay);
@@ -1078,6 +1340,9 @@ function initGlance() {
     } else if (t.dataset.focus) {
       dlg.close();
       setContact(t.dataset.focus);
+    } else if (t.dataset.linkPeople) {
+      dlg.close();
+      openPeopleDialog(t.dataset.linkPeople);
     }
   });
 }
@@ -1413,7 +1678,7 @@ function renderCalls(ui) {
     kpi('Calls', fmtNum(C.n), `${fmtNum(C.byType[0])} out · ${fmtNum(C.byType[1])} in`),
     kpi('Talk time', fmtDuration(talk * 1000), `${fmtDuration(C.talk[1] * 1000)} out · ${fmtDuration(C.talk[0] * 1000)} in`),
     kpi('Average call', answeredDur ? fmtDuration((talk / answeredDur) * 1000) : '–', `across ${fmtNum(connected)} connected calls`),
-    kpi('Longest call', C.longest ? fmtDuration(C.longest.du * 1000) : '–', C.longest ? `${labelFor(C.longest.k)} · ${new Date(C.longest.t).toLocaleDateString()}` : ''),
+    kpi('Longest call', C.longest ? fmtDuration(C.longest.du * 1000) : '–', C.longest ? `${escapeHtml(labelFor(C.longest.k))} · ${new Date(C.longest.t).toLocaleDateString()}` : ''),
     kpi('Missed', fmtNum(C.byType[2]), `${fmtNum(C.byType[3])} voicemail · ${fmtNum(C.byType[4])} declined`),
   ].join('');
 
@@ -1608,7 +1873,7 @@ function renderBrowser(msgs) {
   S.browserShown = shown;
 
   const frag = document.createDocumentFragment();
-  const showWho = S.filter.contact === 'all' || S.filter.contact.startsWith('g:');
+  const showWho = S.filter.contact === 'all' || S.filter.contact.startsWith('g:') || S.filter.contact.startsWith('p:');
   let lastDay = null;
   for (const m of shown) {
     if (m.d !== lastDay) {
@@ -1623,12 +1888,13 @@ function renderBrowser(msgs) {
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     const sender = !m.o && m.k.startsWith('g:') && (m.sn || m.sk) ? senderLabel(m.sn || m.sk) : '';
-    if (showWho && (S.filter.contact === 'all' || sender)) {
+    const via = m.tk ? SOURCES[m.s || 0] : ''; // a linked person's messages say which app (spec 005 R7)
+    if (showWho && (S.filter.contact === 'all' || sender || via)) {
       const who = document.createElement('div');
       who.className = 'who';
-      if (S.filter.contact !== 'all') who.textContent = sender;
+      if (S.filter.contact !== 'all') who.textContent = sender || via;
       else if (sender) who.textContent = `${sender} · ${labelFor(m.k)}`;
-      else who.textContent = (m.o ? 'To ' : 'From ') + labelFor(m.k);
+      else who.textContent = (m.o ? 'To ' : 'From ') + labelFor(m.k) + (via ? ` · ${via}` : '');
       bubble.appendChild(who);
     }
     if (m.b) {
@@ -1810,6 +2076,7 @@ function init() {
   };
   $('#wrapSave').onclick = saveWrapped;
   initGlance();
+  initPeople();
   initMoodDetails();
   AiMood.init();
   AiAnalysis.init();
