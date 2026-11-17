@@ -104,7 +104,9 @@ first). It survives redraws and loading more files.
 - `select()` calls the app's `onTabHidden(prev)` and `onTabShown(section)`. Shown runs
   the section's lazy parts (`renderLazyIn`, R7); for Messages, hidden saves the list's
   scroll and shown restores it, or scrolls to the latest message if `renderBrowser` ran
-  while the list had no layout box (R11, found in review).
+  while the list had no layout box (R11, found in review). Both run only when the tab
+  really changes: selecting the tab already shown just runs its lazy parts, so it
+  doesn't restore a stale saved scroll (also found in review).
 - `Tabs.jump(card)`: R5.
 
 The lazy sections in `app.js` are keyed by `data-lazy` when an element has one, so the
@@ -145,7 +147,8 @@ first (`openTabOf`), so tests written for the long page still reach their cards.
   charts drawn. The same holds for `/#/calls`, whose section starts hidden.
 - **AC14** After loading the demo, opening Messages shows the latest message. Scrolled
   up, then away and back, the list is where it was. Redrawn while hidden, it opens on
-  the latest message again.
+  the latest message again. Clicking Messages while it's open doesn't move the list,
+  and "Read that day" while it's open ends on the latest message.
 
 ## Decisions
 

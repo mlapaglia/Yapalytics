@@ -230,6 +230,13 @@ test.describe('spec 003: the message list', () => {
     await page.click('#presets button[data-preset="90"]');
     await openTab(page, 'sec-messages');
     expect(await fromBottom(page)).toBeLessThanOrEqual(1);
+    // Clicking Messages again while it's open leaves the list where it is.
+    await page.evaluate(() => { document.getElementById('messages').scrollTop = 300; });
+    await openTab(page, 'sec-messages');
+    expect(await page.evaluate(() => document.getElementById('messages').scrollTop)).toBe(300);
+    // A link into the list while it's open (here "Read that day") still ends on the latest message.
+    await page.evaluate(() => readDay(S.msgs.at(-1).t - (S.msgs.at(-1).t % 86400000)));
+    expect(await fromBottom(page)).toBeLessThanOrEqual(1);
   });
 });
 

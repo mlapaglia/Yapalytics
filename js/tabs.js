@@ -5,7 +5,7 @@
  * A section the code hides (`hidden`, e.g. Groups with no group chats) loses its tab.
  * The open tab is in the URL as `#/<data-slug>` (the `#/` keeps it from matching an
  * element id), so Back and Forward move between tabs.
- * Uses the app's $, $$, escapeHtml, onTabHidden and onTabShown.
+ * Uses the app's $, $$, escapeHtml, renderLazyIn, onTabHidden and onTabShown.
  */
 const Tabs = {
   current: 'sec-glance',
@@ -93,11 +93,15 @@ const Tabs = {
     const target = document.getElementById(id);
     if (!target || target.hidden || !target.classList.contains('dash-section')) return;
     const prev = document.getElementById(this.current);
+    const wasShown = target.classList.contains('active');
     if (prev !== target && prev.classList.contains('active')) onTabHidden(prev);
     this.current = id;
     if (history !== 'none') this.writeUrl(history);
     for (const sec of this.sections()) sec.classList.toggle('active', sec === target);
-    onTabShown(target);
+    // Already on screen (e.g. "Read that day" while on Messages): only render what's
+    // pending. The hidden-to-shown hook would restore a scroll saved when it was left.
+    if (wasShown) renderLazyIn(target);
+    else onTabShown(target);
     for (const b of $$('#tabList [role="tab"]')) {
       const on = b.dataset.panel === id;
       b.classList.toggle('on', on);
