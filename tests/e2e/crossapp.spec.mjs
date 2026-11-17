@@ -110,6 +110,8 @@ test.describe('spec 007 cross-app habits', () => {
   test('M12: the biggest juggle reads that day with that person', async ({ page }) => {
     await load(page);
     await linkAlex(page);
+    await page.evaluate(() => showMoodMessages(S.msgs[0].mo - 1, 1, 'pos'));
+    await expect(page.locator('#browserFilter')).toBeVisible();
     await openTab(page, 'sec-apps');
     await expect(page.locator('#appsJuggle')).toContainText('3 switches between SMS and Instagram with Alex Rivera');
     await page.click('#appsJuggle [data-otd-day]');
@@ -117,6 +119,8 @@ test.describe('spec 007 cross-app habits', () => {
     await expect(page.locator('#contactSel')).toHaveValue(PERSON);
     await expect(page.locator('#fromDate')).toHaveValue('2024-08-20');
     await expect(page.locator('#toDate')).toHaveValue('2024-08-20');
+    await expect(page.locator('#browserFilter')).toBeHidden();
+    await expect(page.locator('#browserCount')).toContainText('5 messages · showing');
   });
 
   test('AC13: the tab has its own conversation gap, and 15 minutes splits a slow switch off', async ({ page }) => {

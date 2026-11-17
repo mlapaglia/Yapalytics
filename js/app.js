@@ -1600,6 +1600,7 @@ function initGlance() {
         S.filter.contact = t.dataset.contact;
         $('#contactSel').value = t.dataset.contact;
       }
+      S.browserMood = null;
       readDay(+t.dataset.otdDay);
     }
     else if (t.dataset.otdGoto) {
