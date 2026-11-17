@@ -3,7 +3,7 @@
  * answered by a route on localhost:11434, and the Anthropic SDK and WebLLM are replaced
  * by small fake modules served at their CDN URLs, which record what they were asked.
  */
-import { test, expect, loadDemo, scrollTo } from './fixtures.mjs';
+import { test, expect, loadDemo, scrollTo, openTab } from './fixtures.mjs';
 
 const OLLAMA = 'http://localhost:11434';
 const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@1.1.0/+esm';
@@ -143,7 +143,9 @@ test.describe('spec 002: AI conversation analysis', () => {
     // first day may hold a single message: "1 message".
     const onDay = await page.evaluate(() => inRange(baseMessages()).length);
     expect(onDay).toBeGreaterThan(0);
+    await expect(page.locator('#sec-messages')).toBeVisible(); // spec 003 R6: the date opens the Messages tab
     await expect(page.locator('#browserCount')).toHaveText(new RegExp(`^${onDay.toLocaleString('en-US')} messages? · showing latest`));
+    await openTab(page, 'sec-ai');
     await expect(reportText(page)).toBeVisible(); // same conversation, so the report stays
   });
 

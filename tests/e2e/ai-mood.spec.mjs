@@ -3,7 +3,7 @@
  * fake module served at its CDN URL, so the real worker, batching and UI run without
  * downloading the 126 MB model. The fake reads tone from a few keywords.
  */
-import { test, expect, loadDemo, scrollTo } from './fixtures.mjs';
+import { test, expect, loadDemo, scrollTo, openTab } from './fixtures.mjs';
 import { fullExport, resultJson } from '../helpers/telegram.mjs';
 
 const LIB_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.min.js';
@@ -151,6 +151,7 @@ test.describe('spec 001: AI mood scoring', () => {
     await serveFake(page);
     await openMood(page);
     await scoreWithAi(page);
+    await openTab(page, 'sec-messages');
     await page.check('#moodChk');
     const pill = page.locator('#messages .mood-pill').last();
     await pill.scrollIntoViewIfNeeded();
