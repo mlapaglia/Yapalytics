@@ -107,6 +107,13 @@ export function looseThread() {
   return { name: 'message_1.json', mimeType: 'application/json', buffer: Buffer.from(metaJson(thread('inbox/alexrivera_1111', ALEX, [ALEX, ME], a2))) };
 }
 
+/** A message_1.json between Alex and Jamie with just these messages, picked on its own. */
+export const threadOf = (...messages) => ({
+  name: 'message_1.json',
+  mimeType: 'application/json',
+  buffer: Buffer.from(metaJson(thread('inbox/alex_1', 'Alex', ['Alex', 'Jamie'], messages))),
+});
+
 /** Instagram's HTML export, zipped: not readable. */
 export function zippedHtmlExport() {
   return {

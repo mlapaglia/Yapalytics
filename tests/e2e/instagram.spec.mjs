@@ -1,5 +1,5 @@
 import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab } from './fixtures.mjs';
-import { looseThread, splitExport, zippedExport, zippedHtmlExport } from '../helpers/instagram.mjs';
+import { igMessage, looseThread, splitExport, threadOf, zippedExport, zippedHtmlExport } from '../helpers/instagram.mjs';
 
 /** Instagram messages loaded: total, and how many count as sent by you. */
 const instagramCounts = (page) => page.evaluate(() => {
@@ -122,6 +122,29 @@ test.describe('spec 004 Instagram shared posts', () => {
     const again = await openShare(page);
     await expect(page.locator('#igPreviewsChk')).toBeChecked();
     await expect(again.locator('.share-preview iframe')).toHaveAttribute('src', EMBED);
+  });
+
+  test('AC2, AC15: a bad link gets no link; Instagram links say so, others don\'t, and only posts get a preview', async ({ page }) => {
+    const share = (sec, s) => igMessage(sec, 'Alex', { content: 'Alex sent an attachment.', share: s });
+    await page.route(/^https:\/\/www\.instagram\.com\//, (route) => route.fulfill({ contentType: 'text/html', body: '' }));
+    await loadFiles(page, threadOf(
+      share(0, { link: 'javascript:alert(1)', share_text: 'bad link', original_content_owner: 'bad' }),
+      share(60, { link: 'https://www.instagram.com/stories/storyteller/123/', original_content_owner: 'storyteller' }),
+      share(120, { link: 'https://www.instagram.com/tacotuesday', profile_share_username: 'tacotuesday', profile_share_name: 'Taco Tuesday' }),
+      share(180, { link: 'https://youtu.be/abc', share_text: 'a video' }),
+      share(240, { link: 'https://www.instagram.com/p/Post1/', share_text: 'a post', original_content_owner: 'poster' }),
+    ));
+    await openTab(page, 'sec-messages');
+    await page.check('#igPreviewsChk');
+    const card = (text) => page.locator('#messages .share-card', { hasText: text });
+    await expect(card('bad link')).toBeVisible();
+    await expect(card('bad link').locator('a')).toHaveCount(0);
+    await expect(card('@storyteller').locator('a.share-link')).toHaveText('Open on Instagram ↗');
+    await expect(card('@tacotuesday')).toContainText('Taco Tuesday');
+    await expect(card('@tacotuesday').locator('a.share-link')).toHaveText('Open on Instagram ↗');
+    await expect(card('a video').locator('a.share-link')).toHaveText('Open link ↗');
+    await expect(page.locator('#messages iframe')).toHaveCount(1);
+    await expect(card('@poster').locator('iframe')).toHaveAttribute('src', 'https://www.instagram.com/p/Post1/embed/');
   });
 
   test('AC7: searching finds a share by its caption or creator', async ({ page }) => {

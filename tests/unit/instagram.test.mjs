@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { runParser } from '../helpers/worker.mjs';
-import { asFile, igMessage, looseThread, metaJson, splitExport, zippedExport, zippedHtmlExport } from '../helpers/instagram.mjs';
+import { asFile, igMessage, looseThread, splitExport, threadOf, zippedExport, zippedHtmlExport } from '../helpers/instagram.mjs';
 import { loadScripts } from '../helpers/load.mjs';
 
 const parse = (...specs) => runParser('instagram.js', 'instagramParserWorker', { files: specs.map(asFile) });
@@ -93,13 +93,6 @@ describe('Instagram parser: what it can and cannot tell', () => {
   });
 });
 
-/** A message_1.json with these messages, picked on its own. */
-const threadOf = (...messages) => ({
-  name: 'message_1.json',
-  mimeType: 'application/json',
-  buffer: Buffer.from(metaJson({ participants: [{ name: 'Alex' }, { name: 'Jamie' }], title: 'Alex', thread_path: 'inbox/alex_1', messages })),
-});
-
 describe('spec 004 Instagram shared posts: parser', () => {
   const reel = { link: 'https://www.instagram.com/reel/DesZwLVvHS6/?id=401_744', share_text: 'whatever makes her sleep??😅😅 so happy', original_content_owner: 'kianna.johnson' };
 
@@ -124,6 +117,14 @@ describe('spec 004 Instagram shared posts: parser', () => {
       igMessage(60, 'Alex', { content: 'Alex sent an attachment.', share: { link: 'javascript:alert(1)' } }),
     ));
     assert.deepEqual(out.msgs.map((m) => m.sh), [{ u: '', x: 'look', w: '' }], 'a share with nothing left to show is skipped');
+  });
+
+  it('AC14: a shared profile keeps its username and display name', async () => {
+    const out = await parse(threadOf(igMessage(0, 'Alex', {
+      content: 'Alex sent an attachment.',
+      share: { link: 'https://www.instagram.com/tacotuesday', profile_share_username: 'tacotuesday', profile_share_name: 'Taco Tuesday 🌮' },
+    })));
+    assert.deepEqual(out.msgs[0].sh, { u: 'https://www.instagram.com/tacotuesday', x: 'Taco Tuesday 🌮', w: 'tacotuesday' });
   });
 
   it('AC5: the caption is not counted as the sender\'s words, emoji or mood', async () => {

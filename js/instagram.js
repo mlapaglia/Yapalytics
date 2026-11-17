@@ -157,7 +157,9 @@ function instagramParserWorker(self, lib) {
         }
       }
       if (m.share && typeof m.share === 'object') {
-        const sh = { u: webLink(str(m.share.link)), x: str(m.share.share_text), w: str(m.share.original_content_owner) };
+        const s = m.share;
+        // A shared profile has its username and display name instead of a creator and caption.
+        const sh = { u: webLink(str(s.link)), x: str(s.share_text) || str(s.profile_share_name), w: str(s.original_content_owner) || str(s.profile_share_username) };
         if (sh.u || sh.x || sh.w) rec.sh = sh;
       }
       if (att.length) rec.att = att;

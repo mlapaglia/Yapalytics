@@ -1,6 +1,6 @@
 # 004 Shared posts and reactions on messages
 
-Status: Draft (built, awaiting review) · PR: [#10](https://github.com/mlapaglia/Yapalytics/pull/10)
+Status: Implemented · PR: [#10](https://github.com/mlapaglia/Yapalytics/pull/10)
 
 ## Problem
 
@@ -30,8 +30,10 @@ SMS, are a different thing. They're already counted and left out of the messages
 - **R1** A message that shares a post or reel shows a share card instead of `📎 File`.
   The card shows the creator (`@owner`), the caption (clamped to 4 lines; clicking the
   caption expands it) and an "Open on Instagram ↗" link. The link opens in a new tab
-  (`target="_blank"`, `rel="noopener noreferrer"`). A share with no Instagram link says
-  "Open link ↗" instead.
+  (`target="_blank"`, `rel="noopener noreferrer"`). A link to another site (a YouTube
+  video, a web page) says "Open link ↗" instead. A shared profile has no creator or
+  caption, so its card shows `@username` and the display name
+  (`profile_share_username`, `profile_share_name`).
 - **R2** Only `http:` and `https:` links become links. A share with any other link
   still shows its card, but the card has no link.
 - **R3** The Messages toolbar has an "Instagram previews" checkbox, off by default and
@@ -82,7 +84,8 @@ Reactions are read from the export and shown on the page. They go nowhere else.
 
 **Data.** The Instagram worker sets `rec.sh = { u, x, w }` on a message whose `share`
 has a link, caption or owner. `u` is the link, or `''` if it isn't `http(s)`. `x` is the
-caption and `w` is the creator. The text goes through the same mojibake fix as the rest
+caption and `w` is the creator. For a shared profile they're the display name and
+username instead. The text goes through the same mojibake fix as the rest
 of the export. The share no longer adds to `rec.ot`. A message with only a share (its
 text is the "… sent an attachment." placeholder) is kept because it has `sh`. Its `b`
 stays `''`.
@@ -142,8 +145,25 @@ read in sent and received bubbles and in both themes.
   ❤️ chip with "2" whose tooltip is "❤️ Alex Rivera, You" and a 😮 chip, and the
   shared reel shows 😂 from "You". After picking Alex Rivera as the owner, the ❤️
   tooltip names "You, Jamie Park" instead. The message count doesn't change.
+- **AC14** Given a shared profile, then `sh` has its link, `x` its display name and
+  `w` its username.
+- **AC15** With previews on, a share of a post gets a preview, and a story, a profile
+  or a link to another site doesn't. Stories and profiles say "Open on Instagram ↗",
+  and the other site says "Open link ↗".
 
 ## Open questions
 
-- Instagram's embed may not render some posts (private accounts, removed posts). The
-  card's text and link still work, and we can't detect the failure across origins.
+None. Settled while building:
+
+- **Embeds that don't render.** Instagram's embed can be empty or say "unavailable"
+  for private or removed posts. That's accepted: the card's creator, caption and link
+  still work, and the page can't detect the failure inside a cross-origin frame. The
+  demo's shares use made-up shortcodes, so with previews on the demo shows
+  "unavailable" embeds. That's accepted too: the demo still shows where previews go.
+- **Shares that aren't posts.** A survey of a real export (1,926 shares) found 974
+  reels, 927 posts, 6 profiles, 1 story and 18 links to other sites. Profiles and
+  other links led to R1's profile card and the "Open link ↗" wording (AC14, AC15).
+  Only posts, reels and IGTV get previews.
+- **A message with text and a share.** 16 shares in that export came with the sender's
+  own text, mostly a pasted link. The text shows as the message and the card shows
+  under it, even when that repeats the link.

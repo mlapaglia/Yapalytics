@@ -588,6 +588,12 @@ function messageAttachments(m) {
 // ------------------------------------------------------------------ shared posts (spec 004)
 
 const IG_POST_RE = /^\/(p|reels?|tv)\/([A-Za-z0-9_-]+)\/?$/;
+const IG_HOST_RE = /^(?:www\.)?instagram\.com$/i;
+
+/** Whether a link is on instagram.com (a post, a reel, a story, a profile…). */
+function isInstagramLink(link) {
+  try { return IG_HOST_RE.test(new URL(link).hostname); } catch { return false; }
+}
 
 /**
  * Instagram's embed page for a post or reel link, or null. Rebuilt from the shortcode
@@ -596,7 +602,7 @@ const IG_POST_RE = /^\/(p|reels?|tv)\/([A-Za-z0-9_-]+)\/?$/;
 function instagramEmbedUrl(link) {
   let url;
   try { url = new URL(link); } catch { return null; }
-  if (!/^https?:$/.test(url.protocol) || !/^(?:www\.)?instagram\.com$/i.test(url.hostname)) return null;
+  if (!/^https?:$/.test(url.protocol) || !IG_HOST_RE.test(url.hostname)) return null;
   const m = IG_POST_RE.exec(url.pathname);
   if (!m) return null;
   const kind = m[1] === 'reels' ? 'reel' : m[1];
@@ -653,7 +659,7 @@ function shareCard(sh, previews) {
   }
   if (sh.u) {
     const a = newTabLink(sh.u, 'share-link');
-    a.textContent = embed ? 'Open on Instagram ↗' : 'Open link ↗';
+    a.textContent = isInstagramLink(sh.u) ? 'Open on Instagram ↗' : 'Open link ↗';
     card.appendChild(a);
   }
   return card;
