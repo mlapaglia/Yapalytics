@@ -1,6 +1,6 @@
 # 006 Managing loaded files
 
-Status: Approved · PR:
+Status: Approved · PR: [#13](https://github.com/mlapaglia/Yapalytics/pull/13)
 
 ## Problem
 
