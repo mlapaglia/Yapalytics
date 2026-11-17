@@ -3,7 +3,7 @@
  * fake module served at its CDN URL, so the real worker, batching and UI run without
  * downloading the 126 MB model. The fake reads tone from a few keywords.
  */
-import { test, expect, loadDemo, scrollTo, openTab } from './fixtures.mjs';
+import { test, expect, loadDemo, scrollTo, openTab, addFiles } from './fixtures.mjs';
 import { fullExport, resultJson } from '../helpers/telegram.mjs';
 
 const LIB_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.min.js';
@@ -275,11 +275,32 @@ test.describe('spec 001: AI mood scoring', () => {
     await openMood(page);
     await scoreWithAi(page);
     const before = (await state(page)).ai;
-    await page.setInputFiles('#addInput', resultJson(fullExport()));
+    await addFiles(page, resultJson(fullExport()));
     await expect.poll(() => page.evaluate(() => S.msgs.some((m) => m.s === 4))).toBe(true);
     await expect.poll(async () => (await state(page)).missing, { timeout: 30_000 }).toBe(0);
     const s = await state(page);
     expect(s.ai).toBeGreaterThan(before);
     expect(s).toMatchObject({ scorer: 'ai', on: 'ai' });
+  });
+});
+
+test.describe('spec 006: managing loaded files', () => {
+  test('AC13: AI mood scores survive leaving a file out, without the model running again', async ({ page }) => {
+    await serveFake(page);
+    await openMood(page);
+    await scoreWithAi(page);
+    await spyOnScoring(page);
+    await page.click('#filesBtn');
+    await page.locator('#filesList li', { has: page.locator('use[href="#logo-telegram"]') }).locator('input').uncheck();
+    await page.click('#filesApply');
+    await expect(page.locator('#landing')).toBeHidden({ timeout: 60_000 });
+    await expect(page.locator('#dash')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => S.msgs.some((m) => m.s === 4))).toBe(false);
+    await scrollTo(page, '#c-mood');
+    const s = await state(page);
+    expect(s.missing).toBe(0);
+    expect(s.ai).toBe(s.vader);
+    expect(s).toMatchObject({ scorer: 'ai', on: 'ai' });
+    expect(await page.evaluate(() => window.__sent)).toEqual([]);
   });
 });

@@ -54,6 +54,17 @@ export async function loadFiles(page, files) {
   await expect(page.locator('#dash')).toBeVisible({ timeout: 60_000 });
 }
 
+/** Adds export files from the Files dialog (spec 006) and applies, waiting for the dashboard. */
+export async function addFiles(page, files) {
+  await page.click('#filesBtn');
+  const rows = await page.locator('#filesList li[data-file]').count();
+  await page.setInputFiles('#addInput', files);
+  await expect(page.locator('#filesList li[data-file]')).toHaveCount(rows + (Array.isArray(files) ? files.length : 1));
+  await page.click('#filesApply');
+  await expect(page.locator('#landing')).toBeHidden({ timeout: 60_000 });
+  await expect(page.locator('#dash')).toBeVisible();
+}
+
 /** Scrolls a card into view below the sticky filter bar (lazy sections render when visible). */
 /**
  * Opens the dashboard tab (spec 003) that holds an element, by clicking its tab. Does

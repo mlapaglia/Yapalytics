@@ -44,8 +44,9 @@ const Tabs = {
     const nav = $('#dashTabs');
     const measure = () => {
       const dash = $('#dash');
-      dash.style.setProperty('--filters-h', filters.offsetHeight + 'px');
-      dash.style.setProperty('--tabs-h', nav.offsetHeight + 'px');
+      // Exact heights: offsetHeight rounds, which leaves a 1px gap or overlap under a bar of fractional height.
+      dash.style.setProperty('--filters-h', filters.getBoundingClientRect().height + 'px');
+      dash.style.setProperty('--tabs-h', nav.getBoundingClientRect().height + 'px');
     };
     new ResizeObserver(measure).observe(filters);
     new ResizeObserver(measure).observe(nav);

@@ -1,4 +1,4 @@
-import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab } from './fixtures.mjs';
+import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab, addFiles } from './fixtures.mjs';
 import { igMessage, looseThread, splitExport, threadOf, zippedExport, zippedHtmlExport } from '../helpers/instagram.mjs';
 
 /** Instagram messages loaded: total, and how many count as sent by you. */
@@ -211,7 +211,7 @@ test.describe('spec 004 reactions on messages', () => {
   test('AC16: loading an overlapping export adds the reactions it has, without counting twice', async ({ page }) => {
     const msg = (reactions) => igMessage(0, 'Alex', { content: 'see you there', reactions });
     await loadFiles(page, threadOf(msg([{ reaction: '❤️', actor: 'Jamie' }])));
-    await page.setInputFiles('#addInput', threadOf(msg([{ reaction: '❤️', actor: 'Jamie' }, { reaction: '😂', actor: 'Alex' }])));
+    await addFiles(page, threadOf(msg([{ reaction: '❤️', actor: 'Jamie' }, { reaction: '😂', actor: 'Alex' }])));
     await expect.poll(() => page.evaluate(() => S.msgs.length)).toBe(1);
     await openTab(page, 'sec-messages');
     const chips = page.locator('#messages .bubble', { hasText: 'see you there' }).locator('.rx');
