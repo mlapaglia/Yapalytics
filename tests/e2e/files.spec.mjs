@@ -2,7 +2,8 @@
  * specs/006-file-manager.md in the browser: the Files button and dialog.
  */
 import { writeFileSync } from 'node:fs';
-import { test, expect, loadFiles, loadDemo } from './fixtures.mjs';
+import { test, expect, loadFiles, scrollTo } from './fixtures.mjs';
+import { splitExport } from '../helpers/instagram.mjs';
 import { smsBackup } from '../helpers/sms.mjs';
 import { resultJson, singleChatExport, zippedHtmlExport } from '../helpers/telegram.mjs';
 
@@ -82,7 +83,7 @@ test.describe('spec 006 managing loaded files', () => {
     await apply(page);
     await dashboard(page);
     await expect(page.locator('#filesBtn')).toHaveText('📁 Files (2)');
-    expect((await options(page)).some((o) => o.startsWith('✈️ Alex Rivera (3)'))).toBe(true);
+    await expect.poll(async () => (await options(page)).some((o) => o.startsWith('✈️ Alex Rivera (3)'))).toBe(true);
     expect(await counts(page)).toEqual(before);
   });
 
@@ -122,7 +123,8 @@ test.describe('spec 006 managing loaded files', () => {
     await expect(row(page, 'result.json')).toHaveCount(1);
     await apply(page);
     await dashboard(page);
-    expect((await options(page)).some((o) => o.startsWith('✈️ Alex Rivera (3)'))).toBe(true);
+    // Adding doesn't hide the dashboard, so wait for the picker the read produces.
+    await expect.poll(async () => (await options(page)).some((o) => o.startsWith('✈️ Alex Rivera (3)'))).toBe(true);
     await expect(page.locator('#filesBtn')).toHaveText('📁 Files (2)');
     await openDialog(page);
     await page.setInputFiles('#addInput', path);
@@ -230,5 +232,95 @@ test.describe('spec 006 managing loaded files', () => {
     expect(await page.evaluate(() => AiAnalysis.report)).toBeNull();
     await expect(page.locator('#aiReport')).toBeHidden();
     await expect(page.locator('#aiReport')).toBeEmpty();
+  });
+
+  test.describe('a file that fails to read', () => {
+    test.use({ failOnConsoleError: false }); // the parse error is logged
+
+    test('AC16: is left out, and exactly the other checked files stay loaded', async ({ page }) => {
+      await loadFiles(page, [sms()]);
+      const alerts = [];
+      page.on('dialog', (d) => { alerts.push(d.message()); d.accept(); });
+      await openDialog(page);
+      await page.setInputFiles('#addInput', { name: 'result.json', mimeType: 'application/json', buffer: Buffer.from('{oops') });
+      await expect(rows(page)).toHaveCount(2);
+      await apply(page);
+      await expect.poll(() => alerts.length).toBe(1);
+      expect(alerts[0]).toMatch(/^Could not read that file: .*valid JSON/);
+      await dashboard(page);
+      await expect(page.locator('#filesBtn')).toHaveText('📁 Files (1)');
+      expect(await counts(page)).toEqual({ msgs: 5, telegram: 0 });
+      expect(await page.evaluate(() => S.contacts.size)).toBe(2);
+    });
+  });
+
+  test('AC17: the Files button is disabled while files are read', async ({ page }) => {
+    await loadFiles(page, [sms()]);
+    const states = await page.evaluate(async () => {
+      const read = loadFiles([new File([JSON.stringify({ name: 'Alex Rivera', type: 'personal_chat', id: 9, messages: [] })], 'result.json')]);
+      const during = $('#filesBtn').disabled;
+      await read;
+      return { during, after: $('#filesBtn').disabled };
+    });
+    expect(states).toEqual({ during: true, after: false });
+  });
+
+  test('AC18: re-checking the media part of a split Instagram export brings its photos back', async ({ page }) => {
+    await loadFiles(page, splitExport());
+    const openable = () => page.evaluate(() => S.msgs.flatMap((m) => m.att || []).filter(attLoadable).length);
+    const before = await openable();
+    expect(before).toBeGreaterThan(0);
+    await openDialog(page);
+    await row(page, 'part2.zip').locator('input').uncheck();
+    await apply(page);
+    await dashboard(page);
+    expect(await openable()).toBe(0);
+    await openDialog(page);
+    await row(page, 'part2.zip').locator('input').check();
+    await apply(page);
+    await dashboard(page);
+    await expect.poll(openable).toBe(before);
+    await scrollTo(page, '#galleryCard');
+    await expect(page.locator('#galleryGrid .tile[title^="1801_1"]')).toHaveClass(/loaded/, { timeout: 30_000 });
+  });
+
+  test('AC19: the dialog works from the keyboard', async ({ page }) => {
+    await loadFiles(page, [sms(), telegram(), sms('sms-b.xml')]);
+    await openDialog(page);
+    const add = page.locator('#addFilesBtn');
+    await add.focus();
+    await expect(add).toBeFocused();
+    const chooser = page.waitForEvent('filechooser');
+    await page.keyboard.press('Enter');
+    expect((await chooser).isMultiple()).toBe(true);
+
+    const box = row(page, 'result.json').locator('input');
+    await box.focus();
+    await page.keyboard.press('Space');
+    await expect(box).not.toBeChecked();
+    await expect(box).toBeFocused();
+    await expect(row(page, 'result.json')).toHaveClass(/\boff\b/);
+    await expect(page.locator('#filesApply')).toBeEnabled();
+
+    await row(page, 'sms-20240821.xml').getByRole('button', { name: /^Remove/ }).focus();
+    await page.keyboard.press('Enter');
+    await expect(rows(page)).toHaveCount(2);
+    await expect(row(page, 'result.json').getByRole('button', { name: /^Remove/ })).toBeFocused();
+  });
+
+  test('AC20: Apply waits for added files to be checked', async ({ page }) => {
+    await loadFiles(page, [sms(), telegram()]);
+    await openDialog(page);
+    await row(page, 'result.json').locator('input').uncheck();
+    await expect(page.locator('#filesApply')).toBeEnabled();
+    const during = await page.evaluate(async () => {
+      const adding = addToDraft([new File(['<smses count="0"></smses>'], 'sms-new.xml', { lastModified: 1 })]);
+      const disabled = $('#filesApply').disabled;
+      await adding;
+      return disabled;
+    });
+    expect(during).toBe(true);
+    await expect(row(page, 'sms-new.xml')).toHaveCount(1);
+    await expect(page.locator('#filesApply')).toBeEnabled();
   });
 });

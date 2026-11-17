@@ -4,21 +4,34 @@
 const sameFile = (a, b) => a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
 
 /**
+ * Kinds whose files are parsed together, so one can't be read alone next to others already
+ * loaded (R16): a split Takeout spreads a conversation across parts, a split Instagram
+ * export keeps its media in another part, and WhatsApp date formats are worked out from
+ * every export at once.
+ */
+const READ_TOGETHER = new Set(['gchat', 'whatsapp', 'instagram']);
+
+/**
  * What applying the Files dialog's `draft` to the loaded `current` list takes. Entries are
- * `{ id, on, error? }`; rows with an `error` can't be read and are dropped. Reading only
- * ever adds, so newly checked files can load on their own, but leaving out a loaded file
- * means reading every checked file again (overlapping exports are deduplicated as they're
- * read, so one file's share can't be taken back out).
+ * `{ id, on, kind, error? }`; rows with an `error` can't be read and are dropped. Reading
+ * only ever adds, so newly checked files can usually load on their own. Everything is read
+ * again (a rebuild) when a loaded file is left out, since overlapping exports are
+ * deduplicated as they're read and one file's share can't be taken back out, or when a
+ * new file must be read together with loaded files of its kind.
  * Returns `{ changed, rebuild, read }`: `read` is the entries to read, in draft order.
  */
 function planFileChanges(current, draft) {
   const usable = draft.filter((e) => !e.error);
   const was = new Map(current.map((e) => [e.id, e]));
   const now = new Map(usable.map((e) => [e.id, e]));
-  const rebuild = current.some((e) => e.on && !(now.has(e.id) && now.get(e.id).on));
+  const loaded = (e) => was.has(e.id) && was.get(e.id).on;
+  const kept = usable.filter((e) => e.on && loaded(e));
+  const fresh = usable.filter((e) => e.on && !loaded(e));
+  const dropped = current.some((e) => e.on && !(now.has(e.id) && now.get(e.id).on));
+  const joins = fresh.some((e) => READ_TOGETHER.has(e.kind) && kept.some((k) => k.kind === e.kind));
+  const rebuild = dropped || joins;
   const changed = current.length !== usable.length || usable.some((e) => !was.has(e.id) || was.get(e.id).on !== e.on);
-  const read = rebuild ? usable.filter((e) => e.on) : usable.filter((e) => e.on && !(was.has(e.id) && was.get(e.id).on));
-  return { changed, rebuild, read };
+  return { changed, rebuild, read: rebuild ? usable.filter((e) => e.on) : fresh };
 }
 
 /** Whether the dialog's Apply can run: something changed, and it isn't every file unchecked (R9). */

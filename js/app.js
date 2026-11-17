@@ -11,6 +11,8 @@ const S = {
   seenMsgs: new Map(), // dedupe key -> the message kept (null for reactions sent as texts)
   seenCalls: new Set(),
   reactions: 0, // reactions sent as texts, left out of the messages
+  filesBusy: 0, // file loads and Files dialog changes queued or running (spec 006 R15)
+  filesPending: 0, // files added in the open Files dialog that are still being checked
   files: [], // loaded export files (spec 006): { id, file, name, size, lastModified, kind, on }, in the order added
   filesDraft: [], // the Files dialog's edited copy of `files` (rows it adds also have `added`, unreadable ones `error`)
   filter: { contact: 'all', source: 'all', groups: true, people: [], from: null, to: null },
@@ -91,24 +93,41 @@ let fileSeq = 0;
 /** An entry in S.files (spec 006) for `file` of `kind` (fileKind's result). */
 const fileEntry = (file, kind) => ({ id: ++fileSeq, file, name: file.name, size: file.size, lastModified: file.lastModified, kind, on: true });
 
+/**
+ * Changes to the loaded files run one at a time, each against what the last one left
+ * (R15): a read that's still going can't be overtaken by a later change and then commit
+ * its stale file list over it. The Files button is disabled meanwhile.
+ */
+let fileOps = Promise.resolve();
+function queueFileOp(op) {
+  S.filesBusy++;
+  updateFilesButton();
+  fileOps = fileOps.then(op).catch((err) => console.error(err)).finally(() => {
+    S.filesBusy--;
+    updateFilesButton();
+  });
+  return fileOps;
+}
+
 /** Load files from the landing page, a drop or the demo: they join S.files, checked. */
-async function loadFiles(fileList) {
-  const files = [...fileList].filter((f, i, all) =>
-    f.size > 0 && !S.files.some((e) => sameFile(e, f)) && all.findIndex((g) => sameFile(g, f)) === i);
-  if (!files.length) return;
-  showProgress();
-  let entries;
-  try {
-    const kinds = await Promise.all(files.map(fileKind));
-    entries = files.map((f, i) => fileEntry(f, kinds[i]));
-  } catch (err) {
-    console.error(err);
-    showLoadError('Could not read that file: ' + err.message);
-    return;
-  }
-  if (!(await readFiles(entries))) return;
-  S.files.push(...entries);
-  finishLoad();
+function loadFiles(fileList) {
+  const picked = [...fileList]; // a drop's file list is emptied once the event is over
+  return queueFileOp(async () => {
+    const files = picked.filter((f, i, all) =>
+      f.size > 0 && !S.files.some((e) => sameFile(e, f)) && all.findIndex((g) => sameFile(g, f)) === i);
+    if (!files.length) return;
+    showProgress();
+    let entries;
+    try {
+      const kinds = await Promise.all(files.map(fileKind));
+      entries = files.map((f, i) => fileEntry(f, kinds[i]));
+    } catch (err) {
+      console.error(err);
+      showLoadError('Could not read that file: ' + err.message);
+      return;
+    }
+    await applyFiles([...S.files, ...entries]);
+  });
 }
 
 function showProgress() {
@@ -120,14 +139,17 @@ function showProgress() {
 
 /**
  * Parse S.files entries and merge what they hold into the loaded data, deduplicating
- * against what's already there. False (with the error shown) when reading failed or
- * nothing at all is loaded.
+ * against what's already there. Null when that worked; otherwise `{ error, failed }`, the
+ * message and the files that couldn't be read (the failing parse job's, or all of them
+ * when nothing at all is loaded). A failed read leaves the loaded data half-merged: the
+ * caller reads the remaining files again (see applyFiles).
  */
 async function readFiles(entries) {
   const bar = $('#progressBar');
   const text = $('#progressText');
 
   let chatBadDates = 0;
+  let job = null;
 
   try {
     // Each SMS backup is parsed on its own; all Takeout zips go together because a
@@ -165,7 +187,7 @@ async function readFiles(entries) {
     }
 
     for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i];
+      job = jobs[i];
       const label = job.files.length > 1 ? `${job.files.length} files` : job.files[0].name;
       const done = await job.parse({
         onBatch(msgs, calls) {
@@ -217,17 +239,18 @@ async function readFiles(entries) {
     }
   } catch (err) {
     console.error(err);
-    showLoadError('Could not read that file: ' + err.message);
-    return false;
+    return { error: 'Could not read that file: ' + err.message, failed: job ? job.files : entries.map((e) => e.file) };
   }
 
   if (!S.msgs.length && !S.calls.length) {
-    showLoadError(chatBadDates
-      ? 'The Google Chat dates are in a language this app can\'t read yet. Set your Google account language to English, export again, and retry.'
-      : 'No messages or calls were found. Use an XML backup from SMS Backup & Restore (sms-*.xml or calls-*.xml), a Google Takeout zip that includes Google Chat, a WhatsApp chat export (.txt or .zip), an iMessage export, a Telegram export (result.json, or a zip of the export folder), or an Instagram export (.zip, JSON format).');
-    return false;
+    return {
+      error: chatBadDates
+        ? 'The Google Chat dates are in a language this app can\'t read yet. Set your Google account language to English, export again, and retry.'
+        : 'No messages or calls were found. Use an XML backup from SMS Backup & Restore (sms-*.xml or calls-*.xml), a Google Takeout zip that includes Google Chat, a WhatsApp chat export (.txt or .zip), an iMessage export, a Telegram export (result.json, or a zip of the export folder), or an Instagram export (.zip, JSON format).',
+      failed: entries.map((e) => e.file),
+    };
   }
-  return true;
+  return null;
 }
 
 /** After files are read: sort, work out owners and links, keep the filters that still apply, and show the dashboard. */
@@ -251,8 +274,15 @@ function finishLoad() {
   refresh();
 }
 
-/** Forget everything read from files (not the settings, filters or links), before reading the checked files again. */
+/**
+ * Forget everything read from files (not the settings, filters or links), before reading
+ * the checked files again. An AI report may describe messages that are gone (R11); AI
+ * mood scores come back from AiMood.known as the charts draw.
+ */
 function resetLoaded() {
+  if (AiAnalysis.busy) AiAnalysis.stop();
+  AiAnalysis.clearReport();
+  $('#dash').hidden = true; // its data is gone until the files are read again
   S.msgs = [];
   S.calls = [];
   S.contacts = new Map();
@@ -682,16 +712,21 @@ function initPeople() {
 
 const FILE_LOGO = { sms: 'sms', gchat: 'googlechat', whatsapp: 'whatsapp', imessage: 'imessage', telegram: 'telegram', instagram: 'instagram' };
 
-/** The filter bar's Files button: how many files are loaded, and how many are in use (R1). */
+/** The filter bar's Files button: how many files are loaded, and how many are in use (R1). Off while files are read (R15). */
 function updateFilesButton() {
   const n = S.files.length;
   const on = S.files.filter((e) => e.on).length;
-  $('#filesBtn').textContent = `📁 Files (${on === n ? n : `${on} of ${n}`})`;
+  const btn = $('#filesBtn');
+  btn.textContent = `📁 Files (${on === n ? n : `${on} of ${n}`})`;
+  btn.disabled = S.filesBusy > 0;
 }
 
 function openFilesDialog() {
+  if (S.filesBusy) return;
   // The dialog edits a copy; Apply compares it with S.files, closing throws it away (R6).
+  // Each opening gets a new array, so files still being checked for a closed one can't land here.
   S.filesDraft = S.files.map((e) => ({ ...e }));
+  S.filesPending = 0;
   renderFilesDialog();
   const dlg = $('#filesDlg');
   if (!dlg.open) dlg.showModal();
@@ -713,9 +748,14 @@ function renderFilesDialog() {
       </li>`;
     }).join('')
     : '<li class="files-empty">No files. Add some, or apply to start over.</li>';
-  const usable = draft.filter((e) => !e.error);
+  syncFilesActions();
+}
+
+/** The hint and Apply, from the draft. Apply waits for added files still being checked (R6). */
+function syncFilesActions() {
+  const usable = S.filesDraft.filter((e) => !e.error);
   $('#filesHint').hidden = !(usable.length && !usable.some((e) => e.on));
-  $('#filesApply').disabled = !canApplyFiles(S.files, draft);
+  $('#filesApply').disabled = S.filesPending > 0 || !canApplyFiles(S.files, S.filesDraft);
 }
 
 /** Add files to the dialog's list as pending rows, checked, or marked with why they can't be read (R5, R8). */
@@ -723,6 +763,9 @@ async function addToDraft(fileList) {
   const draft = S.filesDraft;
   const files = [...fileList].filter((f, i, all) =>
     f.size > 0 && !draft.some((e) => sameFile(e, f)) && all.findIndex((g) => sameFile(g, f)) === i);
+  if (!files.length) return;
+  S.filesPending++;
+  syncFilesActions();
   const entries = await Promise.all(files.map(async (f) => {
     try {
       return { ...fileEntry(f, await fileKind(f)), added: true };
@@ -730,47 +773,50 @@ async function addToDraft(fileList) {
       return { ...fileEntry(f, null), on: false, error: err.message, added: true };
     }
   }));
+  if (draft !== S.filesDraft) return; // the dialog was opened again since
+  S.filesPending--;
   // Picked twice before the first pick's kinds were known: keep one row.
   draft.push(...entries.filter((e) => !draft.some((d) => sameFile(d, e))));
-  if (draft === S.filesDraft) renderFilesDialog();
+  renderFilesDialog();
 }
 
-/** Make the loaded files match the dialog's list. */
+/**
+ * Make the loaded files match `draft` (the dialog's list, or S.files plus new files). A
+ * file that fails to read is left out, and the dashboard goes back to exactly the checked
+ * files that can be read (R14), so nothing stays loaded that the dialog can't take out.
+ */
 async function applyFiles(draft) {
   const plan = planFileChanges(S.files, draft);
   if (!plan.changed) return;
-  const next = draft.filter((e) => !e.error).map(({ added, ...e }) => e);
-  if (!plan.rebuild) {
-    // Only files added or checked again: read just those, as adding always has.
-    if (plan.read.length) {
-      showProgress();
-      if (!(await readFiles(plan.read))) return;
-    }
-    S.files = next;
-    if (plan.read.length) finishLoad();
-    else updateFilesButton();
+  let next = draft.filter((e) => !e.error).map(({ added, ...e }) => e);
+  if (!plan.read.length && !plan.rebuild) {
+    S.files = next; // only unchecked files removed
+    updateFilesButton();
     return;
   }
-  // A loaded file is left out: read the checked ones again from scratch, so content
-  // another checked file also has stays (R7). An AI report may describe messages that
-  // are gone (R11); AI mood scores come back from AiMood.known as the charts draw.
-  if (AiAnalysis.busy) AiAnalysis.stop();
-  AiAnalysis.clearReport();
-  resetLoaded();
-  S.files = next;
-  if (!plan.read.length) {
+  // A rebuild starts from nothing, so content another checked file also has stays (R7).
+  if (plan.rebuild) resetLoaded();
+  let read = plan.read;
+  let error = '';
+  while (read.length) {
+    showProgress();
+    const failure = await readFiles(read);
+    if (!failure) break;
+    error = failure.error;
+    next = next.filter((e) => !failure.failed.includes(e.file));
+    resetLoaded();
+    read = next.filter((e) => e.on);
+  }
+  if (!read.length) {
+    // Every file removed (R9), or none of the checked ones could be read.
     S.files = [];
     showLanding();
+    if (error) showLoadError(error);
     return;
   }
-  $('#dash').hidden = true; // its data is gone until the files are read again
-  showProgress();
-  if (!(await readFiles(plan.read))) {
-    if (S.msgs.length || S.calls.length) finishLoad();
-    else S.files = [];
-    return;
-  }
+  S.files = next;
   finishLoad();
+  if (error) showLoadError(error);
 }
 
 function initFiles() {
@@ -779,9 +825,11 @@ function initFiles() {
   dlg.querySelector('.profile-close').onclick = () => dlg.close();
   $('#filesCancel').onclick = () => dlg.close();
   $('#filesApply').onclick = () => {
+    const draft = S.filesDraft;
     dlg.close();
-    applyFiles(S.filesDraft);
+    queueFileOp(() => applyFiles(draft));
   };
+  $('#addFilesBtn').onclick = () => $('#addInput').click();
   $('#addInput').onchange = (e) => {
     addToDraft(e.target.files);
     e.target.value = ''; // so picking the same file again fires change
@@ -790,14 +838,25 @@ function initFiles() {
     if (e.target === dlg) { dlg.close(); return; } // the backdrop
     const x = e.target.closest('[data-remove]');
     if (!x) return;
-    S.filesDraft = S.filesDraft.filter((d) => d.id !== +x.dataset.remove);
+    // In place: files still being checked are added to this same array.
+    const draft = S.filesDraft;
+    const i = draft.findIndex((d) => d.id === +x.dataset.remove);
+    if (i < 0) return;
+    draft.splice(i, 1);
     renderFilesDialog();
+    // Keep the keyboard where it was: the next row's remove button, else the previous one's, else Add files.
+    const left = $$('#filesList [data-remove]');
+    (left[Math.min(i, left.length - 1)] || $('#addFilesBtn')).focus();
   });
   dlg.addEventListener('change', (e) => {
     if (e.target.type !== 'checkbox') return;
-    const d = S.filesDraft.find((d) => d.id === +e.target.closest('[data-file]').dataset.file);
-    if (d) d.on = e.target.checked;
-    renderFilesDialog();
+    const li = e.target.closest('[data-file]');
+    const d = S.filesDraft.find((d) => d.id === +li.dataset.file);
+    if (!d) return;
+    // Update the row rather than redraw the list, so the checkbox keeps keyboard focus.
+    d.on = e.target.checked;
+    li.classList.toggle('off', !d.on);
+    syncFilesActions();
   });
 }
 

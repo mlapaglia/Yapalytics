@@ -302,9 +302,6 @@ select { width: 100%; }
 .seg button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 0 0 1px var(--border); }
 
 .scope { margin: 14px 0 0; color: var(--text-2); font-size: 13px; }
-.scope .note { color: var(--muted); margin-left: 8px; }
-.scope .note::before { content: "· "; }
-.scope .note:empty { display: none; }
 
 .kpis {
   display: grid;

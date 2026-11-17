@@ -34,6 +34,23 @@ describe('spec 006 managing loaded files', () => {
     assert.deepEqual({ rebuild: removed.rebuild, read: ids(removed.read) }, { rebuild: true, read: [2] });
   });
 
+  it('AC14, AC18: checking a file read together with a loaded file of its kind reads everything again', () => {
+    const ig = (id, on) => f(id, on, { kind: 'instagram' });
+    const sms = (id, on) => f(id, on, { kind: 'sms' });
+    const media = planFileChanges([sms(1), ig(2), ig(3, false)], [sms(1), ig(2), ig(3)]);
+    assert.deepEqual({ rebuild: media.rebuild, read: ids(media.read) }, { rebuild: true, read: [1, 2, 3] });
+    const wa = planFileChanges([f(1, true, { kind: 'whatsapp' })], [f(1, true, { kind: 'whatsapp' }), f(2, true, { kind: 'whatsapp' })]);
+    assert.equal(wa.rebuild, true, 'WhatsApp date formats are worked out from every export at once');
+    const gchat = planFileChanges([f(1, true, { kind: 'gchat' })], [f(1, true, { kind: 'gchat' }), f(2, true, { kind: 'gchat' })]);
+    assert.equal(gchat.rebuild, true, 'a split Takeout spreads a conversation across parts');
+    const apart = planFileChanges([sms(1)], [sms(1), sms(2)]);
+    assert.deepEqual({ rebuild: apart.rebuild, read: ids(apart.read) }, { rebuild: false, read: [2] }, 'SMS backups are read one by one');
+    const first = planFileChanges([sms(1)], [sms(1), ig(2), ig(3)]);
+    assert.deepEqual({ rebuild: first.rebuild, read: ids(first.read) }, { rebuild: false, read: [2, 3] }, 'no Instagram loaded yet');
+    const unchecked = planFileChanges([ig(1, false)], [ig(1, false), ig(2)]);
+    assert.equal(unchecked.rebuild, false, 'an unchecked part of the kind is not loaded');
+  });
+
   it('AC14: removing a file that was unchecked changes the list without reading', () => {
     const plan = planFileChanges([f(1), f(2, false)], [f(1)]);
     assert.deepEqual({ changed: plan.changed, rebuild: plan.rebuild, read: ids(plan.read) }, { changed: true, rebuild: false, read: [] });

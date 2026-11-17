@@ -220,7 +220,7 @@
       </div>
       <button class="btn small" type="button" id="filesBtn" title="See the loaded files, add more, or leave some out">📁 Files</button>
     </div>
-    <p class="scope"><span id="scope"></span> <button class="btn small ghost scope-btn" id="profileBtn" type="button" hidden>View profile</button> <span class="note" id="reactionInfo"></span></p>
+    <p class="scope"><span id="scope"></span> <button class="btn small ghost scope-btn" id="profileBtn" type="button" hidden>View profile</button></p>
 
     <nav class="tabs" id="dashTabs" aria-label="Dashboard sections">
       <div class="tab-list" id="tabList" role="tablist"></div>
@@ -639,7 +639,8 @@
     <ul class="files-list" id="filesList"></ul>
     <p class="files-hint" id="filesHint" hidden>Check at least one file, or remove them all to start over.</p>
     <footer class="people-foot">
-      <label class="btn small" title="Duplicates are merged">+ Add files<input type="file" id="addInput" accept=".xml,text/xml,.zip,application/zip,.txt,text/plain,.json,application/json" multiple hidden></label>
+      <button class="btn small" type="button" id="addFilesBtn" title="Duplicates are merged">+ Add files</button>
+      <input type="file" id="addInput" accept=".xml,text/xml,.zip,application/zip,.txt,text/plain,.json,application/json" multiple hidden>
       <div class="files-actions">
         <button class="btn small ghost" type="button" id="filesCancel">Cancel</button>
         <button class="btn small primary" type="button" id="filesApply" disabled>Apply</button>
