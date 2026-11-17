@@ -703,12 +703,31 @@ table.leader .muted { color: var(--muted); }
 .first-msg { margin: 0; padding: 12px 16px; border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0; background: var(--surface-2); }
 .first-msg p { margin: 0 0 6px; font-size: 14px; overflow-wrap: anywhere; }
 .first-msg footer { color: var(--muted); font-size: 12px; }
-.profile-actions { display: flex; justify-content: flex-end; margin-top: 24px; }
+.profile-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 24px; }
 @media (max-width: 560px) {
   .profile { padding: 18px 16px 20px; }
   .profile-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .otd-nav #otdDate { min-width: 0; }
 }
+
+/* ------------------------------------------------------------------ linked people (spec 005) */
+.people-btn { padding: 7px 12px; }
+.profile-linked { overflow-wrap: anywhere; }
+.people-head { margin: 0 40px 4px 0; }
+.people-head h2 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
+.people-list { list-style: none; margin: 0; padding: 0; }
+.people-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 2px; border-bottom: 1px solid var(--border); }
+.people-list .chips { flex: 1 1 260px; }
+.people-list .meta { color: var(--muted); font-size: 12.5px; }
+.people-list .person-name { width: auto; max-width: 220px; }
+.people-actions { display: flex; gap: 6px; margin-left: auto; }
+.person-chip { display: inline-flex; align-items: center; gap: 6px; }
+.person-chip small { color: var(--muted); }
+.chip-x { font: inherit; font-size: 11px; line-height: 1; color: var(--muted); background: none; border: 0; padding: 2px; margin-right: -4px; cursor: pointer; }
+.chip-x:hover { color: var(--text); }
+.people-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.people-pick select { flex: 1 1 200px; width: auto; }
+.people-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border); }
 
 /* ------------------------------------------------------------------ mood details */
 .browser-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }

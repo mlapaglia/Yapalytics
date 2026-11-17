@@ -572,7 +572,7 @@ const AiAnalysis = {
   engine: null,
   engineModel: null,
   gpu: null, // Promise<boolean>
-  report: null, // { key, html }
+  report: null, // { id }: the conversation() id it belongs to
 
   hasWebGPU() {
     if (!this.gpu) {
@@ -590,11 +590,15 @@ const AiAnalysis = {
     const c = S.contacts.get(key) || {};
     const group = key.startsWith('g:');
     const msgs = inRange(baseMessages());
-    const own = hasOwner(c.s) ? [S.owners[c.s].name].filter(Boolean) : [];
-    const names = [c.name, ...(c.addr ? c.addr.split('~') : []), ...(c.members || []).map(([n]) => n)]
+    // A linked person (spec 005) goes by the names of all its conversations.
+    const parts = c.person ? c.threads.map((k) => S.contacts.get(k)).filter(Boolean) : [c];
+    const own = [...new Set(parts.filter((p) => hasOwner(p.s)).map((p) => S.owners[p.s].name).filter(Boolean))];
+    const names = [...new Set([c.name, ...parts.flatMap((p) => [p.name, ...(p.addr ? p.addr.split('~') : []), ...(p.members || []).map(([n]) => n)])])]
       .filter((n) => n && !own.includes(n));
     return {
       key,
+      // What a report belongs to: a linked person's report goes stale when its conversations change.
+      id: c.person ? `${key}|${c.threads.join('|')}` : key,
       msgs,
       group,
       title: plainName(key),
@@ -661,7 +665,7 @@ const AiAnalysis = {
     const conv = this.conversation();
     $('#aiPick').hidden = !!conv;
     $('#aiForm').classList.toggle('disabled', !conv);
-    if (this.report && (!conv || this.report.key !== conv.key)) this.clearReport();
+    if (this.report && (!conv || this.report.id !== conv.id)) this.clearReport();
     const t = conv && this.transcript(conv);
     // A pending Claude confirmation describes what was selected then: drop it if that changed.
     if (this.pending && (!conv || this.pending.t.text !== t.text)) this.hideStatus();
@@ -759,7 +763,10 @@ const AiAnalysis = {
       if (run !== this.run) return;
       const report = parseAnalysis(raw, t);
       this.hideStatus();
-      this.showReport(conv.key, report, { backend, t, question });
+      // The selection changed while the model read (another conversation, or a person's links): drop the result.
+      const now = this.conversation();
+      if (!now || now.id !== conv.id) return;
+      this.showReport(conv.id, report, { backend, t, question });
     } catch (err) {
       if (run !== this.run) return;
       if (!(err instanceof AiError)) console.warn('AI analysis failed:', err);
@@ -781,7 +788,7 @@ const AiAnalysis = {
     this.render();
   },
 
-  showReport(key, r, { backend, t, question }) {
+  showReport(id, r, { backend, t, question }) {
     const who = backend === 'webllm' ? `${AI_BACKENDS.webllm.label} (${this.settings.webllmModel.replace(/-q4f16.*$/, '')})`
       : backend === 'ollama' ? `Ollama (${this.settings.ollamaModel})`
         : backend === 'lmstudio' ? `LM Studio (${this.settings.lmstudioModel})`
@@ -795,7 +802,7 @@ const AiAnalysis = {
       ${r.moments.length ? `<h3>Moments</h3><ol class="ai-moments">${r.moments.map((m) => `<li><button type="button" class="ai-date" data-day="${m.date}" title="Read that day">${day(m.date)}</button><span class="ai-dot ${m.mood}" title="${moodWord[m.mood]}"></span><span><b>${escapeHtml(m.title)}</b>${m.detail ? `: ${escapeHtml(m.detail)}` : ''}</span></li>`).join('')}</ol>` : ''}
       ${r.topics.length ? `<h3>Topics</h3><div class="ai-topics">${r.topics.map((x) => `<span class="mw">${escapeHtml(x)}</span>`).join('')}</div>` : ''}
       <p class="mood-note">By ${escapeHtml(who)}, from the ${t.count === t.total ? '' : 'latest '}${fmtNum(t.count)} messages (${fmtDayRange(t.first, t.last)}).${r.dropped ? ` ${r.dropped} moment${r.dropped === 1 ? '' : 's'} with dates outside them left out.` : ''} AI can get things wrong: check the messages.</p>`;
-    this.report = { key };
+    this.report = { id };
     $('#aiReport').innerHTML = html;
     $('#aiReport').hidden = false;
   },
