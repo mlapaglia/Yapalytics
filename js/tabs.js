@@ -3,7 +3,9 @@
  * time, picked from a tab bar that stays under the filters, and "Jump to…" lists every
  * chart. Sections are the `.dash-section` elements in #dash, labelled by `data-tab`.
  * A section the code hides (`hidden`, e.g. Groups with no group chats) loses its tab.
- * Uses the app's $, $$ and escapeHtml.
+ * The open tab is in the URL as `#/<data-slug>` (the `#/` keeps it from matching an
+ * element id), so Back and Forward move between tabs.
+ * Uses the app's $, $$, escapeHtml and renderLazyIn.
  */
 const Tabs = {
   current: 'sec-glance',
@@ -47,14 +49,42 @@ const Tabs = {
     new ResizeObserver(measure).observe(filters);
     new ResizeObserver(measure).observe(nav);
 
-    this.select(this.current, { scroll: false });
+    // Back / Forward, or a typed URL: open the tab it names (Overview if none or gone).
+    window.addEventListener('popstate', () => {
+      const sec = this.fromUrl();
+      this.select(sec && !sec.hidden ? sec.id : 'sec-glance', { history: 'none' });
+    });
+    // Opened with a tab in the URL: it's selected once the data is loaded.
+    this.select(this.fromUrl()?.id || this.current, { scroll: false, history: 'none' });
   },
 
-  /** Show one section. `scroll` brings its top under the tab bar if the page is below it. */
-  select(id, { scroll = true, focus = false } = {}) {
+  /** The section the URL names, or null. */
+  fromUrl() {
+    const m = /^#\/([\w-]+)$/.exec(location.hash);
+    return (m && this.sections().find((sec) => sec.dataset.slug === m[1])) || null;
+  },
+
+  /**
+   * Put the open tab in the URL: 'push' adds a history entry, 'replace' doesn't. Only
+   * while the dashboard shows, so the landing page keeps a plain URL.
+   */
+  writeUrl(mode) {
+    if ($('#dash').hidden) return;
+    const hash = '#/' + document.getElementById(this.current).dataset.slug;
+    if (location.hash === hash) return;
+    if (mode === 'push') history.pushState(null, '', hash);
+    else history.replaceState(null, '', hash);
+  },
+
+  /**
+   * Show one section. `scroll` brings its top under the tab bar if the page is below it.
+   * `history`: 'push' (a new entry, so Back returns here), 'replace' or 'none'.
+   */
+  select(id, { scroll = true, focus = false, history = 'push' } = {}) {
     const target = document.getElementById(id);
     if (!target || target.hidden || !target.classList.contains('dash-section')) return;
     this.current = id;
+    if (history !== 'none') this.writeUrl(history);
     for (const sec of this.sections()) sec.classList.toggle('active', sec === target);
     renderLazyIn(target);
     for (const b of $$('#tabList [role="tab"]')) {
@@ -88,7 +118,8 @@ const Tabs = {
     if (next == null) return;
     e.preventDefault();
     const b = tabs[(next + tabs.length) % tabs.length];
-    this.select(b.dataset.panel, { focus: true });
+    // Arrowing across tabs replaces the entry, so Back doesn't step through each one.
+    this.select(b.dataset.panel, { focus: true, history: 'replace' });
   },
 
   /**
@@ -97,7 +128,9 @@ const Tabs = {
    */
   sync() {
     for (const b of $$('#tabList [role="tab"]')) b.hidden = document.getElementById(b.dataset.panel).hidden;
-    if (document.getElementById(this.current).hidden) this.select('sec-glance', { scroll: false });
+    if (document.getElementById(this.current).hidden) this.select('sec-glance', { scroll: false, history: 'none' });
+    // The first draw after loading data puts the tab in the URL; a fallback replaces it.
+    this.writeUrl('replace');
     const groups = [];
     this.cards.forEach((c, i) => {
       if (c.sec.hidden || c.el.hidden || !c.title) return;

@@ -16,13 +16,15 @@ reader away from the chart they were looking at, with no quick way back.
   reach, so any chart is one or two clicks away.
 - Keep every chart, and keep the filters applying to all of them.
 - Not in scope: rearranging or removing charts, user-customizable layouts, remembering
-  the tab between visits or in the URL.
+  the tab between visits (the data isn't kept either), putting the filters in the URL.
 
 ## Requirements
 
 - **R1** A tab bar sits under the filter bar, with one tab per section: Overview,
-  Activity, People, Groups, Replies, Words, Mood & emoji, Media & links, Calls,
-  Sources, Year in review, AI analysis, Messages. Only the selected section is shown.
+  Messages, Activity, People, Groups, Replies, Words, Mood & emoji, Media & links,
+  Calls, Sources, Year in review, AI analysis. Only the selected section is shown.
+  Messages comes second because it's the section people go back to most, and several
+  charts link into it.
 - **R2** The tab bar stays on screen while scrolling (under the sticky filters on wide
   screens, at the top on phones, where the filters don't stick).
 - **R3** A section with nothing to show (Groups without group chats, Calls without a
@@ -43,6 +45,15 @@ reader away from the chart they were looking at, with no quick way back.
   `aria-selected`, and Left/Right/Home/End to move between tabs.
 - **R9** The filters, the scope line and the date range apply to every tab, as before.
   Changing them keeps the selected tab.
+- **R10** The open tab is in the URL as `#/<name>` (`#/overview`, `#/mood`…), so Back
+  and Forward move between tabs and a link can open one. Clicking a tab, "Jump to…" and
+  links into the message list add a history entry; moving with the arrow keys and the
+  R3 fallback replace it, so Back doesn't step through every tab passed on the way.
+  Back and Forward change only the tab, not the filters. Opened with a tab in the URL,
+  the app selects it once data is loaded; a tab that's unknown or has nothing to show
+  falls back to Overview. The landing page keeps a plain URL. The `#/` prefix keeps a
+  tab name from matching an element id (`#messages` is the message list), which would
+  make the browser jump to it.
 
 ## Privacy
 
@@ -52,7 +63,7 @@ No change. This only rearranges the page; no message text goes anywhere new.
 
 **UI.** `#dashTabs` (`nav.tabs`) sits after the scope line: a horizontally scrolling
 `#tabList` of tab buttons and a `#jumpSel` select. Each `.dash-section` in `#dash` is a
-tab panel, labelled by `data-tab`. Section headings stay in the markup for screen
+tab panel, labelled by `data-tab` and named in the URL by `data-slug`. Section headings stay in the markup for screen
 readers but are hidden visually, since the tab names the section.
 
 The old Content section is split three ways:
@@ -75,19 +86,23 @@ first). It survives redraws and loading more files.
 - `Tabs.init()` builds the tab buttons from the sections, the card list for "Jump to…",
   and keeps `--filters-h` and `--tabs-h` on `#dash` up to date (ResizeObserver) for the
   sticky offset and `scroll-margin-top`.
-- `Tabs.select(id, { scroll, focus })` shows one section (class `active`; CSS hides the
-  rest), renders its lazy parts at once (`renderLazyIn`, R7), updates the tabs, and
-  scrolls per R4.
+- `Tabs.select(id, { scroll, focus, history })` shows one section (class `active`; CSS
+  hides the rest), renders its lazy parts at once (`renderLazyIn`, R7), updates the
+  tabs, writes the URL (`history`: `'push'`, `'replace'` or `'none'`, R10) and scrolls
+  per R4.
 - `Tabs.sync()`, at the end of `refresh()`: hides tabs of hidden sections, falls back to
-  Overview (R3), and rebuilds the "Jump to…" options from the visible cards.
+  Overview (R3), rebuilds the "Jump to…" options from the visible cards, and writes the
+  URL with `replaceState` (the first draw after loading data puts the tab there).
+- `Tabs.fromUrl()` reads `#/<slug>`. `init()` starts on it, and a `popstate` listener
+  (Back, Forward, a typed URL) selects it without adding an entry.
 - `Tabs.jump(card)`: R5.
 
 The lazy sections in `app.js` are keyed by `data-lazy` when an element has one, so the
-three content tabs share `#sec-content`'s pass (R7).
+three content tabs share `#sec-content`'s pass (R7). Charts drawn into a hidden tab are
+sized by their ResizeObserver when the tab is shown, as hidden sections already were.
 
 **Tests.** `scrollTo` in `tests/e2e/fixtures.mjs` clicks the tab holding the element
-first (`openTabOf`), so tests written for the long page still reach their cards. Charts drawn into a hidden tab are
-sized by their ResizeObserver when the tab is shown, as hidden sections already were.
+first (`openTabOf`), so tests written for the long page still reach their cards.
 
 ## Acceptance criteria
 
@@ -110,11 +125,16 @@ sized by their ResizeObserver when the tab is shown, as hidden sections already 
 - **AC9** Changing the date range on a tab other than Overview keeps that tab selected.
 - **AC10** At phone width (390 px), the tab bar sticks to the top of the screen when
   scrolled.
+- **AC11** Clicking tabs updates the URL (`#/people`, `#/mood`), and Back and Forward
+  select the tabs in between without reloading. Arrow keys don't add history entries.
+  "Read that day" adds one, so Back returns to the tab it was clicked on.
+- **AC12** When the open tab loses its section (R3), the URL is replaced with
+  `#/overview`. Typing the URL of a hidden tab opens Overview.
+- **AC13** Opening `/#/mood` and loading the demo shows the Mood & emoji tab, with its
+  charts drawn.
 
-## Open questions
+## Decisions
 
-- Should the tab go in the URL (`#mood`), so Back returns to the previous tab and a
-  reload keeps it? Reloading loses the data anyway, so it would help Back more than
-  reloads.
-- Is Messages better placed right after Overview? It's the most used section after the
-  charts, but it's also the only one that isn't a summary.
+- The tab is in the URL (R10). Reloading still loses the data, so the main win is Back
+  and Forward, and links that open a given tab.
+- Messages sits right after Overview (R1).

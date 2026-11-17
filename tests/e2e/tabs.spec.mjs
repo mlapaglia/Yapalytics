@@ -1,7 +1,7 @@
 /* specs/003-dashboard-tabs.md: one section at a time, picked from a sticky tab bar. */
 import { test, expect, loadDemo, openTab } from './fixtures.mjs';
 
-const ALL_TABS = ['Overview', 'Activity', 'People', 'Groups', 'Replies', 'Words', 'Mood & emoji', 'Media & links', 'Calls', 'Sources', 'Year in review', 'AI analysis', 'Messages'];
+const ALL_TABS = ['Overview', 'Messages', 'Activity', 'People', 'Groups', 'Replies', 'Words', 'Mood & emoji', 'Media & links', 'Calls', 'Sources', 'Year in review', 'AI analysis'];
 
 /** The tabs shown, the selected one, and the sections on screen. */
 const tabState = (page) => page.evaluate(() => ({
@@ -118,15 +118,15 @@ test.describe('spec 003: dashboard tabs', () => {
   test('AC8: arrow keys, Home and End move between the shown tabs', async ({ page }) => {
     await page.focus('#tab-sec-glance');
     await page.keyboard.press('ArrowRight');
-    await expect(page.locator('#tab-sec-activity')).toBeFocused();
-    await expect(page.locator('#tab-sec-activity')).toHaveAttribute('aria-selected', 'true');
-    await page.keyboard.press('End');
     await expect(page.locator('#tab-sec-messages')).toBeFocused();
     await expect(page.locator('#tab-sec-messages')).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('End');
+    await expect(page.locator('#tab-sec-ai')).toBeFocused();
+    await expect(page.locator('#tab-sec-ai')).toHaveAttribute('aria-selected', 'true');
     await page.keyboard.press('ArrowRight'); // wraps around
     await expect(page.locator('#tab-sec-glance')).toBeFocused();
     await page.keyboard.press('ArrowLeft');
-    await expect(page.locator('#tab-sec-messages')).toBeFocused();
+    await expect(page.locator('#tab-sec-ai')).toBeFocused();
     await page.keyboard.press('Home');
     await expect(page.locator('#tab-sec-glance')).toHaveAttribute('aria-selected', 'true');
     // Only the selected tab is in the Tab order.
@@ -143,6 +143,57 @@ test.describe('spec 003: dashboard tabs', () => {
     expect((await tabState(page)).selected).toEqual(['sec-people']);
     expect((await tabState(page)).visible).toEqual(['sec-people']);
   });
+
+  test('AC11: the open tab is in the URL, and Back and Forward move between tabs', async ({ page }) => {
+    const hash = () => page.evaluate(() => location.hash);
+    expect(await hash()).toBe('#/overview');
+    await page.click('#tabList [data-panel="sec-people"]');
+    expect(await hash()).toBe('#/people');
+    await page.click('#tabList [data-panel="sec-mood"]');
+    expect(await hash()).toBe('#/mood');
+    await page.goBack();
+    await expect(page.locator('#tab-sec-people')).toHaveAttribute('aria-selected', 'true');
+    expect((await tabState(page)).visible).toEqual(['sec-people']);
+    await page.goBack();
+    await expect(page.locator('#tab-sec-glance')).toHaveAttribute('aria-selected', 'true');
+    await page.goForward();
+    await expect(page.locator('#tab-sec-people')).toHaveAttribute('aria-selected', 'true');
+    // The data is still loaded: going back and forth only switches tabs.
+    await expect(page.locator('#dash')).toBeVisible();
+    // Arrow keys replace the entry instead of adding one per tab.
+    const before = await page.evaluate(() => history.length);
+    await page.focus('#tab-sec-people');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    expect(await hash()).toBe('#/replies');
+    expect(await page.evaluate(() => history.length)).toBe(before);
+    // A link into the message list adds one, so Back returns to the chart.
+    await page.click('#tabList [data-panel="sec-glance"]');
+    await page.click('#otd [data-otd-day]');
+    expect(await hash()).toBe('#/messages');
+    await page.goBack();
+    await expect(page.locator('#tab-sec-glance')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('AC12: a tab the URL names that has nothing to show falls back to Overview, replacing the URL', async ({ page }) => {
+    await page.click('#tabList [data-panel="sec-sources"]');
+    await page.click('#sourceSeg [data-source="2"]');
+    await expect(page.locator('#tab-sec-glance')).toHaveAttribute('aria-selected', 'true');
+    expect(await page.evaluate(() => location.hash)).toBe('#/overview');
+    // Typing a hidden tab's URL opens Overview too.
+    await page.evaluate(() => { location.hash = '#/sources'; });
+    await expect(page.locator('#tab-sec-glance')).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+test('spec 003 AC13: opened with a tab in the URL, that tab shows once the data loads', async ({ page }) => {
+  await page.goto('/#/mood');
+  await page.click('#demoBtn');
+  await expect(page.locator('#dash')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('#tab-sec-mood')).toHaveAttribute('aria-selected', 'true');
+  expect((await tabState(page)).visible).toEqual(['sec-mood']);
+  await expect.poll(() => chartDrawn(page, 'c-mood')).toBe(true);
+  expect(await page.evaluate(() => location.hash)).toBe('#/mood');
 });
 
 test.describe('spec 003: dashboard tabs on a phone', () => {
