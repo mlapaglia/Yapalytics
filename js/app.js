@@ -202,7 +202,6 @@ async function loadFiles(fileList) {
   $('#dash').hidden = false;
   populateContacts();
   refresh();
-  AiMood.afterLoad();
 }
 
 function showLoadError(msg) {
@@ -486,6 +485,8 @@ function refresh({ timeline = true } = {}) {
   if (timeline) renderTimeline(ui, base);
 
   const msgs = inRange(base);
+  // AI mood (spec 001) scores only this selection: pick up whatever it doesn't cover yet.
+  AiMood.selectionChanged(msgs);
   const A = aggregateMessages(msgs, S.convoGap);
   renderKpis(A);
   renderHighlights(msgs, A);

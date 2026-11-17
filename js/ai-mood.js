@@ -29,14 +29,20 @@ const aiMoodMissing = (m) => m.v != null && !m.ai;
 
 /**
  * What's left to score: each unique model text once (shortest first, so a batch pads
- * little), the messages behind each text, and how many messages that is.
+ * little), the messages behind each text, and how many messages that is. Messages whose
+ * text is in `known` (text -> scores from an earlier run) get those scores here instead.
  */
-function aiMoodPlan(msgs) {
+function aiMoodPlan(msgs, known = null) {
   const byText = new Map();
   let count = 0;
   for (const m of msgs) {
     if (!aiMoodMissing(m)) continue;
     const t = aiMoodText(m.b);
+    const p = known && known.get(t);
+    if (p) {
+      m.ai = p;
+      continue;
+    }
     let list = byText.get(t);
     if (!list) byText.set(t, (list = []));
     list.push(m);
@@ -96,7 +102,9 @@ const aiMoodRound = (p) => p.map((x) => Math.round(x * 1000) / 1000);
 
 /**
  * The controller behind the scorer switch on the Mood card. States: off, asking (the
- * download notice), loading, scoring, error. Uses the app's S, $ and setMoodScorer.
+ * download notice), loading, scoring, error. Uses the app's S, $, inRange, baseMessages
+ * and setMoodScorer. It only scores the messages the Mood chart shows: the selected
+ * dates, conversation and filters.
  */
 const AiMood = {
   state: 'off',
@@ -108,14 +116,21 @@ const AiMood = {
   inflight: null, // Promise of the batch being scored
   nextId: 0,
   run: 0, // bumped to stop the current run
+  replan: false, // the selection changed during a run: plan again after this batch
+  known: new Map(), // model text -> scores, so a text is scored once however the range moves
   pct: 0,
   done: 0,
   total: 0,
   error: '',
 
+  /** The messages the Mood chart shows. */
+  selection() {
+    return inRange(baseMessages());
+  },
+
   /** The user picked "AI model". */
   choose() {
-    if (!S.msgs.some(aiMoodMissing)) return setMoodScorer('ai');
+    if (!aiMoodPlan(this.selection(), this.known).count) return setMoodScorer('ai');
     if (this.ready) return this.start();
     this.state = 'asking';
     this.render();
@@ -132,7 +147,7 @@ const AiMood = {
     this.render();
   },
 
-  /** Load the model if needed, then score every message still missing an AI score. */
+  /** Load the model if needed, then score every selected message still missing an AI score. */
   async start() {
     const run = ++this.run;
     this.error = '';
@@ -149,7 +164,8 @@ const AiMood = {
       if (this.inflight) await this.inflight.catch(() => {});
       if (run !== this.run) return;
       for (;;) {
-        const plan = aiMoodPlan(S.msgs);
+        this.replan = false;
+        const plan = aiMoodPlan(this.selection(), this.known);
         if (!plan.count) break;
         this.state = 'scoring';
         this.done = 0;
@@ -161,13 +177,15 @@ const AiMood = {
           // Results are valid even if the run was stopped meanwhile: keep them.
           texts.forEach((t, j) => {
             const p = aiMoodRound(results[j]);
+            this.known.set(t, p);
             for (const m of plan.byText.get(t)) m.ai = p;
             this.done += plan.byText.get(t).length;
           });
           if (run !== this.run) return;
+          if (this.replan) break;
           this.render();
         }
-        // Files added while scoring are picked up by the next pass.
+        // A changed selection, or files added while scoring, are picked up by the next pass.
       }
       this.state = 'off';
       this.render();
@@ -179,7 +197,9 @@ const AiMood = {
       this.error = this.ready
         ? 'Scoring stopped because the model ran into a problem.'
         : 'The AI model couldn’t be downloaded. Check your connection (and any content blockers) and try again.';
-      this.render();
+      // Part of the selection has no AI score, so the chart goes back to VADER.
+      if (S.moodScorer === 'ai') setMoodScorer('vader');
+      else this.render();
     }
   },
 
@@ -191,9 +211,14 @@ const AiMood = {
     this.render();
   },
 
-  /** Files were added: score them if the AI scorer is on. */
-  afterLoad() {
-    if (S.moodScorer === 'ai' && this.state !== 'scoring' && this.state !== 'loading' && S.msgs.some(aiMoodMissing)) this.start();
+  /**
+   * The dashboard is being drawn for `msgs` (the selection): new dates, filters or files.
+   * A run in progress re-plans for it. With the AI scorer on, texts scored before are
+   * filled in at once (before the charts draw) and anything else gets scored.
+   */
+  selectionChanged(msgs) {
+    if (this.state === 'scoring') this.replan = true;
+    else if (S.moodScorer === 'ai' && this.state === 'off' && msgs.some(aiMoodMissing) && aiMoodPlan(msgs, this.known).count) this.start();
   },
 
   load() {
@@ -293,7 +318,11 @@ const AiMood = {
       const action = e.target.dataset.aiMood;
       if (action === 'start') this.start();
       else if (action === 'cancel') this.cancel();
-      else if (action === 'stop') this.stop();
+      else if (action === 'stop') {
+        // With AI on, part of the selection would be unscored: back to VADER.
+        this.stop();
+        if (S.moodScorer === 'ai') setMoodScorer('vader');
+      }
     };
     this.render();
   },

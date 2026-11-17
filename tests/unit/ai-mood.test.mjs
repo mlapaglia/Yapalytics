@@ -44,6 +44,15 @@ describe('spec 001: aiMoodPlan', () => {
     assert.deepEqual(plan.texts, ['ugh not again']);
     assert.equal(plan.count, 1);
   });
+  it('AC10, AC12: texts scored in an earlier run get their scores instead of being planned again', () => {
+    const p = [0.05, 0.15, 0.8];
+    const seen = msg({ body: 'lol   sure' });
+    const fresh = msg({ body: 'see you at five then' });
+    const plan = aiMoodPlan([seen, fresh], new Map([['lol sure', p]]));
+    assert.equal(seen.ai, p);
+    assert.deepEqual(plan.texts, ['see you at five then']);
+    assert.equal(plan.count, 1);
+  });
 });
 
 describe('spec 001: moodScore and moodSign', () => {
