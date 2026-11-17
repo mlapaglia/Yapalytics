@@ -989,3 +989,24 @@ function platformMixOption(ui, A, names) {
   const present = [0, 1, 2, 3, 4, 5].filter((s) => months.some((mo) => A.sourceMonths.get(mo)[s]));
   return monthlyStackOption(ui, months, present.map((s) => ({ name: names[s], color: ui.series[s], get: (mo) => A.sourceMonths.get(mo)[s] })));
 }
+
+/** Spec 007 M11: each app's share of a linked person's messages per month. `months`: mo -> [6]. */
+function appShareOption(ui, months, names) {
+  const keys = [...months.keys()].sort((a, b) => a - b);
+  const present = [0, 1, 2, 3, 4, 5].filter((s) => keys.some((mo) => months.get(mo)[s]));
+  return monthlyStackOption(ui, keys, present.map((s) => ({ name: names[s], color: ui.series[s], get: (mo) => months.get(mo)[s] })), { percent: true });
+}
+
+/** Spec 007 M6/M7: switches per route ("Instagram → SMS"), split by who made the move. */
+function switchRoutesOption(ui, routes, names) {
+  const rows = [...routes.entries()]
+    .map(([key, [them, you]]) => {
+      const [from, to] = key.split('>').map(Number);
+      return { label: `${names[from]} → ${names[to]}`, them, you };
+    })
+    .sort((a, b) => b.them + b.you - (a.them + a.you));
+  const opt = sentRecvStack(ui, rows.map((r) => r.label), rows.map((r) => r.you), rows.map((r) => r.them), { horizontal: true });
+  opt.series[0].name = 'You moved';
+  opt.series[1].name = 'They moved';
+  return opt;
+}

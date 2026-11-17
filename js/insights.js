@@ -25,7 +25,7 @@ function peakOf([r, s]) {
  * The most notable findings in a selection, most interesting first (at most one of each
  * kind). `single`: the selection is one conversation, so sentences talk about "here".
  */
-function buildHighlights(msgs, A, { labelFor = (k) => k, senderLabel = (x) => x, single = false, limit = HIGHLIGHT_LIMIT } = {}) {
+function buildHighlights(msgs, A, { labelFor = (k) => k, senderLabel = (x) => x, single = false, limit = HIGHLIGHT_LIMIT, crossApp = null } = {}) {
   if (!msgs.length) return [];
   const out = [];
   const add = (kind, score, icon, parts) => out.push({ kind, score, icon, parts });
@@ -166,6 +166,9 @@ function buildHighlights(msgs, A, { labelFor = (k) => k, senderLabel = (x) => x,
   if (loud && loud[1] >= 50 && (!single || rows[0].group)) {
     add('groups', 12, '👥', [{ b: senderLabel(loud[0]) }, single ? ' is the most active member here, with ' : ' is the most active in your group chats, with ', { b: fmtNum(loud[1]) }, ' messages.']);
   }
+
+  // How a linked person moves between apps (spec 007 R5): crossAppHighlight's pick
+  if (crossApp) out.push(crossApp);
 
   return out.sort((a, b) => b.score - a.score).slice(0, limit);
 }

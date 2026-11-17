@@ -209,7 +209,7 @@ function buildDemoInstagram(rand, pick, lines, endT) {
   let photoN = 1;
 
   /** One message with the format's variety: text, photos, shared reels, likes, reactions. */
-  const message = (t, who, dir) => {
+  const message = (t, who, dir, other = noor) => {
     const m = { sender_name: who, timestamp_ms: t };
     const r = rand();
     if (r < 0.06) {
@@ -224,21 +224,21 @@ function buildDemoInstagram(rand, pick, lines, endT) {
     } else {
       m.content = pick(textLines);
     }
-    if (rand() < 0.06) m.reactions = [{ reaction: pick(['❤️', '😂', '😮']), actor: who === me ? noor : me, timestamp: Math.floor(t / 1000) + 30 }];
+    if (rand() < 0.06) m.reactions = [{ reaction: pick(['❤️', '😂', '😮']), actor: who === me ? other : me, timestamp: Math.floor(t / 1000) + 30 }];
     m.is_geoblocked_for_viewer = false;
     m.is_unsent_image_by_messenger_kid_parent = false;
     return m;
   };
 
   /** Days of conversation between `people` (the first is the one who usually starts), newest first. */
-  const conversation = (people, dir, perDay, from) => {
+  const conversation = (people, dir, perDay, from, to = endT, other = noor) => {
     const msgs = [];
-    for (let day = from; day < endT; day += DAY) {
+    for (let day = from; day < to; day += DAY) {
       if (rand() > perDay) continue;
       let t = day + (10 + Math.floor(rand() * 13)) * 3600e3 + Math.floor(rand() * 3600e3);
       let who = pick(people);
       for (let i = 0, n = 1 + Math.floor(rand() * rand() * 12); i < n && t < endT; i++) {
-        msgs.push(message(t, who, dir));
+        msgs.push(message(t, who, dir, other));
         who = rand() < 0.35 ? who : pick(people.filter((p) => p !== who));
         t += Math.floor((rand() < 0.8 ? rand() * 6 : 6 + rand() * 120) * 60000) + 1000 + Math.floor(rand() * 1000);
       }
@@ -276,6 +276,18 @@ function buildDemoInstagram(rand, pick, lines, endT) {
 
   const leoDir = 'archived_threads/leomartins_17846200000000002';
   const requestDir = 'message_requests/freefollowers4u_17846200000000003';
+  const leoMsgs = conversation([leo, me], leoDir, 0.3, start).slice(-30);
+  // Alex Rivera is also in the SMS backup: same name, so the People button suggests linking
+  // them (spec 005), and once linked the Across apps tab has something to show (spec 007).
+  // Instagram picks up over the last 5 months. Generated last, so the threads above keep
+  // their messages.
+  const alex = 'Alex Rivera';
+  const alexDir = 'inbox/alexrivera_17846200000000004';
+  const alexTurn = endT - 150 * DAY;
+  const alexMsgs = [
+    ...conversation([alex, me], alexDir, 0.9, alexTurn, endT, alex),
+    ...conversation([alex, me], alexDir, 0.15, start, alexTurn, alex),
+  ];
   const stamp = new Date(endT).toISOString().slice(0, 10);
   return new File(
     [buildStoredZip([
@@ -289,7 +301,8 @@ function buildDemoInstagram(rand, pick, lines, endT) {
       [`${root}${noorDir}/message_1.json`, metaJson(thread(noorDir, noor, [noor, me], noorMsgs.slice(0, half)))],
       [`${root}${noorDir}/message_2.json`, metaJson(thread(noorDir, noor, [noor, me], noorMsgs.slice(half)))],
       [`${root}${groupDir}/message_1.json`, metaJson(thread(groupDir, 'Concert Squad 🎸', [leo, me, noor, priya], groupMsgs))],
-      [`${root}${leoDir}/message_1.json`, metaJson(thread(leoDir, leo, [leo, me], conversation([leo, me], leoDir, 0.3, start).slice(-30)))],
+      [`${root}${leoDir}/message_1.json`, metaJson(thread(leoDir, leo, [leo, me], leoMsgs))],
+      [`${root}${alexDir}/message_1.json`, metaJson(thread(alexDir, alex, [alex, me], alexMsgs))],
       [`${root}${requestDir}/message_1.json`, metaJson(thread(requestDir, 'Free Followers 4U', ['Free Followers 4U', me], [{ sender_name: 'Free Followers 4U', timestamp_ms: endT - 3 * DAY, content: 'Want 10k followers? DM us 🚀' }]))],
       ...files,
     ])],

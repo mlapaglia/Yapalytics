@@ -527,6 +527,41 @@
       </div>
     </section>
 
+    <section class="dash-section" id="sec-apps" data-slug="apps" data-tab="Across apps" hidden>
+      <h2 class="section-title">Across apps</h2>
+      <div class="grid">
+      <article class="card wide" id="appsSwitchCard">
+        <header>
+          <div><h2>Switching apps</h2><p class="sub" id="appsNote"></p></div>
+          <div class="seg" id="appsGapSeg" role="group" aria-label="On this tab, a conversation ends after this much quiet"></div>
+        </header>
+        <div class="app-splits" id="appsSplit"></div>
+        <div class="kpis apps-kpis" id="appsKpis"></div>
+        <p class="sub apps-juggle" id="appsJuggle"></p>
+      </article>
+      <article class="card wide" id="appsPeopleCard">
+        <header><div><h2>Linked people</h2><p class="sub">How each linked person spreads across apps. Click a name for their profile.</p></div></header>
+        <div class="table-wrap"><table class="leader apps-table" id="appsPeople"></table></div>
+      </article>
+      <article class="card wide">
+        <header><div><h2>Main app over time</h2><p class="sub" id="appsShareNote"></p></div></header>
+        <div class="chart" id="c-appshare"></div>
+      </article>
+      <article class="card">
+        <header><div><h2>Switch routes</h2><p class="sub">Where conversations move, and who moves them</p></div></header>
+        <div class="chart" id="c-routes"></div>
+      </article>
+      <article class="card">
+        <header><div><h2>What sets off a switch</h2><p class="sub">The message right before a conversation moves to another app</p></div></header>
+        <ul class="apps-triggers" id="appsTriggers"></ul>
+      </article>
+      <article class="card wide">
+        <header><div><h2>What each app is for</h2><p class="sub" id="appsForNote"></p></div></header>
+        <div class="table-wrap"><table class="vs apps-for" id="appsFor"></table></div>
+      </article>
+      </div>
+    </section>
+
     <section class="dash-section" id="sec-wrapped" data-slug="year" data-tab="Year in review">
       <h2 class="section-title">Year in review</h2>
       <div class="grid">
@@ -661,6 +696,7 @@
   <script src="js/demo.js"></script>
   <script src="js/analysis.js"></script>
   <script src="js/insights.js"></script>
+  <script src="js/crossapp.js"></script>
   <script src="js/charts.js"></script>
   <script src="js/media.js"></script>
   <script src="js/ai-mood.js"></script>

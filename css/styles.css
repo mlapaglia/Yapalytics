@@ -881,3 +881,31 @@ input[type="url"], input[type="text"], input[type="password"] {
   .ai-moments li { flex-wrap: wrap; }
   .ai-settings .field, .ai-ask .field.grow { max-width: none; }
 }
+
+/* ------------------------------------------------------------------ cross-app habits (spec 007) */
+.app-splits { display: grid; gap: 8px; margin: 4px 0 4px; }
+.app-split-row { display: grid; grid-template-columns: 96px minmax(80px, 1fr) auto; align-items: center; gap: 12px; font-size: 13px; }
+.app-split-label { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-split { display: flex; gap: 2px; height: 12px; border-radius: 6px; overflow: hidden; background: var(--surface-2); }
+.app-split > span { min-width: 3px; }
+.app-split.mini { height: 8px; min-width: 90px; }
+.app-split-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.app-split-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+.apps-kpis { margin-bottom: 8px; }
+.apps-kpis .kpi-sub { white-space: normal; }
+.apps-juggle { margin: 0 0 6px; line-height: 2; }
+.apps-juggle .btn { margin-left: 6px; }
+table.apps-table th { cursor: default; }
+table.apps-table tbody tr { cursor: default; }
+table.apps-table td.apps-cell { min-width: 110px; }
+.apps-for th[scope="col"] { text-align: right; }
+.apps-triggers { list-style: none; margin: 4px 0 0; padding: 0; }
+.apps-triggers li { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(60px, 2fr) auto; align-items: center; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+.apps-triggers li.empty { display: block; color: var(--muted); border: 0; }
+.apps-triggers .meter { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.apps-triggers .meter i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.apps-triggers .meta { color: var(--muted); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) {
+  .app-split-row { grid-template-columns: 72px minmax(0, 1fr); }
+  .app-split-legend { grid-column: 2; }
+}

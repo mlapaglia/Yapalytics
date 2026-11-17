@@ -28,6 +28,7 @@ const S = {
   gran: 'auto',
   activeGran: 'month',
   convoGap: CONVO_GAP, // silence that ends a conversation (picked on the Conversation length card)
+  appsGap: APPS_GAP, // the same, for the Across apps tab only (spec 007 R7)
   calYear: null,
   topRows: [],
   callRows: [],
@@ -999,8 +1000,9 @@ function refresh({ timeline = true } = {}) {
   // AI mood (spec 001) scores only this selection: pick up whatever it doesn't cover yet.
   AiMood.selectionChanged(msgs);
   const A = aggregateMessages(msgs, S.convoGap);
+  const X = aggregateCrossApp(msgs, S.appsGap); // spec 007: cheap, no message text
   renderKpis(A);
-  renderHighlights(msgs, A);
+  renderHighlights(msgs, A, X);
   renderOnThisDay(base);
   show('#profileBtn', S.filter.contact !== 'all');
   syncRangeUi();
@@ -1126,6 +1128,11 @@ function refresh({ timeline = true } = {}) {
   const multi = all && S.filter.source === 'all' && [...A.sourceMonths.values()].reduce((set, v) => (v.forEach((n, i) => n && set.add(i)), set), new Set()).size > 1;
   show('#sec-sources', multi);
   if (multi) Charts.set('c-platforms', platformMixOption(ui, A, SOURCES));
+
+  // Across apps (spec 007): only for linked people with messages on 2+ apps here
+  const crossApp = S.filter.source === 'all' && (all ? X.total.n > 0 : X.people.has(S.filter.contact));
+  show('#sec-apps', crossApp);
+  if (crossApp) renderCrossApp(ui, X);
 
   show('#sec-wrapped', base.length > 0);
   if (base.length) lazyRender('#sec-wrapped', () => renderWrapped(ui, base));
@@ -1412,8 +1419,9 @@ function partsHtml(parts) {
   return parts.map((p) => (typeof p === 'string' ? escapeHtml(p) : p.k != null ? personLink(p.k, p.text) : `<b>${escapeHtml(p.b)}</b>`)).join('');
 }
 
-function renderHighlights(msgs, A) {
-  const items = buildHighlights(msgs, A, { labelFor: plainName, senderLabel, single: S.filter.contact !== 'all' });
+function renderHighlights(msgs, A, X) {
+  const crossApp = X ? crossAppHighlight(X, { labelFor: plainName, names: SOURCES }) : null;
+  const items = buildHighlights(msgs, A, { labelFor: plainName, senderLabel, single: S.filter.contact !== 'all', crossApp });
   $('#highlights').innerHTML = items.length
     ? items.map((h) => `<li><span class="hl-icon" aria-hidden="true">${escapeHtml(h.icon)}</span><span>${partsHtml(h.parts)}</span></li>`).join('')
     : '<li class="empty">Not enough messages here for highlights yet.</li>';
@@ -1476,6 +1484,15 @@ function moveOtd(days) {
   renderOnThisDay(baseMessages());
 }
 
+/** Spec 007 R4: how a linked person's conversations move between apps, for the profile. */
+function profileCrossApp(key, msgs, name) {
+  const P = aggregateCrossApp(msgs, S.appsGap).people.get(key);
+  if (!P) return '';
+  const K = crossKpis(P, name);
+  return `<h3 class="profile-h">Across apps</h3><div class="app-splits">${appSplitHtml(P, name)}</div>
+    <div class="kpis profile-kpis apps-kpis">${K.switches}${K.who}${K.replies}</div>`;
+}
+
 /** A profile of one conversation, over all its messages (filters and dates aside). */
 function openProfile(key) {
   const msgs = S.msgs.filter((m) => m.k === key);
@@ -1533,7 +1550,7 @@ function openProfile(key) {
     </header>
     <div class="kpis profile-kpis">${tiles.join('')}</div>
     <h3 class="profile-h">You and ${escapeHtml(them === 'Everyone else' ? 'everyone else' : them)}</h3>
-    ${vs}`;
+    ${vs}${c.person ? profileCrossApp(key, msgs, name) : ''}`;
 
   const words = distinctiveWords(msgs, docFreqFor(), 15);
   const started = F.firstText;
@@ -1578,7 +1595,13 @@ function initGlance() {
     const t = e.target.closest('[data-profile], [data-otd-day], [data-otd-goto], [data-focus], [data-link-people]');
     if (!t) return;
     if (t.dataset.profile) openProfile(t.dataset.profile);
-    else if (t.dataset.otdDay) readDay(+t.dataset.otdDay);
+    else if (t.dataset.otdDay) {
+      if (t.dataset.contact && S.contacts.has(t.dataset.contact)) { // the biggest juggle (spec 007) names its person
+        S.filter.contact = t.dataset.contact;
+        $('#contactSel').value = t.dataset.contact;
+      }
+      readDay(+t.dataset.otdDay);
+    }
     else if (t.dataset.otdGoto) {
       const [month, day] = t.dataset.otdGoto.split('-').map(Number);
       S.otd = { month, day };
@@ -1591,6 +1614,130 @@ function initGlance() {
       openPeopleDialog(t.dataset.linkPeople);
     }
   });
+}
+
+// ------------------------------------------------------------------ cross-app habits (spec 007)
+
+const shareText = (a, b) => (b ? Math.round((a / b) * 100) + '%' : '–');
+const sortedApps = (P) => [...P.apps.keys()].sort((a, b) => a - b);
+const appNames = (apps) => andList([...apps].sort((a, b) => a - b).map((s) => SOURCES[s]));
+const monthText = (mo) => new Date(monthToTs(mo)).toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
+const TRIGGER_TEXT = { share: 'A shared post', link: 'A link', media: 'A photo, video or GIF', text: 'A plain message' };
+
+/** M1: a bar of each app's share. `counts`: [[app, n]]. */
+function appSplitBar(counts, cls = '') {
+  const total = counts.reduce((s, [, n]) => s + n, 0);
+  const parts = counts.filter(([, n]) => n).map(([s, n]) => ({ s, n, text: `${SOURCES[s]} ${shareText(n, total)}` }));
+  const bar = `<div class="app-split ${cls}" role="img" aria-label="${escapeHtml(parts.map((p) => p.text).join(', '))}">${parts.map((p) =>
+    `<span style="flex: ${p.n} 1 0; background: var(--series-${p.s + 1})" title="${escapeHtml(p.text)}"></span>`).join('')}</div>`;
+  return { bar, parts };
+}
+
+/** M1 for both sides: everyone, you, them. */
+function appSplitHtml(P, them) {
+  const apps = sortedApps(P);
+  const row = (label, n) => {
+    const { bar, parts } = appSplitBar(apps.map((s) => [s, n(P.apps.get(s))]));
+    return `<div class="app-split-row"><span class="app-split-label">${escapeHtml(label)}</span>${bar}<span class="app-split-legend">${parts.map((p) =>
+      `<span><i style="background: var(--series-${p.s + 1})"></i>${escapeHtml(p.text)}</span>`).join('')}</span></div>`;
+  };
+  return row('Both of you', (a) => a.n[0] + a.n[1]) + row('You', (a) => a.n[1]) + row(them, (a) => a.n[0]);
+}
+
+/** M6: who makes most of the moves, as [who, "68%"], or null without switches. */
+function whoSwitches(P, them) {
+  if (!P.switches) return null;
+  const you = P.switchBy[1] / P.switches;
+  return you >= 0.5 ? ['You', shareText(P.switchBy[1], P.switches)] : [them, shareText(P.switchBy[0], P.switches)];
+}
+
+/** The Switching apps tiles (M2–M6, M9). `them`: the other side's name, or 'They'. */
+function crossKpis(P, them) {
+  const replies = P.replies[0] + P.replies[1];
+  const cross = P.crossReplies[0] + P.crossReplies[1];
+  const crossMs = median([...P.crossMs[0], ...P.crossMs[1]]);
+  const sameMs = median([...P.sameMs[0], ...P.sameMs[1]]);
+  const who = whoSwitches(P, them);
+  return {
+    switches: kpi('Switches', fmtNum(P.switches), `${P.sessions ? (P.switches / P.sessions).toFixed(1) : '–'} per conversation`, 'Times the next message in a conversation came on a different app'),
+    multi: kpi('Multi-app conversations', shareText(P.multiSessions, P.sessions), `${fmtNum(P.multiSessions)} of ${fmtNum(P.sessions)} conversations`, 'Conversations that used more than one app'),
+    bounce: kpi('Back and forth', shareText(P.bounceSessions, P.sessions), 'left an app and came back', 'Conversations that moved to another app and then back again'),
+    days: kpi('Multi-app days', shareText(P.multiDays, P.days), `${fmtNum(P.multiDays)} of ${fmtNum(P.days)} active days`, 'Days with messages on more than one app'),
+    who: kpi('Who switches', who ? escapeHtml(who[0]) : '–', who ? `${who[0] === 'You' || who[0] === 'They' ? 'make' : 'makes'} ${who[1]} of the moves` : 'no switches yet', 'Who sent the first message on the new app'),
+    replies: kpi('Cross-app replies', shareText(cross, replies), `answered on another app · ${fmtDuration(crossMs)} vs ${fmtDuration(sameMs)} same-app`, 'Replies sent on a different app than the message they answer, and the median reply time for each'),
+  };
+}
+
+const peakHour = (hours) => hours.reduce((best, n, h) => (n > hours[best] ? h : best), 0);
+
+function renderCrossApp(ui, X) {
+  const all = S.filter.contact === 'all';
+  const P = all ? X.total : X.people.get(S.filter.contact);
+  const them = all ? 'They' : plainName(S.filter.contact);
+  const gapWords = fmtGapWords(S.appsGap);
+  $$('#appsGapSeg button').forEach((b) => b.classList.toggle('on', +b.dataset.gap === S.appsGap));
+  $('#appsNote').textContent = all
+    ? `${fmtNum(X.people.size)} linked ${X.people.size === 1 ? 'person' : 'people'} on more than one app in this selection · a conversation ends after ${gapWords} of quiet`
+    : `You and ${them} on ${appNames(P.apps.keys())} · a conversation ends after ${gapWords} of quiet`;
+  $('#appsSplit').innerHTML = appSplitHtml(P, all ? 'Them' : them);
+  $('#appsKpis').innerHTML = Object.values(crossKpis(P, them)).join('');
+
+  // M12: the conversation with the most switches
+  const b = P.busiest;
+  if (b) {
+    const d = new Date(b.start);
+    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    $('#appsJuggle').innerHTML = `Biggest juggle: <b>${fmtNum(b.switches)} switch${b.switches === 1 ? '' : 'es'}</b> between ${escapeHtml(appNames(b.apps))}${all ? ` with ${personLink(b.k)}` : ''} on ${escapeHtml(longDate(b.start))}. ` +
+      `<button class="btn small ghost" type="button" data-otd-day="${day}" data-contact="${escapeHtml(b.k)}">Read that day →</button>`;
+  } else $('#appsJuggle').textContent = 'No conversation here has moved between apps yet.';
+
+  // Linked people (All conversations only)
+  show('#appsPeopleCard', all);
+  if (all) {
+    const rows = [...X.people].sort((a, b) => b[1].switches - a[1].switches || b[1].n - a[1].n);
+    $('#appsPeople').innerHTML = '<thead><tr><th>Person</th><th>Messages</th><th>Apps</th><th>Switches</th><th>Per conversation</th><th>Multi-app</th><th>Who switches</th><th>Main app</th></tr></thead>' +
+      `<tbody>${rows.map(([k, Q]) => {
+        const who = whoSwitches(Q, plainName(k));
+        const { bar } = appSplitBar(sortedApps(Q).map((s) => [s, Q.apps.get(s).n[0] + Q.apps.get(s).n[1]]), 'mini');
+        return `<tr data-person="${escapeHtml(k)}"><td>${personLink(k)}</td><td>${fmtNum(Q.n)}</td><td class="apps-cell">${bar}</td><td>${fmtNum(Q.switches)}</td>` +
+          `<td>${Q.sessions ? (Q.switches / Q.sessions).toFixed(1) : '–'}</td><td>${shareText(Q.multiSessions, Q.sessions)}</td>` +
+          `<td>${who ? `${escapeHtml(who[0])} ${who[1]}` : '–'}</td><td>${escapeHtml(SOURCES[Q.mainApp])}</td></tr>`;
+      }).join('')}</tbody>`;
+  }
+
+  // M11: main app over time
+  Charts.set('c-appshare', appShareOption(ui, P.months, SOURCES));
+  const shifts = all ? [...X.people].flatMap(([k, Q]) => Q.shifts.map((s) => ({ ...s, k }))) : P.shifts;
+  $('#appsShareNote').innerHTML = 'Each app’s share of messages per month' + (shifts.length
+    ? '. ' + shifts.sort((a, b) => a.mo - b.mo).map((s) => `${all ? personLink(s.k) + ': m' : 'M'}oved from ${escapeHtml(SOURCES[s.from])} to ${escapeHtml(SOURCES[s.to])} around ${escapeHtml(monthText(s.mo))}`).join('; ') + '.'
+    : '');
+
+  // M7, M8: routes and what sets off a switch
+  Charts.set('c-routes', P.switches ? switchRoutesOption(ui, P.routes, SOURCES) : emptyOption(ui, 'No switches in this selection'));
+  const kinds = CROSS_TRIGGERS.filter((t) => t !== 'share' || P.apps.has(5) || P.triggers.share);
+  $('#appsTriggers').innerHTML = P.switches
+    ? kinds.map((t) => `<li><span>${TRIGGER_TEXT[t]}</span><span class="meter" aria-hidden="true"><i style="width: ${(P.triggers[t] / P.switches) * 100}%"></i></span><span class="meta">${shareText(P.triggers[t], P.switches)} · ${fmtNum(P.triggers[t])}</span></li>`).join('')
+    : '<li class="empty">No switches in this selection.</li>';
+
+  // M10: what each app is for
+  const apps = sortedApps(P);
+  const avg = (a) => (a.lenN ? Math.round(a.lenSum / a.lenN) : 0);
+  const n = (a) => a.n[0] + a.n[1];
+  const rows = [
+    ['Messages', (a) => fmtNum(n(a))],
+    ['From you', (a) => shareText(a.n[1], n(a))],
+    ['Average length', (a) => `${fmtNum(avg(a))} chars`],
+    ['Photos & videos', (a) => shareText(a.visual, n(a))],
+    ['Links & shares', (a) => shareText(a.links, n(a))],
+    ['Busiest hour', (a) => hourText(peakHour(a.hour))],
+    ['Conversations you start', (a) => fmtNum(a.starts[1])],
+    [`Conversations ${all ? 'they start' : `${them} starts`}`, (a) => fmtNum(a.starts[0])],
+    ['You usually reply in', (a) => fmtDuration(a.replyMedian[1])],
+    [`${all ? 'They usually reply' : `${them} usually replies`} in`, (a) => fmtDuration(a.replyMedian[0])],
+  ];
+  $('#appsForNote').textContent = 'A conversation counts on the app it started on; a reply on the app it was sent on';
+  $('#appsFor').innerHTML = `<thead><tr><th></th>${apps.map((s) => `<th scope="col">${escapeHtml(SOURCES[s])}</th>`).join('')}</tr></thead>` +
+    `<tbody>${rows.map(([label, fmt]) => `<tr><th scope="row">${escapeHtml(label)}</th>${apps.map((s) => `<td>${escapeHtml(fmt(P.apps.get(s)))}</td>`).join('')}</tr>`).join('')}</tbody>`;
 }
 
 // ---- lazy sections: render expensive sections only when they're on (or near) the screen
@@ -2291,6 +2438,13 @@ function init() {
     const g = +e.target.dataset.gap;
     if (!g) return;
     S.convoGap = g;
+    refresh({ timeline: false });
+  };
+  $('#appsGapSeg').innerHTML = APPS_GAPS.map((g) => `<button data-gap="${g}" title="A conversation ends after ${fmtGapWords(g)} of quiet">${fmtGapShort(g)}</button>`).join('');
+  $('#appsGapSeg').onclick = (e) => {
+    const g = +e.target.dataset.gap;
+    if (!g) return;
+    S.appsGap = g;
     refresh({ timeline: false });
   };
   $('#granSeg').onclick = (e) => {
