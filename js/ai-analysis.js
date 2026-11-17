@@ -590,8 +590,10 @@ const AiAnalysis = {
     const c = S.contacts.get(key) || {};
     const group = key.startsWith('g:');
     const msgs = inRange(baseMessages());
-    const own = hasOwner(c.s) ? [S.owners[c.s].name].filter(Boolean) : [];
-    const names = [c.name, ...(c.addr ? c.addr.split('~') : []), ...(c.members || []).map(([n]) => n)]
+    // A linked person (spec 005) goes by the names of all its conversations.
+    const parts = c.person ? c.threads.map((k) => S.contacts.get(k)).filter(Boolean) : [c];
+    const own = [...new Set(parts.filter((p) => hasOwner(p.s)).map((p) => S.owners[p.s].name).filter(Boolean))];
+    const names = [...new Set([c.name, ...parts.flatMap((p) => [p.name, ...(p.addr ? p.addr.split('~') : []), ...(p.members || []).map(([n]) => n)])])]
       .filter((n) => n && !own.includes(n));
     return {
       key,
