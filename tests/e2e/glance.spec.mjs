@@ -108,6 +108,24 @@ test.describe('on this day', () => {
     await expect(page.locator('#browserCount')).toContainText(`${counted.toLocaleString('en-US')} message`);
   });
 
+  test('reading a day clears a previous mood chart filter', async ({ page }) => {
+    await loadDemo(page);
+    const year = page.locator('.otd-year').first();
+    const counted = Number((await year.locator('.otd-head .muted').textContent()).match(/([\d,]+) message/)[1].replace(/,/g, ''));
+    const day = Number(await year.locator('[data-otd-day]').getAttribute('data-otd-day'));
+    await page.evaluate((t) => {
+      const d = new Date(t);
+      showMoodMessages(d.getFullYear() * 12 + d.getMonth() - 1, 1, 'pos');
+    }, day);
+    await expect(page.locator('#browserFilter')).toBeVisible();
+    await page.click('#tabList [data-panel="sec-glance"]');
+    await year.locator('[data-otd-day]').click();
+    await expect(page.locator('#browserFilter')).toBeHidden();
+    await expect(page.locator('#browserCount')).toContainText(`${counted.toLocaleString('en-US')} message`);
+    await expect(page.locator('#fromDate')).toHaveValue('2025-10-15');
+    await expect(page.locator('#toDate')).toHaveValue('2025-10-15');
+  });
+
   test('moves between days and back to today', async ({ page }) => {
     await loadDemo(page);
     await page.click('#otdPrev');
