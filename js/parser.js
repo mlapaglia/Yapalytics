@@ -181,6 +181,23 @@ function messageLib(vader) {
  * attributes. The scanner never buffers those: it skips over them and only records
  * their length, so memory stays proportional to the text content.
  */
+/**
+ * Reactions on one message that turned up in two overlapping exports (spec 004): each
+ * emoji keeps the larger count and everyone named in either. It doesn't depend on which
+ * export was loaded first, which says nothing about which is newer; the price is that a
+ * reaction removed between the two exports stays.
+ */
+function mergeReactions(a, b) {
+  const out = (a || []).map((x) => ({ r: x.r, c: x.c, n: [...x.n] }));
+  for (const y of b || []) {
+    const x = out.find((z) => z.r === y.r);
+    if (!x) { out.push({ r: y.r, c: y.c, n: [...y.n] }); continue; }
+    for (const n of y.n) if (!x.n.includes(n)) x.n.push(n);
+    x.c = Math.max(x.c, y.c, x.n.length);
+  }
+  return out.length ? out : undefined;
+}
+
 function smsParserWorker(self, lib) {
   'use strict';
 

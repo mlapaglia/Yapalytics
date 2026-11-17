@@ -4,7 +4,7 @@ const S = {
   msgs: [],
   calls: [],
   contacts: new Map(), // key -> { key, name, addr, group, lastT, s, label }
-  seenMsgs: new Set(),
+  seenMsgs: new Map(), // dedupe key -> the message kept (null for reactions sent as texts)
   seenCalls: new Set(),
   reactions: 0, // reactions sent as texts, left out of the messages
   files: [],
@@ -139,11 +139,16 @@ async function loadFiles(fileList) {
           for (const m of msgs) {
             // WhatsApp / iMessage / Telegram / Instagram records get `o` later (see applyOwners), so key them by sender.
             const key = `${m.t}|${hasOwner(m.s) ? m.sn : m.o}|${m.k}|${m.l}|${m.m}`;
-            if (S.seenMsgs.has(key)) continue;
-            S.seenMsgs.add(key);
-            // Reactions sent as texts (tapbacks, "😂 to “…”") aren't messages; the other
-            // exports leave reactions out entirely.
-            if (m.f & T_REACTION) { S.reactions++; continue; }
+            const seen = S.seenMsgs.get(key);
+            if (seen !== undefined) {
+              // The same message in an overlapping export: keep the reactions both list.
+              if (seen && m.rx) seen.rx = mergeReactions(seen.rx, m.rx);
+              continue;
+            }
+            // Reactions sent as texts (tapbacks, "😂 to “…”") aren't messages. Reactions
+            // on a message (Instagram, Telegram, Google Chat) ride along in its rx.
+            if (m.f & T_REACTION) { S.seenMsgs.set(key, null); S.reactions++; continue; }
+            S.seenMsgs.set(key, m);
             if (m.att && job.attBase) for (const a of m.att) if (a.z != null) a.z += job.attBase;
             S.msgs.push(m);
           }
@@ -860,7 +865,11 @@ function initMoodDetails() {
   $('#igPreviewsChk').checked = S.igPreviews;
   $('#igPreviewsChk').onchange = (e) => {
     S.igPreviews = e.target.checked;
-    try { localStorage.setItem('ms-ig-previews', S.igPreviews ? '1' : '0'); } catch (err) { /* storage unavailable */ }
+    // Turning previews off deletes the setting, so a failed write can't leave an old "on" behind.
+    try {
+      if (S.igPreviews) localStorage.setItem('ms-ig-previews', '1');
+      else localStorage.removeItem('ms-ig-previews');
+    } catch (err) { /* storage unavailable: reading it fails too, so previews start off */ }
     renderBrowser(inRange(baseMessages()));
   };
   $('#browserFilter').onclick = (e) => {

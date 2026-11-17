@@ -122,6 +122,27 @@ test.describe('spec 004 Instagram shared posts', () => {
     const again = await openShare(page);
     await expect(page.locator('#igPreviewsChk')).toBeChecked();
     await expect(again.locator('.share-preview iframe')).toHaveAttribute('src', EMBED);
+
+    // Turning it off is remembered too, by deleting the setting.
+    await page.uncheck('#igPreviewsChk');
+    await expect(page.locator('#messages iframe')).toHaveCount(0);
+    expect(await page.evaluate(() => localStorage.getItem('ms-ig-previews'))).toBeNull();
+    await page.reload();
+    await openShare(page);
+    await expect(page.locator('#igPreviewsChk')).not.toBeChecked();
+    await expect(page.locator('#messages iframe')).toHaveCount(0);
+  });
+
+  test('AC17: a long caption expands from the keyboard', async ({ page }) => {
+    const bubble = await openShare(page);
+    const caption = bubble.locator('button.share-text');
+    await expect(caption).toHaveAttribute('aria-expanded', 'false');
+    await caption.focus();
+    await page.keyboard.press('Enter');
+    await expect(caption).toHaveAttribute('aria-expanded', 'true');
+    await expect(caption).toHaveClass(/open/);
+    await page.keyboard.press('Space');
+    await expect(caption).toHaveAttribute('aria-expanded', 'false');
   });
 
   test('AC2, AC15: a bad link gets no link; Instagram links say so, others don\'t, and only posts get a preview', async ({ page }) => {
@@ -185,5 +206,16 @@ test.describe('spec 004 reactions on messages', () => {
     await openTab(page, 'sec-messages');
     await expect(page.locator('#messages .bubble', { hasText: 'café later?' }).locator('.rx', { hasText: '❤️' })).toHaveAttribute('title', '❤️ You, Jamie Park');
     expect((await instagramCounts(page)).n).toBe(before.n);
+  });
+
+  test('AC16: loading an overlapping export adds the reactions it has, without counting twice', async ({ page }) => {
+    const msg = (reactions) => igMessage(0, 'Alex', { content: 'see you there', reactions });
+    await loadFiles(page, threadOf(msg([{ reaction: '❤️', actor: 'Jamie' }])));
+    await page.setInputFiles('#addInput', threadOf(msg([{ reaction: '❤️', actor: 'Jamie' }, { reaction: '😂', actor: 'Alex' }])));
+    await expect.poll(() => page.evaluate(() => S.msgs.length)).toBe(1);
+    await openTab(page, 'sec-messages');
+    const chips = page.locator('#messages .bubble', { hasText: 'see you there' }).locator('.rx');
+    await expect(chips).toHaveText(['❤️', '😂']);
+    await expect(chips.first()).toHaveAttribute('title', /^❤️ (Jamie|You)$/);
   });
 });

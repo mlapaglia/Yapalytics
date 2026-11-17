@@ -28,8 +28,9 @@ SMS, are a different thing. They're already counted and left out of the messages
 ## Requirements
 
 - **R1** A message that shares a post or reel shows a share card instead of `📎 File`.
-  The card shows the creator (`@owner`), the caption (clamped to 4 lines; clicking the
-  caption expands it) and an "Open on Instagram ↗" link. The link opens in a new tab
+  The card shows the creator (`@owner`), the caption (clamped to 4 lines; the caption
+  is a button, so clicking it or pressing Enter or Space expands it, with
+  `aria-expanded` saying which) and an "Open on Instagram ↗" link. The link opens in a new tab
   (`target="_blank"`, `rel="noopener noreferrer"`). A link to another site (a YouTube
   video, a web page) says "Open link ↗" instead. A shared profile has no creator or
   caption, so its card shows `@username` and the display name
@@ -37,7 +38,9 @@ SMS, are a different thing. They're already counted and left out of the messages
 - **R2** Only `http:` and `https:` links become links. A share with any other link
   still shows its card, but the card has no link.
 - **R3** The Messages toolbar has an "Instagram previews" checkbox, off by default and
-  saved in this browser (`localStorage` key `ms-ig-previews`). It appears only when a
+  saved in this browser (`localStorage` key `ms-ig-previews`). Turning it on stores
+  `'1'`. Turning it off deletes the key, so a failed write can't leave an old "on"
+  behind. It appears only when a
   loaded message shares an Instagram post (`instagram.com/p|reel|reels|tv/<code>`).
   When it's on, each such card shows Instagram's embed of the post, loaded lazily,
   clipped to the card. A transparent link covers the embed, so clicking the preview
@@ -62,6 +65,10 @@ SMS, are a different thing. They're already counted and left out of the messages
 - **R9** You are named "You" by the owner picked for the source (Instagram, Telegram),
   so picking a different owner relabels the reactions. Google Chat knows your email
   from the export.
+- **R10** When a message turns up in two loaded exports that overlap, its reactions
+  are merged. Each emoji keeps the larger count and everyone named in either export.
+  The order the exports were loaded in doesn't matter, because it says nothing about
+  which is newer. A reaction removed between the two exports stays.
 
 ## Privacy
 
@@ -72,8 +79,11 @@ With it on, the browser loads `https://www.instagram.com/<p|reel|tv>/<code>/embe
 each share card in the message list (lazily, as cards near the screen). Instagram learns
 the post's shortcode, the user's IP address, and any instagram.com cookies the browser
 sends. Nothing else goes to Instagram: no message text, caption, sender or the link's
-`?id=` query. The URL is rebuilt from the shortcode alone. The checkbox's tooltip and the
-landing page's privacy line say this.
+`?id=` query. The URL is rebuilt from the shortcode alone. `no-referrer` and the sandbox
+don't stop the cookies, so Instagram may tie those views to the user's account. The
+checkbox's tooltip says all of this (found in review: it used to say "Nothing else is
+sent"). The landing page's privacy line says previews load from Instagram only when
+turned on.
 
 Clicking a card's link opens the post on Instagram in a new tab. The user does that
 explicitly.
@@ -128,7 +138,8 @@ read in sent and received bubbles and in both themes.
   (`wc === 0`, `e === null`, no `v`).
 - **AC6** Given an export with a shared reel, when "Instagram previews" is checked,
   then the card shows an iframe whose src is the reel's `/embed/` URL. After a reload
-  and loading the export again, the checkbox is still checked.
+  and loading the export again, the checkbox is still checked. Unchecking it removes
+  the iframe and the stored key, and after another reload it's still unchecked.
 - **AC7** Given the chat with a share is open, when searching for a word in the caption,
   then the share message is listed.
 - **AC8** Shares don't count as files: the Attachments KPI and "Other files" leave them
@@ -150,6 +161,13 @@ read in sent and received bubbles and in both themes.
 - **AC15** With previews on, a share of a post gets a preview, and a story, a profile
   or a link to another site doesn't. Stories and profiles say "Open on Instagram ↗",
   and the other site says "Open link ↗".
+- **AC16** Given a chat loaded with ❤️ on a message, when an overlapping export with
+  the same message reacted ❤️ (same person) and 😂 is added, then the message is listed
+  once with a ❤️ chip (no count) and a 😂 chip. `mergeReactions` gives the same result in
+  either order, keeps Telegram counts above the names listed, and doesn't change its
+  inputs.
+- **AC17** Given a share with a caption, when the caption is focused and Enter is
+  pressed, then it expands and `aria-expanded` is `true`. Pressing Space collapses it.
 
 ## Open questions
 

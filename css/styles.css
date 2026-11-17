@@ -469,16 +469,27 @@ table.leader .muted { color: var(--muted); }
 }
 .share-owner { font-weight: 600; }
 .share-text {
-  white-space: pre-wrap;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   opacity: 0.85;
   cursor: pointer;
+}
+.share-text > span {
+  white-space: pre-wrap;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
   line-clamp: 4;
   overflow: hidden;
 }
-.share-text.open { display: block; }
+.share-text.open > span { display: block; }
+.share-text:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; border-radius: 3px; }
 .share-link { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 .share-preview {
   position: relative;

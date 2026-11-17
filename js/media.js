@@ -650,11 +650,16 @@ function shareCard(sh, previews) {
     card.appendChild(who);
   }
   if (sh.x) {
-    const text = document.createElement('div');
+    // A button, so keyboard users can expand a caption clamped to 4 lines too.
+    const text = document.createElement('button');
+    text.type = 'button';
     text.className = 'share-text';
-    text.textContent = sh.x;
-    text.title = 'Click to show all';
-    text.onclick = () => text.classList.toggle('open');
+    text.title = 'Show all';
+    text.setAttribute('aria-expanded', 'false');
+    const span = document.createElement('span');
+    span.textContent = sh.x;
+    text.appendChild(span);
+    text.onclick = () => text.setAttribute('aria-expanded', String(text.classList.toggle('open')));
     card.appendChild(text);
   }
   if (sh.u) {
