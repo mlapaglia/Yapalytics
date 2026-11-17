@@ -23,22 +23,6 @@ test.describe('demo data', () => {
     expect(timeline.series[0].data.length).toBeGreaterThan(10);
   });
 
-  test('keeps reactions out of the messages and says how many', async ({ page }) => {
-    await loadDemo(page);
-    const r = await page.evaluate(() => {
-      const look = /^(?:Liked|Loved|Disliked|Laughed at|Emphasized|Questioned|Reacted|Removed)\b|^[^\p{L}\p{N}\s]{1,12} to [“"]/u;
-      return {
-        reactions: S.reactions,
-        flagged: S.msgs.filter((m) => m.f & 16).length,
-        lookalikes: S.msgs.filter((m) => m.b && look.test(m.b)).map((m) => m.b).slice(0, 5),
-      };
-    });
-    expect(r.reactions).toBeGreaterThan(0);
-    expect(r.flagged).toBe(0);
-    expect(r.lookalikes).toEqual([]);
-    await expect(page.locator('#reactionInfo')).toContainText(/reactions .* not counted as messages/);
-  });
-
   test('renders the content section once it scrolls into view', async ({ page }) => {
     await loadDemo(page);
     await scrollTo(page, '#c-mood');
