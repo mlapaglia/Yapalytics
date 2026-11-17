@@ -213,6 +213,7 @@ code { font-size: 0.92em; background: var(--surface-2); padding: 1px 5px; border
   background: var(--surface-2);
   font-size: 20px;
 }
+.source-icon .logo { width: 24px; height: 24px; }
 .source h3 { margin: 0; font-size: 15px; }
 .source header p { margin: 0; color: var(--muted); font-size: 12px; }
 .source ol, .source ul { margin: 0 0 12px; padding-left: 20px; color: var(--text-2); font-size: 13px; }
@@ -228,6 +229,9 @@ code { font-size: 0.92em; background: var(--surface-2); padding: 1px 5px; border
 .source .links .btn { text-decoration: none; }
 .source.tips { grid-column: 1 / -1; background: var(--surface-2); border-style: dashed; }
 .nowrap { white-space: nowrap; }
+/* App logos come from the sprite at the top of index.html. */
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.logo { display: inline-block; flex: none; color: var(--accent); }
 .source.tips .source-icon { background: var(--surface); }
 
 .progress { width: min(560px, 100%); text-align: center; }
@@ -293,6 +297,7 @@ select { width: 100%; }
   padding: 5px 10px;
   cursor: pointer;
 }
+.seg button .logo { width: 14px; height: 14px; margin-right: 5px; vertical-align: -2px; }
 .seg button:hover { color: var(--text); }
 .seg button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 0 0 1px var(--border); }
 

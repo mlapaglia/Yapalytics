@@ -1,6 +1,13 @@
 import { test, expect, loadDemo, scrollTo, chartOption } from './fixtures.mjs';
 
 test.describe('demo data', () => {
+  test('clicking an app logo in the source switch picks that app', async ({ page }) => {
+    await loadDemo(page);
+    await page.click('#sourceSeg button[data-source="2"] .logo');
+    await expect(page.locator('#sourceSeg button[data-source="2"]')).toHaveClass(/\bon\b/);
+    await expect(page.locator('#scope')).toContainText('(WhatsApp)');
+  });
+
   test('loads every source and renders the dashboard', async ({ page }) => {
     await loadDemo(page);
     const bySource = await page.evaluate(() => {
