@@ -35,11 +35,11 @@ export const alexMessages = () => [
     igMessage(480, ALEX, { content: 'Video chat ended', call_duration: 120 }),
     igMessage(360, ME, { content: `${ME} started a video chat` }),
     igMessage(300, ALEX, { videos: [{ uri: `${ROOT}inbox/alexrivera_1111/videos/1802.mp4` }] }),
-    igMessage(240, ALEX, { content: `${ALEX} sent an attachment.`, share: { link: 'https://www.instagram.com/reel/abc/', share_text: 'so true lol' } }),
+    igMessage(240, ALEX, { content: `${ALEX} sent an attachment.`, share: { link: 'https://www.instagram.com/reel/abc/?id=1_2', share_text: 'so true lol', original_content_owner: 'tacotuesday' }, reactions: [{ reaction: '😂', actor: ME }] }),
   ],
   [ // message_2.json
     igMessage(180, ALEX, { photos: [{ uri: ALEX_PHOTO }, { uri: ALEX_PHOTO_2 }] }),
-    igMessage(120, ME, { content: 'café later? ☕️', reactions: [{ reaction: '❤️', actor: ALEX }] }),
+    igMessage(120, ME, { content: 'café later? ☕️', reactions: [{ reaction: '❤️', actor: ALEX }, { reaction: '❤️', actor: ME }, { reaction: '😮', actor: ALEX }] }),
     igMessage(60, ALEX, { content: 'hey!! 😂 check https://example.com' }),
     igMessage(0, ME, {}), // nothing in it
   ],

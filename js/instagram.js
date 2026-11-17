@@ -7,9 +7,12 @@
  *
  * Conversations in inbox/ and archived_threads/ are kept; message_requests/ are skipped.
  * Call notices, group events ("… left the group") and placeholder texts ("… sent an
- * attachment.") aren't messages. "Liked a message" and "Reacted 😂 to your message" are
+ * attachment.") aren't messages, though a shared post or reel behind one is: its link,
+ * caption and creator go in `sh` (spec 004), and the caption isn't counted as the sender's
+ * text. "Liked a message" and "Reacted 😂 to your message" are
  * reactions: they're passed on flagged T_REACTION, so the page counts them as reactions.
- * Reactions on a message (its `reactions` field) never count as messages.
+ * Reactions on a message (its `reactions` field) never count as messages: they go in
+ * `rx`, with who reacted, to be shown on the message (spec 004).
  *
  * Meta writes text as UTF-8 bytes escaped one per character ("Ã©" for "é"), so
  * every string is decoded again. Records carry the sender's display name in `sn`, and the
@@ -21,7 +24,7 @@
 function instagramParserWorker(self, lib) {
   'use strict';
 
-  const { analyzeText, stampTime, listZip, readEntryText, T_REACTION } = lib;
+  const { analyzeText, stampTime, addReaction, listZip, readEntryText, T_REACTION } = lib;
 
   const BATCH_SIZE = 5000;
   const KEPT_FOLDERS = new Set(['inbox', 'archived_threads']);
@@ -39,6 +42,9 @@ function instagramParserWorker(self, lib) {
   const baseName = (p) => p.replace(/^.*\//, '');
   /** A path from its "messages/" folder on: attachment uris are relative to the export root. */
   const tailOf = (p) => { const m = /(?:^|\/)(messages\/.+)$/.exec(p); return m ? m[1] : p; };
+  /** The link if it's http(s), else '': it ends up in an href. */
+  const webLink = (s) => { try { return /^https?:$/.test(new URL(s).protocol) ? s : ''; } catch { return ''; } };
+  const str = (v) => (typeof v === 'string' ? v : '');
 
   const utf8 = new TextDecoder('utf-8', { fatal: true });
   function fixText(s) {
@@ -150,9 +156,13 @@ function instagramParserWorker(self, lib) {
           att.push({ n: baseName(e.name), k: kind, t: '', z: e.z, o: e.offset, c: e.csize, u: e.usize, m: e.method, p: e.name });
         }
       }
-      if (m.share && !text && !media.length) rec.ot++;
+      if (m.share && typeof m.share === 'object') {
+        const sh = { u: webLink(str(m.share.link)), x: str(m.share.share_text), w: str(m.share.original_content_owner) };
+        if (sh.u || sh.x || sh.w) rec.sh = sh;
+      }
       if (att.length) rec.att = att;
-      if (!text && !media.length && !rec.ot) { counts.skipped++; continue; }
+      if (!text && !media.length && !rec.sh) { counts.skipped++; continue; }
+      if (Array.isArray(m.reactions)) for (const r of m.reactions) if (r) addReaction(rec, str(r.reaction), 1, [str(r.actor)]);
 
       analyzeText(text, rec);
       if (REACTION_RE.test(text)) { rec.f = T_REACTION; counts.reactions++; }

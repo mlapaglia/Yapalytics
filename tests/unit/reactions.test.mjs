@@ -65,3 +65,18 @@ describe('reactions sent as texts', () => {
     assert.equal(rec.f, lib.T_REACTION);
   });
 });
+
+describe('spec 004 reactions on messages', () => {
+  it('AC9: addReaction merges by emoji, adds up counts and keeps each name once', () => {
+    const rec = {};
+    lib.addReaction(rec, '❤️', 1, ['Alex']);
+    lib.addReaction(rec, '😮', 1, ['Alex']);
+    lib.addReaction(rec, '❤️', 2, ['Alex', 'Sam']);
+    lib.addReaction(rec, '', 1, ['Nobody']);
+    lib.addReaction(rec, '👍', 0, ['Nobody']);
+    assert.deepEqual(rec.rx, [{ r: '❤️', c: 3, n: ['Alex', 'Sam'] }, { r: '😮', c: 1, n: ['Alex'] }]);
+    const none = {};
+    lib.addReaction(none, '', 1, []);
+    assert.equal(none.rx, undefined, 'no rx without a reaction');
+  });
+});

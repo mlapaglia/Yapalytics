@@ -28,6 +28,7 @@ const S = {
   browserQuery: '',
   browserMood: null, // { mo, o (null = both), kind: 'pos' | 'neg' | 'any' } picked on the mood chart
   showMood: false, // mood scores on the messages
+  igPreviews: false, // load Instagram's embeds of shared posts (spec 004, opt-in, saved in localStorage)
   moodScorer: 'vader', // 'vader' | 'ai' (spec 001): which scores the mood chart and pills use
   phrase: '', // word tracker query
   phraseGran: 'auto', // word tracker bars: auto / day / week / month
@@ -195,6 +196,7 @@ async function loadFiles(fileList) {
   S.calls.sort((a, b) => a.t - b.t);
   S.firstSeen = computeFirstSeen();
   S.docFreq = null;
+  $('#igPreviewsLabel').hidden = !S.msgs.some((m) => m.sh && instagramEmbedUrl(m.sh.u));
   for (const c of S.contacts.values()) c.label = contactLabel(c);
   for (const s of Object.keys(S.owners)) if (S.owners[s].auto) S.owners[s].name = guessOwner(+s);
   applyOwners();
@@ -852,6 +854,13 @@ function moodWhyHtml(m) {
 function initMoodDetails() {
   $('#moodChk').onchange = (e) => {
     S.showMood = e.target.checked;
+    renderBrowser(inRange(baseMessages()));
+  };
+  try { S.igPreviews = localStorage.getItem('ms-ig-previews') === '1'; } catch (e) { /* storage unavailable */ }
+  $('#igPreviewsChk').checked = S.igPreviews;
+  $('#igPreviewsChk').onchange = (e) => {
+    S.igPreviews = e.target.checked;
+    try { localStorage.setItem('ms-ig-previews', S.igPreviews ? '1' : '0'); } catch (err) { /* storage unavailable */ }
     renderBrowser(inRange(baseMessages()));
   };
   $('#browserFilter').onclick = (e) => {
@@ -1542,10 +1551,35 @@ function renderPhrase(ui = S.ui) {
   firsts.innerHTML = phraseFirstsHtml(P, re);
 }
 
+/** Reactions on a message (spec 004): one chip per emoji, with who reacted on hover. */
+function reactionsRow(m) {
+  const row = document.createElement('div');
+  row.className = 'reactions';
+  const me = hasOwner(m.s) && S.owners[m.s].name;
+  for (const x of m.rx) {
+    const names = x.n.map((n) => (n === me ? 'You' : n));
+    const more = x.c - names.length;
+    const chip = document.createElement('span');
+    chip.className = 'rx';
+    chip.textContent = x.r;
+    if (x.c > 1) {
+      const n = document.createElement('b');
+      n.textContent = fmtNum(x.c);
+      chip.appendChild(n);
+    }
+    const who = names.length ? names.join(', ') + (more > 0 ? ` and ${fmtNum(more)} more` : '') : `${fmtNum(x.c)} ${x.c === 1 ? 'person' : 'people'}`;
+    chip.title = `${x.r} ${who}`;
+    chip.setAttribute('aria-label', `Reacted ${x.r} by ${who}`);
+    row.appendChild(chip);
+  }
+  return row;
+}
+
 function renderBrowser(msgs) {
   const q = S.browserQuery.trim().toLowerCase();
   const mood = S.browserMood;
-  let list = q ? msgs.filter((m) => m.b && m.b.toLowerCase().includes(q)) : msgs;
+  const has = (s) => s && s.toLowerCase().includes(q);
+  let list = q ? msgs.filter((m) => has(m.b) || (m.sh && (has(m.sh.x) || has(m.sh.w)))) : msgs;
   if (mood) list = list.filter((m) => moodMatches(m, mood));
   const start = Math.max(0, list.length - S.browserLimit);
   const shown = list.slice(start);
@@ -1595,6 +1629,8 @@ function renderBrowser(msgs) {
       bubble.appendChild(body);
     }
     if (m.att) bubble.appendChild(messageAttachments(m));
+    if (m.sh) bubble.appendChild(shareCard(m.sh, S.igPreviews));
+    if (m.rx) bubble.appendChild(reactionsRow(m));
     // Sources without attachment references only know how many there were.
     const att = [];
     if (!m.att) {

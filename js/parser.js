@@ -153,7 +153,21 @@ function messageLib(vader) {
     rec.mo = dt.getFullYear() * 12 + dt.getMonth();
   }
 
-  return { analyzeText, stampTime, swearFamily, explainMood, T_REACTION };
+  /**
+   * Notes a reaction on a message (spec 004): rec.rx is [{ r: emoji, c: count, n: [who] }],
+   * one entry per emoji in the order first seen. `names` may be fewer than `count`
+   * (Telegram lists only recent reactors). Reactions never count as messages.
+   */
+  function addReaction(rec, emoji, count, names) {
+    if (!emoji || !(count > 0)) return;
+    const list = rec.rx || (rec.rx = []);
+    let x = list.find((y) => y.r === emoji);
+    if (!x) list.push((x = { r: emoji, c: 0, n: [] }));
+    x.c += count;
+    for (const n of names) if (n && !x.n.includes(n)) x.n.push(n);
+  }
+
+  return { analyzeText, stampTime, swearFamily, explainMood, addReaction, T_REACTION };
 }
 
 /*

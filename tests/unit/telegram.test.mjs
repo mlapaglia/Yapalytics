@@ -126,3 +126,12 @@ describe('Telegram parser: what it can and cannot tell', () => {
     assert.equal(out.msgs[2].ph, 1);
   });
 });
+
+describe('spec 004 reactions on Telegram messages', () => {
+  it('AC11: keeps emoji reactions with their count and the people listed, and skips custom emoji', async () => {
+    const out = await parse(resultJson(fullExport()));
+    const nice = out.msgs.find((m) => m.b === 'nice');
+    assert.deepEqual(nice.rx, [{ r: '👍', c: 3, n: ['Jamie Park'] }]);
+    assert.equal(out.msgs.filter((m) => m.rx).length, 1);
+  });
+});

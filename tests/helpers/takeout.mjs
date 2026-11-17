@@ -18,7 +18,7 @@ const ME = { name: 'Me', email: 'me@example.com', user_type: 'Human' };
 const ALEX = { name: 'Alex', email: 'alex@example.com', user_type: 'Human' };
 
 /**
- * @param {{ name: string, data: Buffer, fromMe?: boolean }[]} attachments in time order,
+ * @param {{ name: string, data: Buffer, fromMe?: boolean, reactions?: object[] }[]} attachments in time order,
  *   one minute apart starting 2024-08-20 12:00 UTC
  * @returns {{ name: string, mimeType: string, buffer: Buffer }} for setInputFiles
  */
@@ -29,6 +29,7 @@ export function takeoutWithAttachments(attachments) {
     created_date: `Tuesday, August 20, 2024 at 12:${String(i).padStart(2, '0')}:00 PM UTC`,
     text: a.name,
     attached_files: [{ original_name: a.name, export_name: a.name }],
+    ...(a.reactions ? { reactions: a.reactions } : {}),
   }));
   const buffer = makeZip([
     { name: 'Takeout/Google Chat/Users/User 1/user_info.json', data: JSON.stringify({ user: ME }), deflate: true },

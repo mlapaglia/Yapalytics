@@ -585,6 +585,80 @@ function messageAttachments(m) {
   return box;
 }
 
+// ------------------------------------------------------------------ shared posts (spec 004)
+
+const IG_POST_RE = /^\/(p|reels?|tv)\/([A-Za-z0-9_-]+)\/?$/;
+
+/**
+ * Instagram's embed page for a post or reel link, or null. Rebuilt from the shortcode
+ * alone, so nothing else in the link (its ?id=…) goes to Instagram.
+ */
+function instagramEmbedUrl(link) {
+  let url;
+  try { url = new URL(link); } catch { return null; }
+  if (!/^https?:$/.test(url.protocol) || !/^(?:www\.)?instagram\.com$/i.test(url.hostname)) return null;
+  const m = IG_POST_RE.exec(url.pathname);
+  if (!m) return null;
+  const kind = m[1] === 'reels' ? 'reel' : m[1];
+  return `https://www.instagram.com/${kind}/${m[2]}/embed/`;
+}
+
+/** A link that opens `href` in a new tab, away from this page. */
+function newTabLink(href, className) {
+  const a = document.createElement('a');
+  a.className = className;
+  a.href = href;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  return a;
+}
+
+/**
+ * The card for a shared post: creator, caption and a link to it (sh = { u, x, w } from
+ * the parser; u is already http(s) or ''). With `previews`, Instagram's embed of the
+ * post sits on top, under a link so a click opens the post rather than playing it there.
+ */
+function shareCard(sh, previews) {
+  const card = document.createElement('div');
+  card.className = 'share-card';
+  const embed = sh.u && instagramEmbedUrl(sh.u);
+  if (previews && embed) {
+    const frame = document.createElement('div');
+    frame.className = 'share-preview';
+    const iframe = document.createElement('iframe');
+    iframe.src = embed;
+    iframe.loading = 'lazy';
+    iframe.title = sh.w ? `Post by @${sh.w}` : 'Shared post';
+    iframe.referrerPolicy = 'no-referrer';
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+    iframe.tabIndex = -1;
+    const cover = newTabLink(sh.u, 'share-cover');
+    cover.setAttribute('aria-label', 'Open on Instagram');
+    frame.append(iframe, cover);
+    card.appendChild(frame);
+  }
+  if (sh.w) {
+    const who = document.createElement('div');
+    who.className = 'share-owner';
+    who.textContent = '@' + sh.w;
+    card.appendChild(who);
+  }
+  if (sh.x) {
+    const text = document.createElement('div');
+    text.className = 'share-text';
+    text.textContent = sh.x;
+    text.title = 'Click to show all';
+    text.onclick = () => text.classList.toggle('open');
+    card.appendChild(text);
+  }
+  if (sh.u) {
+    const a = newTabLink(sh.u, 'share-link');
+    a.textContent = embed ? 'Open on Instagram ↗' : 'Open link ↗';
+    card.appendChild(a);
+  }
+  return card;
+}
+
 // ------------------------------------------------------------------ Attachments panel
 
 const Gallery = { items: [], shown: 0, kind: 'all', observer: null, sentinel: null, more: null };

@@ -124,6 +124,7 @@ function attachmentTags(m) {
   return [
     ...tag(m.ph, 'photo', 'photos'), ...tag(m.gf, 'GIF', 'GIFs'), ...tag(m.vd, 'video', 'videos'),
     ...tag(m.au, 'audio', 'audio clips'), ...tag(m.ot, 'file', 'files'),
+    ...(m.sh ? ['[shared post]'] : []), // not its caption: that's the creator's words (spec 004)
   ].join(' ');
 }
 

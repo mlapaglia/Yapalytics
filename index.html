@@ -34,7 +34,7 @@
         </div>
         <p class="hint">or drop the files anywhere on this page. Pick several at once, and mix sources: duplicates are merged.</p>
         <p id="loadError" class="error" hidden></p>
-        <p class="privacy"><span aria-hidden="true">🔒</span> Everything runs in this browser tab. Your messages are never uploaded, unless you choose to send a conversation to Claude for analysis with your own API key.</p>
+        <p class="privacy"><span aria-hidden="true">🔒</span> Everything runs in this browser tab. Your messages are never uploaded, unless you choose to send a conversation to Claude for analysis with your own API key. Previews of shared Instagram posts load from Instagram only if you turn them on.</p>
       </div>
 
       <h2 class="guide-title">Get your messages</h2>
@@ -243,6 +243,7 @@
           <div><h2>Messages</h2><p class="sub" id="browserCount"></p></div>
           <div class="browser-tools">
             <label class="check" title="Show each message's mood score; click a score to see why"><input type="checkbox" id="moodChk"> Mood scores</label>
+            <label class="check" id="igPreviewsLabel" hidden title="Show a preview of each shared Instagram post. Previews load from instagram.com, which then sees which posts you look at and your IP address. Nothing else is sent."><input type="checkbox" id="igPreviewsChk"> Instagram previews</label>
             <input type="search" id="search" placeholder="Search messages…" aria-label="Search messages">
           </div>
         </header>

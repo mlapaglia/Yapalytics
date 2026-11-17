@@ -1,4 +1,4 @@
-import { test, expect, loadFiles, loadDemo, scrollTo, chartOption } from './fixtures.mjs';
+import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab } from './fixtures.mjs';
 import { looseThread, splitExport, zippedExport, zippedHtmlExport } from '../helpers/instagram.mjs';
 
 /** Instagram messages loaded: total, and how many count as sent by you. */
@@ -65,5 +65,102 @@ test.describe('Instagram errors', () => {
     await expect(page.locator('#loadError')).toContainText('Instagram');
     await expect(page.locator('#loadError')).toContainText('JSON');
     await expect(page.locator('#dash')).toBeHidden();
+  });
+});
+
+test.describe('spec 004 Instagram shared posts', () => {
+  const REEL = 'https://www.instagram.com/reel/abc/?id=1_2';
+  const EMBED = 'https://www.instagram.com/reel/abc/embed/';
+
+  /** The zipped export, Alex's chat open in Messages; the share card's bubble. */
+  async function openShare(page) {
+    await loadFiles(page, zippedExport());
+    await page.selectOption('#contactSel', 'ig:alexrivera_1111');
+    await openTab(page, 'sec-messages');
+    return page.locator('#messages .bubble', { has: page.locator('.share-card') });
+  }
+
+  test('AC1: a shared reel shows its creator, caption and a link that opens in a new tab', async ({ page }) => {
+    const bubble = await openShare(page);
+    await expect(bubble).toHaveCount(1);
+    await expect(bubble.locator('.share-owner')).toHaveText('@tacotuesday');
+    await expect(bubble.locator('.share-text')).toHaveText('so true lol');
+    const link = bubble.locator('a.share-link');
+    await expect(link).toHaveText('Open on Instagram ↗');
+    await expect(link).toHaveAttribute('href', REEL);
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    await expect(bubble).not.toContainText('📎');
+  });
+
+  test('AC4: with previews off nothing is loaded from Instagram', async ({ page }) => {
+    const requests = [];
+    page.on('request', (r) => { if (/instagram\.com/.test(r.url())) requests.push(r.url()); });
+    const bubble = await openShare(page);
+    await expect(page.locator('#igPreviewsLabel')).toBeVisible();
+    await expect(page.locator('#igPreviewsChk')).not.toBeChecked();
+    await expect(bubble.locator('.share-card')).toBeVisible();
+    await expect(page.locator('#messages iframe')).toHaveCount(0);
+    expect(requests).toEqual([]);
+  });
+
+  test('AC6: turning previews on shows the embed, and the choice is remembered', async ({ page }) => {
+    const loaded = [];
+    await page.route(/^https:\/\/www\.instagram\.com\//, (route) => {
+      loaded.push(route.request().url());
+      route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>embed</title>' });
+    });
+    const bubble = await openShare(page);
+    await page.check('#igPreviewsChk');
+    const frame = bubble.locator('.share-preview iframe');
+    await expect(frame).toHaveAttribute('src', EMBED);
+    await expect.poll(() => loaded).toEqual([EMBED]);
+    await expect(bubble.locator('a.share-cover')).toHaveAttribute('href', REEL);
+    await expect(bubble.locator('a.share-cover')).toHaveAttribute('target', '_blank');
+
+    await page.reload();
+    const again = await openShare(page);
+    await expect(page.locator('#igPreviewsChk')).toBeChecked();
+    await expect(again.locator('.share-preview iframe')).toHaveAttribute('src', EMBED);
+  });
+
+  test('AC7: searching finds a share by its caption or creator', async ({ page }) => {
+    await openShare(page);
+    await page.fill('#search', 'true lol');
+    await expect(page.locator('#messages .bubble')).toHaveCount(1);
+    await expect(page.locator('#messages .share-owner')).toHaveText('@tacotuesday');
+    await page.fill('#search', 'tacotues');
+    await expect(page.locator('#messages .bubble')).toHaveCount(1);
+  });
+
+  test('AC8: a share is not counted as a file', async ({ page }) => {
+    await loadFiles(page, zippedExport());
+    // Alex's two photos and one video (not in the zip): the share isn't an attachment.
+    const media = await page.evaluate(() => S.msgs.reduce((s, m) => s + m.ph + m.gf + m.vd + m.au + m.ot, 0));
+    expect(media).toBe(3);
+    await scrollTo(page, '#galleryCard');
+    await expect(page.locator('#galleryNote')).toContainText(/^1 more can't be shown/);
+  });
+});
+
+test.describe('spec 004 reactions on messages', () => {
+  test('AC13: reactions show under the message, naming you by the owner picked', async ({ page }) => {
+    await loadFiles(page, zippedExport());
+    const before = await instagramCounts(page);
+    await page.selectOption('#contactSel', 'ig:alexrivera_1111');
+    await openTab(page, 'sec-messages');
+    const cafe = page.locator('#messages .bubble', { hasText: 'café later?' });
+    const heart = cafe.locator('.rx', { hasText: '❤️' });
+    await expect(heart).toHaveText('❤️2');
+    await expect(heart).toHaveAttribute('title', '❤️ Alex Rivera, You');
+    await expect(cafe.locator('.rx', { hasText: '😮' })).toHaveAttribute('title', '😮 Alex Rivera');
+    const share = page.locator('#messages .bubble', { has: page.locator('.share-card') });
+    await expect(share.locator('.rx')).toHaveAttribute('title', '😂 You');
+
+    const picker = page.locator('#ownerFields label', { hasText: 'You on Instagram' }).locator('select');
+    await picker.selectOption('Alex Rivera');
+    await openTab(page, 'sec-messages');
+    await expect(page.locator('#messages .bubble', { hasText: 'café later?' }).locator('.rx', { hasText: '❤️' })).toHaveAttribute('title', '❤️ You, Jamie Park');
+    expect((await instagramCounts(page)).n).toBe(before.n);
   });
 });

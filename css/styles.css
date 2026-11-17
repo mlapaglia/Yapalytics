@@ -456,6 +456,59 @@ table.leader .muted { color: var(--muted); }
 .bubble .body { white-space: pre-wrap; }
 .bubble .att { font-size: 13px; opacity: 0.9; margin-top: 2px; }
 
+/* A shared Instagram post (spec 004). currentColor keeps it readable in sent and received bubbles. */
+.share-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 4px 0 2px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.share-owner { font-weight: 600; }
+.share-text {
+  white-space: pre-wrap;
+  opacity: 0.85;
+  cursor: pointer;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+.share-text.open { display: block; }
+.share-link { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.share-preview {
+  position: relative;
+  width: min(326px, 100%);
+  height: 400px;
+  margin-bottom: 4px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+/* 326px is the narrowest Instagram renders an embed; narrower bubbles clip its right edge. */
+.share-preview iframe { width: 326px; height: 100%; border: 0; display: block; }
+.share-cover { position: absolute; inset: 0; }
+
+/* Reactions on a message (spec 004) */
+.reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.rx {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: default;
+}
+.rx b { font-size: 11px; font-weight: 600; opacity: 0.8; }
+.share-cover:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
 /* Attachment preview tiles (message list and Attachments panel); see media.js */
 .media-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 2px; }
 .tile {

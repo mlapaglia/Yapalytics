@@ -6,11 +6,16 @@
 import { loadScripts, messageLib } from './load.mjs';
 
 const { zipLib } = loadScripts(['zip.js'], ['zipLib']);
+const { vaderLib } = loadScripts(['vendor/vader.js'], ['vaderLib']);
 
-/** Resolves with { msgs, contacts, counts } or rejects with the worker's error. */
-export function runParser(file, workerName, payload) {
+/**
+ * Resolves with { msgs, contacts, counts } or rejects with the worker's error.
+ * `{ vader: true }` scores mood with VADER, as the page does.
+ */
+export function runParser(file, workerName, payload, { vader = false } = {}) {
   const worker = loadScripts([file], [workerName])[workerName];
-  const lib = Object.assign(messageLib(), zipLib());
+  const base = vader ? loadScripts(['parser.js'], ['messageLib']).messageLib(vaderLib()) : messageLib();
+  const lib = Object.assign(base, zipLib());
   const msgs = [];
   return new Promise((resolve, reject) => {
     const self = {
