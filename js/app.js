@@ -2015,7 +2015,8 @@ function init() {
 
   $('#contactSel').onchange = (e) => setContact(e.target.value);
   $('#sourceSeg').onclick = (e) => {
-    const v = e.target.dataset.source;
+    // The buttons hold an app logo, so the click can land on the svg inside one.
+    const v = e.target.closest('button[data-source]')?.dataset.source;
     if (v) setSource(v === 'all' ? 'all' : +v);
   };
   $('#groupsChk').onchange = (e) => {
