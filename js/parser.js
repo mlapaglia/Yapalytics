@@ -153,7 +153,21 @@ function messageLib(vader) {
     rec.mo = dt.getFullYear() * 12 + dt.getMonth();
   }
 
-  return { analyzeText, stampTime, swearFamily, explainMood, T_REACTION };
+  /**
+   * Notes a reaction on a message (spec 004): rec.rx is [{ r: emoji, c: count, n: [who] }],
+   * one entry per emoji in the order first seen. `names` may be fewer than `count`
+   * (Telegram lists only recent reactors). Reactions never count as messages.
+   */
+  function addReaction(rec, emoji, count, names) {
+    if (!emoji || !(count > 0)) return;
+    const list = rec.rx || (rec.rx = []);
+    let x = list.find((y) => y.r === emoji);
+    if (!x) list.push((x = { r: emoji, c: 0, n: [] }));
+    x.c += count;
+    for (const n of names) if (n && !x.n.includes(n)) x.n.push(n);
+  }
+
+  return { analyzeText, stampTime, swearFamily, explainMood, addReaction, T_REACTION };
 }
 
 /*
@@ -167,6 +181,23 @@ function messageLib(vader) {
  * attributes. The scanner never buffers those: it skips over them and only records
  * their length, so memory stays proportional to the text content.
  */
+/**
+ * Reactions on one message that turned up in two overlapping exports (spec 004): each
+ * emoji keeps the larger count and everyone named in either. It doesn't depend on which
+ * export was loaded first, which says nothing about which is newer; the price is that a
+ * reaction removed between the two exports stays.
+ */
+function mergeReactions(a, b) {
+  const out = (a || []).map((x) => ({ r: x.r, c: x.c, n: [...x.n] }));
+  for (const y of b || []) {
+    const x = out.find((z) => z.r === y.r);
+    if (!x) { out.push({ r: y.r, c: y.c, n: [...y.n] }); continue; }
+    for (const n of y.n) if (!x.n.includes(n)) x.n.push(n);
+    x.c = Math.max(x.c, y.c, x.n.length);
+  }
+  return out.length ? out : undefined;
+}
+
 function smsParserWorker(self, lib) {
   'use strict';
 

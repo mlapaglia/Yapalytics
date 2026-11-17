@@ -4,7 +4,7 @@ const S = {
   msgs: [],
   calls: [],
   contacts: new Map(), // key -> { key, name, addr, group, lastT, s, label }
-  seenMsgs: new Set(),
+  seenMsgs: new Map(), // dedupe key -> the message kept (null for reactions sent as texts)
   seenCalls: new Set(),
   reactions: 0, // reactions sent as texts, left out of the messages
   files: [],
@@ -28,6 +28,7 @@ const S = {
   browserQuery: '',
   browserMood: null, // { mo, o (null = both), kind: 'pos' | 'neg' | 'any' } picked on the mood chart
   showMood: false, // mood scores on the messages
+  igPreviews: false, // load Instagram's embeds of shared posts (spec 004, opt-in, saved in localStorage)
   moodScorer: 'vader', // 'vader' | 'ai' (spec 001): which scores the mood chart and pills use
   phrase: '', // word tracker query
   phraseGran: 'auto', // word tracker bars: auto / day / week / month
@@ -138,11 +139,16 @@ async function loadFiles(fileList) {
           for (const m of msgs) {
             // WhatsApp / iMessage / Telegram / Instagram records get `o` later (see applyOwners), so key them by sender.
             const key = `${m.t}|${hasOwner(m.s) ? m.sn : m.o}|${m.k}|${m.l}|${m.m}`;
-            if (S.seenMsgs.has(key)) continue;
-            S.seenMsgs.add(key);
-            // Reactions sent as texts (tapbacks, "😂 to “…”") aren't messages; the other
-            // exports leave reactions out entirely.
-            if (m.f & T_REACTION) { S.reactions++; continue; }
+            const seen = S.seenMsgs.get(key);
+            if (seen !== undefined) {
+              // The same message in an overlapping export: keep the reactions both list.
+              if (seen && m.rx) seen.rx = mergeReactions(seen.rx, m.rx);
+              continue;
+            }
+            // Reactions sent as texts (tapbacks, "😂 to “…”") aren't messages. Reactions
+            // on a message (Instagram, Telegram, Google Chat) ride along in its rx.
+            if (m.f & T_REACTION) { S.seenMsgs.set(key, null); S.reactions++; continue; }
+            S.seenMsgs.set(key, m);
             if (m.att && job.attBase) for (const a of m.att) if (a.z != null) a.z += job.attBase;
             S.msgs.push(m);
           }
@@ -195,6 +201,7 @@ async function loadFiles(fileList) {
   S.calls.sort((a, b) => a.t - b.t);
   S.firstSeen = computeFirstSeen();
   S.docFreq = null;
+  $('#igPreviewsLabel').hidden = !S.msgs.some((m) => m.sh && instagramEmbedUrl(m.sh.u));
   for (const c of S.contacts.values()) c.label = contactLabel(c);
   for (const s of Object.keys(S.owners)) if (S.owners[s].auto) S.owners[s].name = guessOwner(+s);
   applyOwners();
@@ -852,6 +859,17 @@ function moodWhyHtml(m) {
 function initMoodDetails() {
   $('#moodChk').onchange = (e) => {
     S.showMood = e.target.checked;
+    renderBrowser(inRange(baseMessages()));
+  };
+  try { S.igPreviews = localStorage.getItem('ms-ig-previews') === '1'; } catch (e) { /* storage unavailable */ }
+  $('#igPreviewsChk').checked = S.igPreviews;
+  $('#igPreviewsChk').onchange = (e) => {
+    S.igPreviews = e.target.checked;
+    // Turning previews off deletes the setting, so a failed write can't leave an old "on" behind.
+    try {
+      if (S.igPreviews) localStorage.setItem('ms-ig-previews', '1');
+      else localStorage.removeItem('ms-ig-previews');
+    } catch (err) { /* storage unavailable: reading it fails too, so previews start off */ }
     renderBrowser(inRange(baseMessages()));
   };
   $('#browserFilter').onclick = (e) => {
@@ -1542,10 +1560,35 @@ function renderPhrase(ui = S.ui) {
   firsts.innerHTML = phraseFirstsHtml(P, re);
 }
 
+/** Reactions on a message (spec 004): one chip per emoji, with who reacted on hover. */
+function reactionsRow(m) {
+  const row = document.createElement('div');
+  row.className = 'reactions';
+  const me = hasOwner(m.s) && S.owners[m.s].name;
+  for (const x of m.rx) {
+    const names = x.n.map((n) => (n === me ? 'You' : n));
+    const more = x.c - names.length;
+    const chip = document.createElement('span');
+    chip.className = 'rx';
+    chip.textContent = x.r;
+    if (x.c > 1) {
+      const n = document.createElement('b');
+      n.textContent = fmtNum(x.c);
+      chip.appendChild(n);
+    }
+    const who = names.length ? names.join(', ') + (more > 0 ? ` and ${fmtNum(more)} more` : '') : `${fmtNum(x.c)} ${x.c === 1 ? 'person' : 'people'}`;
+    chip.title = `${x.r} ${who}`;
+    chip.setAttribute('aria-label', `Reacted ${x.r} by ${who}`);
+    row.appendChild(chip);
+  }
+  return row;
+}
+
 function renderBrowser(msgs) {
   const q = S.browserQuery.trim().toLowerCase();
   const mood = S.browserMood;
-  let list = q ? msgs.filter((m) => m.b && m.b.toLowerCase().includes(q)) : msgs;
+  const has = (s) => s && s.toLowerCase().includes(q);
+  let list = q ? msgs.filter((m) => has(m.b) || (m.sh && (has(m.sh.x) || has(m.sh.w)))) : msgs;
   if (mood) list = list.filter((m) => moodMatches(m, mood));
   const start = Math.max(0, list.length - S.browserLimit);
   const shown = list.slice(start);
@@ -1595,6 +1638,8 @@ function renderBrowser(msgs) {
       bubble.appendChild(body);
     }
     if (m.att) bubble.appendChild(messageAttachments(m));
+    if (m.sh) bubble.appendChild(shareCard(m.sh, S.igPreviews));
+    if (m.rx) bubble.appendChild(reactionsRow(m));
     // Sources without attachment references only know how many there were.
     const att = [];
     if (!m.att) {

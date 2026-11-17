@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { messageLib } from '../helpers/load.mjs';
+import { loadScripts, messageLib } from '../helpers/load.mjs';
 
 const lib = messageLib();
 const isReaction = (body) => {
@@ -63,5 +63,34 @@ describe('reactions sent as texts', () => {
     assert.equal(rec.sw, undefined);
     assert.equal(rec.v, undefined);
     assert.equal(rec.f, lib.T_REACTION);
+  });
+});
+
+describe('spec 004 reactions on messages', () => {
+  it('AC9: addReaction merges by emoji, adds up counts and keeps each name once', () => {
+    const rec = {};
+    lib.addReaction(rec, '❤️', 1, ['Alex']);
+    lib.addReaction(rec, '😮', 1, ['Alex']);
+    lib.addReaction(rec, '❤️', 2, ['Alex', 'Sam']);
+    lib.addReaction(rec, '', 1, ['Nobody']);
+    lib.addReaction(rec, '👍', 0, ['Nobody']);
+    assert.deepEqual(rec.rx, [{ r: '❤️', c: 3, n: ['Alex', 'Sam'] }, { r: '😮', c: 1, n: ['Alex'] }]);
+    const none = {};
+    lib.addReaction(none, '', 1, []);
+    assert.equal(none.rx, undefined, 'no rx without a reaction');
+  });
+
+  it('AC16: mergeReactions keeps the larger count per emoji and everyone named, in either order', () => {
+    const { mergeReactions } = loadScripts(['parser.js'], ['mergeReactions']);
+    const older = [{ r: '❤️', c: 1, n: ['Alex'] }];
+    const newer = [{ r: '❤️', c: 1, n: ['Alex'] }, { r: '😂', c: 1, n: ['Jamie'] }];
+    const want = [{ r: '❤️', c: 1, n: ['Alex'] }, { r: '😂', c: 1, n: ['Jamie'] }];
+    assert.deepEqual(mergeReactions(older, newer), want);
+    assert.deepEqual(mergeReactions(newer, older), want);
+    // Telegram: a count above the names listed is kept; names from both are kept.
+    assert.deepEqual(mergeReactions([{ r: '👍', c: 3, n: ['Sam'] }], [{ r: '👍', c: 2, n: ['Alex'] }]), [{ r: '👍', c: 3, n: ['Sam', 'Alex'] }]);
+    assert.deepEqual(mergeReactions([{ r: '👍', c: 1, n: ['Sam'] }], [{ r: '👍', c: 1, n: ['Alex'] }]), [{ r: '👍', c: 2, n: ['Sam', 'Alex'] }]);
+    assert.equal(mergeReactions(undefined, []), undefined);
+    assert.notEqual(mergeReactions(older, [])[0], older[0], 'returns copies, not the inputs');
   });
 });

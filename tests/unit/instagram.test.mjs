@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { runParser } from '../helpers/worker.mjs';
-import { asFile, looseThread, splitExport, zippedExport, zippedHtmlExport } from '../helpers/instagram.mjs';
+import { asFile, igMessage, looseThread, splitExport, threadOf, zippedExport, zippedHtmlExport } from '../helpers/instagram.mjs';
+import { loadScripts } from '../helpers/load.mjs';
 
 const parse = (...specs) => runParser('instagram.js', 'instagramParserWorker', { files: specs.map(asFile) });
 const T0 = Date.parse('2024-08-20T10:00:00Z');
@@ -47,10 +48,8 @@ describe('Instagram parser: zipped export', () => {
     assert.deepEqual(byKey(out, 'g:ig:roadtrip_2222').map((m) => m.b), ['me', 'who is driving?']);
   });
 
-  it('counts shared posts, photos and videos, and links the files in the zip', async () => {
+  it('counts photos and videos, and links the files in the zip', async () => {
     const alex = byKey(await parse(zippedExport()), 'ig:alexrivera_1111');
-    const share = alex.find((m) => m.ot);
-    assert.equal(share.b, '', 'the "sent an attachment." placeholder is not text');
     const photos = alex.find((m) => m.ph);
     assert.equal(photos.ph, 2);
     assert.deepEqual(photos.att.map((a) => [a.n, a.k, a.z]), [['1801_1.jpg', 'ph', 0], ['1801_2.jpg', 'ph', 0]]);
@@ -91,5 +90,77 @@ describe('Instagram parser: what it can and cannot tell', () => {
   it('rejects files that are not Instagram exports', async () => {
     await assert.rejects(parse({ name: 'message_1.json', mimeType: 'application/json', buffer: Buffer.from('{oops') }), /isn't valid JSON/);
     await assert.rejects(parse({ name: 'message_1.json', mimeType: 'application/json', buffer: Buffer.from('{"hello":1}') }), /doesn't look like an Instagram export/);
+  });
+});
+
+describe('spec 004 Instagram shared posts: parser', () => {
+  const reel = { link: 'https://www.instagram.com/reel/DesZwLVvHS6/?id=401_744', share_text: 'whatever makes her sleep??😅😅 so happy', original_content_owner: 'kianna.johnson' };
+
+  it('AC1: keeps the link, caption and creator of a shared reel, and it is not a file', async () => {
+    const out = await parse(threadOf(igMessage(0, 'Alex', { content: 'Alex sent an attachment.', share: reel })));
+    assert.equal(out.msgs.length, 1, 'a share on its own is a message');
+    const [m] = out.msgs;
+    assert.deepEqual(m.sh, { u: reel.link, x: reel.share_text, w: reel.original_content_owner });
+    assert.equal(m.b, '', 'the "sent an attachment." placeholder is not text');
+    assert.equal(m.ot, 0);
+  });
+
+  it('AC1: the zipped export\'s shared reel', async () => {
+    const share = byKey(await parse(zippedExport()), 'ig:alexrivera_1111').find((m) => m.sh);
+    assert.deepEqual(share.sh, { u: 'https://www.instagram.com/reel/abc/?id=1_2', x: 'so true lol', w: 'tacotuesday' });
+    assert.equal(share.ot, 0);
+  });
+
+  it('AC2: a link that is not http(s) is dropped, the caption is kept', async () => {
+    const out = await parse(threadOf(
+      igMessage(0, 'Alex', { content: 'Alex sent an attachment.', share: { link: 'javascript:alert(1)', share_text: 'look' } }),
+      igMessage(60, 'Alex', { content: 'Alex sent an attachment.', share: { link: 'javascript:alert(1)' } }),
+    ));
+    assert.deepEqual(out.msgs.map((m) => m.sh), [{ u: '', x: 'look', w: '' }], 'a share with nothing left to show is skipped');
+  });
+
+  it('AC14: a shared profile keeps its username and display name', async () => {
+    const out = await parse(threadOf(igMessage(0, 'Alex', {
+      content: 'Alex sent an attachment.',
+      share: { link: 'https://www.instagram.com/tacotuesday', profile_share_username: 'tacotuesday', profile_share_name: 'Taco Tuesday 🌮' },
+    })));
+    assert.deepEqual(out.msgs[0].sh, { u: 'https://www.instagram.com/tacotuesday', x: 'Taco Tuesday 🌮', w: 'tacotuesday' });
+  });
+
+  it('AC5: the caption is not counted as the sender\'s words, emoji or mood', async () => {
+    const out = await runParser('instagram.js', 'instagramParserWorker', { files: [asFile(threadOf(igMessage(0, 'Alex', { content: 'Alex sent an attachment.', share: reel })))] }, { vader: true });
+    const [m] = out.msgs;
+    assert.equal(m.wc, 0);
+    assert.equal(m.e, null);
+    assert.equal(m.v, undefined);
+  });
+});
+
+describe('spec 004 Instagram shared posts: embed links', () => {
+  const { instagramEmbedUrl } = loadScripts(['media.js'], ['instagramEmbedUrl']);
+
+  it('AC3: maps post and reel links to their embed page, and nothing else', () => {
+    assert.equal(instagramEmbedUrl('https://www.instagram.com/reel/DesZwLVvHS6/?id=4011694629953762490_744472028'), 'https://www.instagram.com/reel/DesZwLVvHS6/embed/');
+    assert.equal(instagramEmbedUrl('https://instagram.com/reels/Abc_-1'), 'https://www.instagram.com/reel/Abc_-1/embed/');
+    assert.equal(instagramEmbedUrl('https://www.instagram.com/p/C0de/'), 'https://www.instagram.com/p/C0de/embed/');
+    assert.equal(instagramEmbedUrl('http://www.instagram.com/tv/XyZ/'), 'https://www.instagram.com/tv/XyZ/embed/');
+    assert.equal(instagramEmbedUrl('https://www.instagram.com/stories/someone/123/'), null);
+    assert.equal(instagramEmbedUrl('https://www.instagram.com/kianna.johnson/'), null);
+    assert.equal(instagramEmbedUrl('https://evil.example/reel/abc/'), null);
+    assert.equal(instagramEmbedUrl('https://instagram.com.evil.example/reel/abc/'), null);
+    assert.equal(instagramEmbedUrl('javascript:alert(1)'), null);
+    assert.equal(instagramEmbedUrl(''), null);
+  });
+});
+
+describe('spec 004 reactions on Instagram messages', () => {
+  it('AC10: keeps who reacted with what, merged by emoji, and they are not messages', async () => {
+    const out = await parse(zippedExport());
+    const alex = byKey(out, 'ig:alexrivera_1111');
+    assert.equal(alex.length, 7, 'reactions on messages are not messages');
+    const cafe = alex.find((m) => m.b === 'café later? ☕️');
+    assert.deepEqual(cafe.rx, [{ r: '❤️', c: 2, n: ['Alex Rivera', 'Jamie Park'] }, { r: '😮', c: 1, n: ['Alex Rivera'] }]);
+    assert.deepEqual(alex.find((m) => m.sh).rx, [{ r: '😂', c: 1, n: ['Jamie Park'] }]);
+    assert.equal(alex.filter((m) => m.rx).length, 2);
   });
 });

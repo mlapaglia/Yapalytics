@@ -23,7 +23,7 @@
 function telegramParserWorker(self, lib) {
   'use strict';
 
-  const { analyzeText, stampTime, listZip, readEntryText } = lib;
+  const { analyzeText, stampTime, addReaction, listZip, readEntryText } = lib;
 
   const BATCH_SIZE = 5000;
   const ONE_ON_ONE = new Set(['personal_chat', 'bot_chat']);
@@ -143,6 +143,14 @@ function telegramParserWorker(self, lib) {
           rec.att = [{ n: m.file_name || baseName(path), k: kind, t: m.mime_type || '', z: e.z, o: e.offset, c: e.csize, u: e.usize, m: e.method, p: e.name }];
         } else if (m.file_size) {
           rec.mb += +m.file_size || 0;
+        }
+      }
+      // Custom emoji (a sticker file) and paid star reactions have no emoji to show.
+      if (Array.isArray(m.reactions)) {
+        for (const r of m.reactions) {
+          if (!r || r.type !== 'emoji' || typeof r.emoji !== 'string') continue;
+          const recent = Array.isArray(r.recent) ? r.recent.map((x) => x && x.from).filter((x) => typeof x === 'string') : [];
+          addReaction(rec, r.emoji, +r.count || recent.length || 1, recent);
         }
       }
       analyzeText(text, rec);

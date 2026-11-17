@@ -15,7 +15,7 @@
 function googleChatParserWorker(self, lib) {
   'use strict';
 
-  const { analyzeText, stampTime, listZip, readEntryText } = lib;
+  const { analyzeText, stampTime, addReaction, listZip, readEntryText } = lib;
 
   const BATCH_SIZE = 5000;
 
@@ -186,6 +186,9 @@ function googleChatParserWorker(self, lib) {
         g.info = { members: [...seen.values()] };
       }
       const desc = describeGroup(dir, g.info, owner);
+      // Reactors are listed by email: name them from the members, and you as "You".
+      const nameOf = new Map(((g.info && g.info.members) || []).map((p) => [lower(p.email), personName(p)]));
+      const reactorName = (email) => (owner && lower(email) === owner ? 'You' : nameOf.get(lower(email)) || email);
       const repeats = new Map(); // attachment name -> times seen in this conversation
 
       for (const msg of messages) {
@@ -215,6 +218,14 @@ function googleChatParserWorker(self, lib) {
             Object.assign(att, { z: e.z, o: e.offset, c: e.csize, u: e.usize, m: e.method, p: e.name });
           }
           (rec.att || (rec.att = [])).push(att);
+        }
+        if (Array.isArray(msg.reactions)) {
+          for (const r of msg.reactions) {
+            const e = r && r.emoji;
+            const emoji = e && (e.unicode || (e.custom_emoji && e.custom_emoji.name && `:${e.custom_emoji.name}:`));
+            const who = Array.isArray(r && r.reactor_emails) ? r.reactor_emails.filter((x) => typeof x === 'string') : [];
+            addReaction(rec, typeof emoji === 'string' ? emoji : '', who.length || 1, who.map(reactorName));
+          }
         }
         analyzeText(text, rec);
         stampTime(rec);

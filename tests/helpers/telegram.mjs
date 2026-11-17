@@ -44,7 +44,10 @@ export function fullExport() {
             tgMessage(120, ...ALEX, { photo: 'chats/chat_01/photos/photo_1@20-08-2024_10-02-00.jpg', width: 1600, height: 1200 }),
             tgMessage(180, ...ME, { media_type: 'voice_message', file: '(File not included. Change data exporting settings to download.)', mime_type: 'audio/ogg', duration_seconds: 4 }),
             tgMessage(240, ...ME, { media_type: 'sticker', sticker_emoji: '😂', file: 'chats/chat_01/stickers/sticker.webp', mime_type: 'image/webp' }),
-            tgMessage(300, ...ALEX, { text: 'nice', reactions: [{ type: 'emoji', count: 1, emoji: '👍' }] }),
+            tgMessage(300, ...ALEX, { text: 'nice', reactions: [
+              { type: 'emoji', count: 3, emoji: '👍', recent: [{ from: 'Jamie Park', from_id: 'user111', date: '2024-08-20T10:06:00' }] },
+              { type: 'custom_emoji', count: 1, document_id: 'stickers/custom.webp' }, // no emoji to show
+            ] }),
             tgMessage(360, ...ALEX, {}), // nothing in it
             tgMessage(420, ...ME, { media_type: 'animation', file: 'chats/chat_01/video_files/party.mp4', mime_type: 'video/mp4', text: 'party time' }),
           ],
