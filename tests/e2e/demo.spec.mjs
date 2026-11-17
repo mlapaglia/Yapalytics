@@ -36,7 +36,7 @@ test.describe('demo data', () => {
     expect(r.reactions).toBeGreaterThan(0);
     expect(r.flagged).toBe(0);
     expect(r.lookalikes).toEqual([]);
-    await expect(page.locator('#fileInfo')).toContainText(/reactions .* not counted as messages/);
+    await expect(page.locator('#reactionInfo')).toContainText(/reactions .* not counted as messages/);
   });
 
   test('renders the content section once it scrolls into view', async ({ page }) => {
