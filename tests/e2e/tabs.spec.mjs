@@ -180,9 +180,13 @@ test.describe('spec 003: dashboard tabs', () => {
     await page.click('#sourceSeg [data-source="2"]');
     await expect(page.locator('#tab-sec-glance')).toHaveAttribute('aria-selected', 'true');
     expect(await page.evaluate(() => location.hash)).toBe('#/overview');
-    // Typing a hidden tab's URL opens Overview too.
-    await page.evaluate(() => { location.hash = '#/sources'; });
-    await expect(page.locator('#tab-sec-glance')).toHaveAttribute('aria-selected', 'true');
+    // Typing a hidden tab's URL, or an unknown one, opens Overview and says so in the URL.
+    for (const typed of ['#/sources', '#/nope']) {
+      await page.click('#tabList [data-panel="sec-people"]');
+      await page.evaluate((h) => { location.hash = h; }, typed);
+      await expect(page.locator('#tab-sec-glance')).toHaveAttribute('aria-selected', 'true');
+      await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/overview');
+    }
   });
 });
 
@@ -194,6 +198,39 @@ test('spec 003 AC13: opened with a tab in the URL, that tab shows once the data 
   expect((await tabState(page)).visible).toEqual(['sec-mood']);
   await expect.poll(() => chartDrawn(page, 'c-mood')).toBe(true);
   expect(await page.evaluate(() => location.hash)).toBe('#/mood');
+});
+
+test('spec 003 AC13: a tab that starts hidden (Calls) is still opened from the URL once its data loads', async ({ page }) => {
+  await page.goto('/#/calls');
+  await page.click('#demoBtn'); // the demo has a calls backup
+  await expect(page.locator('#dash')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('#tab-callsSection')).toHaveAttribute('aria-selected', 'true');
+  expect((await tabState(page)).visible).toEqual(['callsSection']);
+  expect(await page.evaluate(() => location.hash)).toBe('#/calls');
+});
+
+test.describe('spec 003: the message list', () => {
+  /** How far the list is from its bottom, in pixels (0 = showing the latest message). */
+  const fromBottom = (page) => page.evaluate(() => {
+    const box = document.getElementById('messages');
+    return Math.round(box.scrollHeight - box.clientHeight - box.scrollTop);
+  });
+
+  test('AC14: Messages opens on the latest messages, and keeps its place when you come back', async ({ page }) => {
+    await loadDemo(page); // the list is drawn while Overview is open
+    await openTab(page, 'sec-messages');
+    expect(await page.evaluate(() => document.getElementById('messages').scrollHeight > document.getElementById('messages').clientHeight)).toBe(true);
+    expect(await fromBottom(page)).toBeLessThanOrEqual(1);
+    await page.evaluate(() => { document.getElementById('messages').scrollTop = 500; });
+    await openTab(page, 'sec-activity');
+    await openTab(page, 'sec-messages');
+    expect(await page.evaluate(() => document.getElementById('messages').scrollTop)).toBe(500);
+    // A list redrawn while hidden (here, a new date range) opens on its latest message.
+    await openTab(page, 'sec-activity');
+    await page.click('#presets button[data-preset="90"]');
+    await openTab(page, 'sec-messages');
+    expect(await fromBottom(page)).toBeLessThanOrEqual(1);
+  });
 });
 
 test.describe('spec 003: dashboard tabs on a phone', () => {

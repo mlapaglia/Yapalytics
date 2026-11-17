@@ -1629,7 +1629,34 @@ function renderBrowser(msgs) {
     frag.appendChild(row);
   }
   box.appendChild(frag);
-  box.scrollTop = box.scrollHeight;
+  scrollBrowserToEnd();
+}
+
+/**
+ * The message list scrolls inside its own box, which has no size while the Messages tab
+ * is hidden (spec 003). Scrolling to the latest message waits until the tab is shown,
+ * and leaving the tab keeps the place for when it comes back.
+ */
+const BrowserScroll = { pinEnd: false, top: 0 };
+
+function scrollBrowserToEnd() {
+  const box = $('#messages');
+  BrowserScroll.pinEnd = box.offsetParent === null;
+  if (!BrowserScroll.pinEnd) box.scrollTop = box.scrollHeight;
+}
+
+/** Tabs (spec 003): a section is about to be hidden. */
+function onTabHidden(section) {
+  if (section.id === 'sec-messages') BrowserScroll.top = $('#messages').scrollTop;
+}
+
+/** Tabs (spec 003): a section was just shown. */
+function onTabShown(section) {
+  renderLazyIn(section);
+  if (section.id !== 'sec-messages') return;
+  const box = $('#messages');
+  box.scrollTop = BrowserScroll.pinEnd ? box.scrollHeight : BrowserScroll.top;
+  BrowserScroll.pinEnd = false;
 }
 
 // ------------------------------------------------------------------ theme

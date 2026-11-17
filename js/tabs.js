@@ -5,10 +5,11 @@
  * A section the code hides (`hidden`, e.g. Groups with no group chats) loses its tab.
  * The open tab is in the URL as `#/<data-slug>` (the `#/` keeps it from matching an
  * element id), so Back and Forward move between tabs.
- * Uses the app's $, $$, escapeHtml and renderLazyIn.
+ * Uses the app's $, $$, escapeHtml, onTabHidden and onTabShown.
  */
 const Tabs = {
   current: 'sec-glance',
+  requested: null, // the tab the URL named before data loaded: picked on the first sync
   cards: [], // [{ el, sec, title }] for the jump menu, in page order
 
   sections() {
@@ -49,13 +50,21 @@ const Tabs = {
     new ResizeObserver(measure).observe(filters);
     new ResizeObserver(measure).observe(nav);
 
-    // Back / Forward, or a typed URL: open the tab it names (Overview if none or gone).
+    // Back / Forward, or a typed URL: open the tab it names. One that's unknown or has
+    // nothing to show opens Overview, and the URL is replaced to say so.
     window.addEventListener('popstate', () => {
       const sec = this.fromUrl();
-      this.select(sec && !sec.hidden ? sec.id : 'sec-glance', { history: 'none' });
+      if ($('#dash').hidden) {
+        this.requested = sec ? sec.id : null;
+        return;
+      }
+      if (sec && !sec.hidden) this.select(sec.id, { history: 'none' });
+      else this.select('sec-glance', { history: 'replace' });
     });
-    // Opened with a tab in the URL: it's selected once the data is loaded.
-    this.select(this.fromUrl()?.id || this.current, { scroll: false, history: 'none' });
+    // Opened with a tab in the URL: which sections have data isn't known until the data
+    // loads (Calls starts hidden), so sync() picks it then.
+    this.requested = this.fromUrl()?.id || null;
+    this.select(this.current, { scroll: false, history: 'none' });
   },
 
   /** The section the URL names, or null. */
@@ -83,10 +92,12 @@ const Tabs = {
   select(id, { scroll = true, focus = false, history = 'push' } = {}) {
     const target = document.getElementById(id);
     if (!target || target.hidden || !target.classList.contains('dash-section')) return;
+    const prev = document.getElementById(this.current);
+    if (prev !== target && prev.classList.contains('active')) onTabHidden(prev);
     this.current = id;
     if (history !== 'none') this.writeUrl(history);
     for (const sec of this.sections()) sec.classList.toggle('active', sec === target);
-    renderLazyIn(target);
+    onTabShown(target);
     for (const b of $$('#tabList [role="tab"]')) {
       const on = b.dataset.panel === id;
       b.classList.toggle('on', on);
@@ -128,6 +139,11 @@ const Tabs = {
    */
   sync() {
     for (const b of $$('#tabList [role="tab"]')) b.hidden = document.getElementById(b.dataset.panel).hidden;
+    if (this.requested) {
+      const asked = document.getElementById(this.requested);
+      this.requested = null;
+      if (!asked.hidden) this.select(asked.id, { scroll: false, history: 'none' });
+    }
     if (document.getElementById(this.current).hidden) this.select('sec-glance', { scroll: false, history: 'none' });
     // The first draw after loading data puts the tab in the URL; a fallback replaces it.
     this.writeUrl('replace');

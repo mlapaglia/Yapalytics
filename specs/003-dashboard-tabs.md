@@ -54,6 +54,9 @@ reader away from the chart they were looking at, with no quick way back.
   falls back to Overview. The landing page keeps a plain URL. The `#/` prefix keeps a
   tab name from matching an element id (`#messages` is the message list), which would
   make the browser jump to it.
+- **R11** Opening Messages shows the latest messages, as the list always has, even when
+  it was drawn while another tab was open. Leaving Messages and coming back keeps the
+  list where it was scrolled, unless it was redrawn meanwhile.
 
 ## Privacy
 
@@ -93,8 +96,15 @@ first). It survives redraws and loading more files.
 - `Tabs.sync()`, at the end of `refresh()`: hides tabs of hidden sections, falls back to
   Overview (R3), rebuilds the "Jump to…" options from the visible cards, and writes the
   URL with `replaceState` (the first draw after loading data puts the tab there).
-- `Tabs.fromUrl()` reads `#/<slug>`. `init()` starts on it, and a `popstate` listener
-  (Back, Forward, a typed URL) selects it without adding an entry.
+- `Tabs.fromUrl()` reads `#/<slug>`. `init()` keeps it in `Tabs.requested`, and the
+  first `sync()` after data loads selects it if it has data (found in review: Calls
+  starts hidden, so selecting it at init dropped `#/calls`). A `popstate` listener
+  (Back, Forward, a typed URL) selects the tab without adding an entry, or falls back to
+  Overview and replaces the URL.
+- `select()` calls the app's `onTabHidden(prev)` and `onTabShown(section)`. Shown runs
+  the section's lazy parts (`renderLazyIn`, R7); for Messages, hidden saves the list's
+  scroll and shown restores it, or scrolls to the latest message if `renderBrowser` ran
+  while the list had no layout box (R11, found in review).
 - `Tabs.jump(card)`: R5.
 
 The lazy sections in `app.js` are keyed by `data-lazy` when an element has one, so the
@@ -129,9 +139,13 @@ first (`openTabOf`), so tests written for the long page still reach their cards.
   select the tabs in between without reloading. Arrow keys don't add history entries.
   "Read that day" adds one, so Back returns to the tab it was clicked on.
 - **AC12** When the open tab loses its section (R3), the URL is replaced with
-  `#/overview`. Typing the URL of a hidden tab opens Overview.
+  `#/overview`. Typing the URL of a hidden or unknown tab opens Overview and replaces
+  the URL with `#/overview`.
 - **AC13** Opening `/#/mood` and loading the demo shows the Mood & emoji tab, with its
-  charts drawn.
+  charts drawn. The same holds for `/#/calls`, whose section starts hidden.
+- **AC14** After loading the demo, opening Messages shows the latest message. Scrolled
+  up, then away and back, the list is where it was. Redrawn while hidden, it opens on
+  the latest message again.
 
 ## Decisions
 
