@@ -334,9 +334,44 @@ select { width: 100%; }
 .chart.tall { height: 420px; }
 .chart.cal { height: 210px; }
 
-.section-title { font-size: 20px; margin: 40px 0 0; }
-.dash-section > .grid { margin-top: 12px; }
-#sec-activity > .section-title { margin-top: 24px; }
+/* Tabs (spec 003): one section at a time, picked from a bar that sticks under the filters. */
+#dash { --filters-h: 0px; --tabs-h: 0px; }
+.tabs {
+  position: sticky;
+  top: var(--filters-h);
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  background: var(--page);
+  border-bottom: 1px solid var(--border);
+}
+.tab-list { display: flex; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.tab-list::-webkit-scrollbar { display: none; }
+.tab-list [role="tab"] {
+  font: inherit;
+  font-size: 13.5px;
+  white-space: nowrap;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 10px 10px 9px;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+.tab-list [role="tab"]:hover { color: var(--text); }
+.tab-list [role="tab"].on { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+.tab-list [role="tab"]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px; }
+.tab-list [role="tab"][hidden] { display: none; }
+#jumpSel { flex: 0 0 auto; width: 118px; padding: 5px 8px; font-size: 13px; }
+.dash-section:not(.active) { display: none; }
+.dash-section { padding-top: 16px; }
+.dash-section .card { scroll-margin-top: calc(var(--filters-h) + var(--tabs-h) + 12px); }
+/* The tab names the section, so its heading is for screen readers only. */
+.section-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.dash-section > .kpis { margin-top: 0; }
 
 /* ------------------------------------------------------------------ leaderboard, lists, year in review */
 .table-wrap { overflow-x: auto; margin: 0 -4px; }
@@ -368,7 +403,6 @@ table.leader .muted { color: var(--muted); }
 .wrapped canvas { width: min(420px, 100%); height: auto; border-radius: 14px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15); }
 
 /* ------------------------------------------------------------------ message browser */
-.browser { margin-top: 16px; }
 .browser input[type="search"] { width: min(320px, 100%); }
 
 /* Vocabulary: new words of the picked month */
@@ -457,7 +491,6 @@ table.leader .muted { color: var(--muted); }
 .tile-msg.tile-au .tile-icon, .tile-msg.tile-ot .tile-icon, .tile-msg.missing .tile-icon, .tile-msg.no-preview .tile-icon { font-size: 16px; }
 
 /* Attachments panel */
-.gallery { margin-top: 16px; }
 .gallery .seg .muted { color: var(--muted); font-weight: 400; }
 .gallery-grid {
   display: grid;
@@ -507,6 +540,9 @@ table.leader .muted { color: var(--muted); }
 }
 @media (max-width: 560px) {
   .filters { position: static; }
+  .tabs { top: 0; }
+  .dash-section .card { scroll-margin-top: calc(var(--tabs-h) + 12px); }
+  #jumpSel { width: 104px; }
   .field.grow, .field.people { max-width: none; flex-basis: 100%; }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kpi-value { font-size: 20px; }

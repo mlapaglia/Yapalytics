@@ -55,7 +55,24 @@ export async function loadFiles(page, files) {
 }
 
 /** Scrolls a card into view below the sticky filter bar (lazy sections render when visible). */
+/**
+ * Opens the dashboard tab (spec 003) that holds an element, by clicking its tab. Does
+ * nothing for elements outside the tabs, or when the tab is already open.
+ */
+export async function openTabOf(page, selector) {
+  const panel = await page.evaluate((sel) => document.querySelector(sel)?.closest('.dash-section')?.id ?? null, selector);
+  if (!panel) return;
+  const tab = page.locator(`#tabList [data-panel="${panel}"]`);
+  if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+}
+
+/** Opens a dashboard tab by its section id, e.g. 'sec-messages'. */
+export async function openTab(page, panel) {
+  await page.click(`#tabList [data-panel="${panel}"]`);
+}
+
 export async function scrollTo(page, selector) {
+  await openTabOf(page, selector);
   await page.locator(selector).scrollIntoViewIfNeeded();
   await page.evaluate((sel) => {
     document.querySelector(sel).scrollIntoView({ block: 'center' });

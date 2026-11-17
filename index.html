@@ -207,9 +207,14 @@
     </div>
     <p class="scope"><span id="scope"></span> <button class="btn small ghost scope-btn" id="profileBtn" type="button" hidden>View profile</button> <span class="files" id="fileInfo"></span></p>
 
-    <section class="kpis" id="kpis" aria-label="Summary"></section>
+    <nav class="tabs" id="dashTabs" aria-label="Dashboard sections">
+      <div class="tab-list" id="tabList" role="tablist"></div>
+      <select id="jumpSel" aria-label="Jump to a chart"><option value="">Jump to…</option></select>
+    </nav>
 
-    <section class="dash-section" id="sec-glance">
+    <section class="dash-section" id="sec-glance" data-slug="overview" data-tab="Overview">
+      <h2 class="section-title">Overview</h2>
+      <div class="kpis" id="kpis" aria-label="Summary"></div>
       <div class="grid">
       <article class="card" id="highlightsCard">
         <header><div><h2>Highlights</h2><p class="sub">What stands out in this selection. Click a name for their profile.</p></div></header>
@@ -230,14 +235,32 @@
       </div>
     </section>
 
-    <section class="dash-section" id="sec-activity">
+    <section class="dash-section" id="sec-messages" data-slug="messages" data-tab="Messages">
+      <h2 class="section-title">Messages</h2>
+      <div class="grid">
+      <article class="card wide browser">
+        <header>
+          <div><h2>Messages</h2><p class="sub" id="browserCount"></p></div>
+          <div class="browser-tools">
+            <label class="check" title="Show each message's mood score; click a score to see why"><input type="checkbox" id="moodChk"> Mood scores</label>
+            <input type="search" id="search" placeholder="Search messages…" aria-label="Search messages">
+          </div>
+        </header>
+        <div class="browser-filter" id="browserFilter" hidden></div>
+        <button class="btn small more" id="moreBtn" hidden>Show earlier messages</button>
+        <div class="messages" id="messages"></div>
+      </article>
+      </div>
+    </section>
+
+    <section class="dash-section" id="sec-activity" data-slug="activity" data-tab="Activity">
       <h2 class="section-title">Activity</h2>
       <div class="grid">
       <article class="card wide">
         <header>
           <div>
             <h2>Messages over time</h2>
-            <p class="sub">Drag the slider, or pinch / ctrl+scroll to zoom. Everything below follows the zoomed range.</p>
+            <p class="sub">Drag the slider, or pinch / ctrl+scroll to zoom. Every tab follows the zoomed range.</p>
           </div>
           <div class="seg" id="granSeg" role="group" aria-label="Granularity">
             <button data-gran="auto">Auto</button>
@@ -278,7 +301,7 @@
       </div>
     </section>
 
-    <section class="dash-section" id="sec-people">
+    <section class="dash-section" id="sec-people" data-slug="people" data-tab="People">
       <h2 class="section-title">People</h2>
       <div class="grid">
       <article class="card">
@@ -309,7 +332,7 @@
       </div>
     </section>
 
-    <section class="dash-section" id="sec-groups">
+    <section class="dash-section" id="sec-groups" data-slug="groups" data-tab="Groups">
       <h2 class="section-title">Group chats</h2>
       <div class="grid">
       <article class="card">
@@ -323,7 +346,7 @@
       </div>
     </section>
 
-    <section class="dash-section" id="sec-replies">
+    <section class="dash-section" id="sec-replies" data-slug="replies" data-tab="Replies">
       <h2 class="section-title">Conversations &amp; replies</h2>
       <div class="grid">
       <article class="card">
@@ -356,8 +379,8 @@
       </div>
     </section>
 
-    <section class="dash-section" id="sec-content">
-      <h2 class="section-title">Content</h2>
+    <section class="dash-section" id="sec-content" data-slug="words" data-tab="Words" data-lazy="#sec-content">
+      <h2 class="section-title">Words</h2>
       <div class="grid">
       <article class="card wide" id="distinctCard">
         <header><div><h2>What you talk about</h2><p class="sub" id="distinctNote">Words that set this conversation apart from all the others</p></div></header>
@@ -385,6 +408,11 @@
         <div id="phraseFirsts" aria-live="polite"></div>
       </article>
       <article class="card">
+        <header><div><h2>Vocabulary</h2><p class="sub">Different words used per month, and the new ones each side picked up</p></div></header>
+        <div class="chart" id="c-vocab"></div>
+        <div class="vocab-words" id="vocabWords" aria-live="polite"></div>
+      </article>
+      <article class="card">
         <header><div><h2>Message length</h2><p class="sub">Share of messages by length (reactions excluded)</p></div></header>
         <div class="chart" id="c-length"></div>
       </article>
@@ -392,23 +420,12 @@
         <header><div><h2>Average length over time</h2><p class="sub">Characters per message, by month</p></div></header>
         <div class="chart" id="c-length-trend"></div>
       </article>
-      <article class="card">
-        <header><div><h2>Top emoji</h2><p class="sub">Most-used emoji, sent and received</p></div></header>
-        <div class="chart tall" id="c-emoji"></div>
-      </article>
-      <article class="card">
-        <header><div><h2>Emoji over time</h2><p class="sub">Your top emoji, per month</p></div></header>
-        <div class="chart tall" id="c-emojitrend"></div>
-      </article>
-      <article class="card">
-        <header><div><h2>Shared links</h2><p class="sub">Most-linked websites</p></div></header>
-        <div class="chart tall" id="c-domains"></div>
-      </article>
-      <article class="card">
-        <header><div><h2>Vocabulary</h2><p class="sub">Different words used per month, and the new ones each side picked up</p></div></header>
-        <div class="chart" id="c-vocab"></div>
-        <div class="vocab-words" id="vocabWords" aria-live="polite"></div>
-      </article>
+      </div>
+    </section>
+
+    <section class="dash-section" id="sec-mood" data-slug="mood" data-tab="Mood &amp; emoji" data-lazy="#sec-content">
+      <h2 class="section-title">Mood &amp; emoji</h2>
+      <div class="grid">
       <article class="card wide">
         <header>
           <div><h2>Mood over time</h2><p class="sub" id="moodNote">Share of messages that read positive (up) or negative (down) each month</p></div>
@@ -425,6 +442,20 @@
         <div class="chart" id="c-swear"></div>
       </article>
       <article class="card">
+        <header><div><h2>Top emoji</h2><p class="sub">Most-used emoji, sent and received</p></div></header>
+        <div class="chart tall" id="c-emoji"></div>
+      </article>
+      <article class="card">
+        <header><div><h2>Emoji over time</h2><p class="sub">Your top emoji, per month</p></div></header>
+        <div class="chart tall" id="c-emojitrend"></div>
+      </article>
+      </div>
+    </section>
+
+    <section class="dash-section" id="sec-media" data-slug="media" data-tab="Media &amp; links" data-lazy="#sec-content">
+      <h2 class="section-title">Media &amp; links</h2>
+      <div class="grid">
+      <article class="card">
         <header><div><h2>Pictures, videos &amp; attachments</h2><p class="sub">Attachments by type</p></div></header>
         <div class="chart" id="c-media"></div>
       </article>
@@ -432,10 +463,68 @@
         <header><div><h2>Attachments over time</h2><p class="sub">Per month, by type</p></div></header>
         <div class="chart" id="c-media-trend"></div>
       </article>
+      <article class="card">
+        <header><div><h2>Shared links</h2><p class="sub">Most-linked websites</p></div></header>
+        <div class="chart tall" id="c-domains"></div>
+      </article>
+      <article class="card wide gallery" id="galleryCard" hidden>
+        <header>
+          <div><h2>Attachments</h2><p class="sub" id="galleryCount"></p></div>
+          <div class="seg" id="galleryKinds" role="group" aria-label="Attachment type"></div>
+        </header>
+        <div class="gallery-grid" id="galleryGrid"></div>
+        <p class="sub" id="galleryNote"></p>
+      </article>
       </div>
     </section>
 
-    <section class="dash-section" id="sec-ai">
+    <section class="dash-section" id="callsSection" data-slug="calls" data-tab="Calls" hidden>
+      <h2 class="section-title">Calls</h2>
+      <section class="kpis" id="callKpis"></section>
+      <section class="grid">
+        <article class="card wide">
+          <header><div><h2>Calls over time</h2><p class="sub">Per month, by outcome</p></div></header>
+          <div class="chart" id="c-call-trend"></div>
+        </article>
+        <article class="card">
+          <header><div><h2>Calls by hour</h2><p class="sub">When calls happen</p></div></header>
+          <div class="chart" id="c-call-hour"></div>
+        </article>
+        <article class="card">
+          <header><div><h2>Call length</h2><p class="sub">Connected calls by duration</p></div></header>
+          <div class="chart" id="c-call-dur"></div>
+        </article>
+        <article class="card wide">
+          <header><div><h2>Most talk time</h2><p class="sub">Total minutes on the phone, by person</p></div></header>
+          <div class="chart" id="c-call-contacts"></div>
+        </article>
+      </section>
+    </section>
+
+    <section class="dash-section" id="sec-sources" data-slug="sources" data-tab="Sources">
+      <h2 class="section-title">Sources</h2>
+      <div class="grid">
+      <article class="card wide">
+        <header><div><h2>Platform mix</h2><p class="sub">Messages per month by app</p></div></header>
+        <div class="chart" id="c-platforms"></div>
+      </article>
+      </div>
+    </section>
+
+    <section class="dash-section" id="sec-wrapped" data-slug="year" data-tab="Year in review">
+      <h2 class="section-title">Year in review</h2>
+      <div class="grid">
+        <article class="card wide">
+          <header>
+            <div><h2>Your year in messages</h2><p class="sub">A shareable summary of one year (follows the conversation, source and people filters)</p></div>
+            <div class="wrap-actions"><div class="seg" id="wrapYears" role="group" aria-label="Year"></div><button class="btn small" id="wrapSave">Save PNG</button></div>
+          </header>
+          <div class="wrapped"><canvas id="wrapCanvas" width="1080" height="1350" aria-label="Year in review image"></canvas></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="dash-section" id="sec-ai" data-slug="ai" data-tab="AI analysis">
       <h2 class="section-title">AI analysis</h2>
       <div class="grid">
         <article class="card wide" id="aiCard">
@@ -484,74 +573,6 @@
         </article>
       </div>
     </section>
-
-    <section class="dash-section" id="sec-sources">
-      <h2 class="section-title">Sources</h2>
-      <div class="grid">
-      <article class="card wide">
-        <header><div><h2>Platform mix</h2><p class="sub">Messages per month by app</p></div></header>
-        <div class="chart" id="c-platforms"></div>
-      </article>
-      </div>
-    </section>
-
-    <section class="dash-section" id="sec-wrapped">
-      <h2 class="section-title">Year in review</h2>
-      <div class="grid">
-        <article class="card wide">
-          <header>
-            <div><h2>Your year in messages</h2><p class="sub">A shareable summary of one year (follows the conversation, source and people filters)</p></div>
-            <div class="wrap-actions"><div class="seg" id="wrapYears" role="group" aria-label="Year"></div><button class="btn small" id="wrapSave">Save PNG</button></div>
-          </header>
-          <div class="wrapped"><canvas id="wrapCanvas" width="1080" height="1350" aria-label="Year in review image"></canvas></div>
-        </article>
-      </div>
-    </section>
-
-    <section id="callsSection" hidden>
-      <h2 class="section-title">Calls</h2>
-      <section class="kpis" id="callKpis"></section>
-      <section class="grid">
-        <article class="card wide">
-          <header><div><h2>Calls over time</h2><p class="sub">Per month, by outcome</p></div></header>
-          <div class="chart" id="c-call-trend"></div>
-        </article>
-        <article class="card">
-          <header><div><h2>Calls by hour</h2><p class="sub">When calls happen</p></div></header>
-          <div class="chart" id="c-call-hour"></div>
-        </article>
-        <article class="card">
-          <header><div><h2>Call length</h2><p class="sub">Connected calls by duration</p></div></header>
-          <div class="chart" id="c-call-dur"></div>
-        </article>
-        <article class="card wide">
-          <header><div><h2>Most talk time</h2><p class="sub">Total minutes on the phone, by person</p></div></header>
-          <div class="chart" id="c-call-contacts"></div>
-        </article>
-      </section>
-    </section>
-
-    <section class="card wide browser">
-      <header>
-        <div><h2>Messages</h2><p class="sub" id="browserCount"></p></div>
-        <div class="browser-tools">
-          <label class="check" title="Show each message's mood score; click a score to see why"><input type="checkbox" id="moodChk"> Mood scores</label>
-          <input type="search" id="search" placeholder="Search messages…" aria-label="Search messages">
-        </div>
-      </header>
-      <div class="browser-filter" id="browserFilter" hidden></div>
-      <button class="btn small more" id="moreBtn" hidden>Show earlier messages</button>
-      <div class="messages" id="messages"></div>
-    </section>
-
-    <section class="card wide gallery" id="galleryCard" hidden>
-      <header>
-        <div><h2>Attachments</h2><p class="sub" id="galleryCount"></p></div>
-        <div class="seg" id="galleryKinds" role="group" aria-label="Attachment type"></div>
-      </header>
-      <div class="gallery-grid" id="galleryGrid"></div>
-      <p class="sub" id="galleryNote"></p>
-    </section>
   </main>
 
   <dialog id="viewer" class="viewer" aria-label="Attachment viewer">
@@ -587,6 +608,7 @@
   <script src="js/media.js"></script>
   <script src="js/ai-mood.js"></script>
   <script src="js/ai-analysis.js"></script>
+  <script src="js/tabs.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -37,3 +37,4 @@ see, changes what data leaves the browser, or takes more than a day to build.
 |---|---|
 | [001 AI mood scoring](001-ai-mood-scoring.md) | Draft: built, awaiting review |
 | [002 AI conversation analysis](002-ai-conversation-analysis.md) | Draft: built, awaiting review |
+| [003 Dashboard tabs](003-dashboard-tabs.md) | Draft: built, awaiting review |

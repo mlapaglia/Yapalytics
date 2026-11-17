@@ -625,6 +625,7 @@ function refresh({ timeline = true } = {}) {
   show('#galleryCard', anyMedia);
   if (anyMedia) lazyRender('#galleryCard', () => renderGallery(msgs));
   wireCharts();
+  Tabs.sync();
 }
 
 // ------------------------------------------------------------------ people, groups, content, year in review
@@ -792,7 +793,7 @@ function showMoodMessages(mo, o, kind) {
   S.showMood = true;
   $('#moodChk').checked = true;
   renderBrowser(inRange(baseMessages()));
-  $('.browser').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  Tabs.select('sec-messages');
 }
 
 /** Bars open that month's messages of that side and direction; empty space, all of that month's. */
@@ -941,7 +942,7 @@ function renderOnThisDay(base) {
 function readDay(dayStart) {
   const d = new Date(dayStart);
   setRange(dayStart, new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() - 1);
-  $('.browser').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  Tabs.select('sec-messages');
 }
 
 function moveOtd(days) {
@@ -1065,11 +1066,14 @@ function initGlance() {
 
 // ---- lazy sections: render expensive sections only when they're on (or near) the screen
 
+// visible: the observed elements on (or near) the screen. An element's key is its
+// data-lazy, or its own id: the Words, Mood and Media tabs share the content pass.
 const Lazy = { pending: new Map(), visible: new Set(), observer: null };
+const lazyKey = (el) => el.dataset.lazy || '#' + el.id;
 
 function lazyRender(sel, fn) {
   Lazy.pending.set(sel, fn);
-  if (Lazy.visible.has(sel)) runLazy(sel);
+  if ([...Lazy.visible].some((el) => lazyKey(el) === sel)) runLazy(sel);
 }
 
 function runLazy(sel) {
@@ -1082,16 +1086,25 @@ function runLazy(sel) {
 function observeLazySections() {
   Lazy.observer = new IntersectionObserver((entries) => {
     for (const e of entries) {
-      const sel = '#' + e.target.id;
       if (e.isIntersecting) {
-        Lazy.visible.add(sel);
-        runLazy(sel);
+        Lazy.visible.add(e.target);
+        runLazy(lazyKey(e.target));
       } else {
-        Lazy.visible.delete(sel);
+        Lazy.visible.delete(e.target);
       }
     }
   }, { rootMargin: '600px 0px' });
-  for (const sel of ['#sec-content', '#sec-ai', '#sec-wrapped', '#galleryCard']) Lazy.observer.observe($(sel));
+  for (const el of lazyElements()) Lazy.observer.observe(el);
+}
+
+const lazyElements = () => $$('#sec-content, #sec-mood, #sec-media, #sec-ai, #sec-wrapped, #galleryCard');
+
+/**
+ * A tab was just opened (spec 003): render its lazy parts now, not when the observer
+ * notices, so the layout is final before anything scrolls to a card in it.
+ */
+function renderLazyIn(section) {
+  for (const el of lazyElements()) if (!el.hidden && section.contains(el)) runLazy(lazyKey(el));
 }
 
 // ---- year in review (canvas)
@@ -1616,7 +1629,34 @@ function renderBrowser(msgs) {
     frag.appendChild(row);
   }
   box.appendChild(frag);
-  box.scrollTop = box.scrollHeight;
+  scrollBrowserToEnd();
+}
+
+/**
+ * The message list scrolls inside its own box, which has no size while the Messages tab
+ * is hidden (spec 003). Scrolling to the latest message waits until the tab is shown,
+ * and leaving the tab keeps the place for when it comes back.
+ */
+const BrowserScroll = { pinEnd: false, top: 0 };
+
+function scrollBrowserToEnd() {
+  const box = $('#messages');
+  BrowserScroll.pinEnd = box.offsetParent === null;
+  if (!BrowserScroll.pinEnd) box.scrollTop = box.scrollHeight;
+}
+
+/** Tabs (spec 003): a section is about to be hidden. */
+function onTabHidden(section) {
+  if (section.id === 'sec-messages') BrowserScroll.top = $('#messages').scrollTop;
+}
+
+/** Tabs (spec 003): a section was just shown. */
+function onTabShown(section) {
+  renderLazyIn(section);
+  if (section.id !== 'sec-messages') return;
+  const box = $('#messages');
+  box.scrollTop = BrowserScroll.pinEnd ? box.scrollHeight : BrowserScroll.top;
+  BrowserScroll.pinEnd = false;
 }
 
 // ------------------------------------------------------------------ theme
@@ -1730,6 +1770,7 @@ function init() {
   AiAnalysis.init();
   initViewer();
   initGallery();
+  Tabs.init();
   observeLazySections();
 
   $('#search').oninput = (e) => {
