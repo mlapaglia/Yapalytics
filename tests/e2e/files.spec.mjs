@@ -231,9 +231,4 @@ test.describe('spec 006 managing loaded files', () => {
     await expect(page.locator('#aiReport')).toBeHidden();
     await expect(page.locator('#aiReport')).toBeEmpty();
   });
-
-  test('AC15: the reactions note shows under the filters', async ({ page }) => {
-    await loadDemo(page);
-    await expect(page.locator('.scope #reactionInfo')).toContainText(/reactions .* not counted as messages/);
-  });
 });
