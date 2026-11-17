@@ -41,4 +41,4 @@ see, changes what data leaves the browser, or takes more than a day to build.
 | [004 Shared posts and reactions on messages](004-shares-and-reactions.md) | Implemented ([#10](https://github.com/mlapaglia/Yapalytics/pull/10)) |
 | [005 Linked people across apps](005-linked-people.md) | Draft: built, awaiting review |
 | [006 Managing loaded files](006-file-manager.md) | Approved: built ([#13](https://github.com/mlapaglia/Yapalytics/pull/13)) |
-| [007 Cross-app habits](007-cross-app-habits.md) | Approved: built |
+| [007 Cross-app habits](007-cross-app-habits.md) | Approved: built ([#14](https://github.com/mlapaglia/Yapalytics/pull/14)) |

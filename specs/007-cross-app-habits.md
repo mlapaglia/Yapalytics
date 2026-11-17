@@ -1,6 +1,6 @@
 # 007 Cross-app habits
 
-Status: Approved · PR:
+Status: Approved · PR: [#14](https://github.com/mlapaglia/Yapalytics/pull/14)
 
 ## Problem
 
