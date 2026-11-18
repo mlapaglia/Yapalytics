@@ -1421,10 +1421,21 @@ function partsHtml(parts) {
 
 function renderHighlights(msgs, A, X) {
   const crossApp = X ? crossAppHighlight(X, { labelFor: plainName, names: SOURCES }) : null;
-  const items = buildHighlights(msgs, A, { labelFor: plainName, senderLabel, single: S.filter.contact !== 'all', crossApp });
+  const items = buildHighlights(msgs, A, { labelFor: plainName, senderLabel, single: S.filter.contact !== 'all', crossApp, limit: Infinity });
   $('#highlights').innerHTML = items.length
-    ? items.map((h) => `<li><span class="hl-icon" aria-hidden="true">${escapeHtml(h.icon)}</span><span>${partsHtml(h.parts)}</span></li>`).join('')
+    ? items.map((h, i) => `<li${i >= HIGHLIGHT_LIMIT ? ' class="hl-more" hidden' : ''}><span class="hl-icon" aria-hidden="true">${escapeHtml(h.icon)}</span><span>${partsHtml(h.parts)}</span></li>`).join('')
     : '<li class="empty">Not enough messages here for highlights yet.</li>';
+  showMoreHighlights(false);
+}
+
+/** Spec 008 R3: show or hide the highlights past the first HIGHLIGHT_LIMIT. */
+function showMoreHighlights(open) {
+  const more = $('#highlights').querySelectorAll('.hl-more');
+  const btn = $('#highlightsMore');
+  for (const li of more) li.hidden = !open;
+  btn.hidden = !more.length;
+  btn.textContent = open ? 'Show fewer' : `Show ${more.length} more`;
+  btn.setAttribute('aria-expanded', String(open));
 }
 
 /** Who sent a message, for On this day: "You → Alex", "Alex", "Sam in Book Club". */
@@ -1587,6 +1598,7 @@ function initGlance() {
   $('#otdPrev').onclick = () => moveOtd(-1);
   $('#otdNext').onclick = () => moveOtd(1);
   $('#otdToday').onclick = () => { S.otd = null; renderOnThisDay(baseMessages()); };
+  $('#highlightsMore').onclick = (e) => showMoreHighlights(e.currentTarget.getAttribute('aria-expanded') !== 'true');
   $('#profileBtn').onclick = () => openProfile(S.filter.contact);
   const dlg = $('#profile');
   dlg.querySelector('.profile-close').onclick = () => dlg.close();
