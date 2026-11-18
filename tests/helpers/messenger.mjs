@@ -148,15 +148,15 @@ export function encryptedThread(data = alexEncrypted()) {
 /** Sam's encrypted chat's .json on its own. */
 export const samEncryptedThread = () => encryptedThread(samEncrypted());
 
-/** The encrypted chats download, zipped with its media/ folder. */
-export function encryptedExport() {
+/** The encrypted chats download, zipped with its media/ folder, all inside `folder` (e.g. 'messages/') or not. */
+export function encryptedExport(folder = '') {
   return {
     name: 'messenger-encrypted-chats.zip',
     mimeType: 'application/zip',
     buffer: makeZip([
-      { name: `${ALEX}_6.json`, data: JSON.stringify(alexEncrypted(), null, 2), deflate: true },
-      { name: `${SAM}_2.json`, data: JSON.stringify(samEncrypted(), null, 2), deflate: true },
-      { name: ALEX_MEDIA, data: FIXTURES.landscapeJpg() },
+      { name: `${folder}${ALEX}_6.json`, data: JSON.stringify(alexEncrypted(), null, 2), deflate: true },
+      { name: `${folder}${SAM}_2.json`, data: JSON.stringify(samEncrypted(), null, 2), deflate: true },
+      { name: folder + ALEX_MEDIA, data: FIXTURES.landscapeJpg() },
     ]),
   };
 }

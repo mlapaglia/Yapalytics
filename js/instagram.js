@@ -124,6 +124,7 @@ function metaParserWorker(self, lib) {
   const skippedThreads = new Set();
   const senders = new Set();
   const ownerNames = []; // from the profile file
+  const needChats = new Set(); // zips that are only .json files: at least one has to be a chat
   let msgBatch = [];
 
   function flush() {
@@ -141,6 +142,7 @@ function metaParserWorker(self, lib) {
     const out = [];
     const byTail = new Map();
     const byPath = new Map();
+    needChats.clear();
     for (let z = 0; z < files.length; z++) {
       const file = files[z];
       if (!isZip(file)) {
@@ -160,13 +162,16 @@ function metaParserWorker(self, lib) {
           readOwner(fixAll(JSON.parse(await readEntryText(e))));
         }
       }
-      if (!found && entries.some((e) => /(?:^|\/)message_\d+\.html$/.test(e.name))) throw new Error(app.html);
+      if (found) continue;
+      if (entries.some((e) => /(?:^|\/)message_\d+\.html$/.test(e.name))) throw new Error(app.html);
       // A split export's other parts may hold only media, or only your profile.
-      if (!found && entries.some((e) => /(?:^|\/)(?:messages\/|personal_information\/|your_(?:instagram|facebook)_activity\/)/.test(e.name))) continue;
-      // Messenger's encrypted chats download: a .json per chat, with media/ beside them.
-      const chats = app === APPS.messenger && !found ? entries.filter((e) => /\.json$/i.test(e.name)) : [];
-      for (const e of chats) out.push({ label: file.name, size: e.csize, read: () => readEntryText(e), path: e.name });
-      if (!found && !chats.length) throw new Error(`${file.name} has no ${app.name} messages inside`);
+      const part = entries.some((e) => /(?:^|\/)(?:messages\/|personal_information\/|your_(?:instagram|facebook)_activity\/)/.test(e.name));
+      // Messenger's encrypted chats download: a .json per chat, with media/ beside them, in a
+      // folder or not. Which .json files are chats is only known once they're read.
+      const chats = app === APPS.messenger ? entries.filter((e) => /\.json$/i.test(e.name) && !app.profile.test(e.name)) : [];
+      for (const e of chats) out.push({ label: file.name, size: e.csize, read: () => readEntryText(e), path: e.name, chat: z });
+      if (!part && !chats.length) throw new Error(`${file.name} has no ${app.name} messages inside`);
+      if (!part) needChats.add(z);
     }
     return { threads: out, byTail, byPath };
   }
@@ -201,7 +206,8 @@ function metaParserWorker(self, lib) {
   function parseThread(data, src, byTail) {
     if (!data || !Array.isArray(data.messages)) throw new Error(`${src.label} doesn't look like an ${app.name} export (no messages in it)`);
     const fromPath = THREAD_RE.exec(src.path);
-    const threadPath = String(data.thread_path || (fromPath ? `${fromPath[1]}/${fromPath[2]}` : '') || data.title || 'unknown');
+    // "inbox/<name>_<id>", or the same from the export's root ("your_facebook_activity/messages/inbox/…").
+    const threadPath = String(data.thread_path || (fromPath ? `${fromPath[1]}/${fromPath[2]}` : '') || data.title || 'unknown').replace(/^(?:.*\/)?messages\//, '');
     const slash = threadPath.lastIndexOf('/');
     const folder = slash >= 0 ? threadPath.slice(0, slash) : 'inbox';
     const id = threadPath.slice(slash + 1);
@@ -259,6 +265,9 @@ function metaParserWorker(self, lib) {
     const title = threadName.replace(/_\d+$/, '') || participants.join(', ') || app.nobody;
     const c = contactFor(app.prefix + 'e2ee:' + threadName, title, false);
     const members = new Map(c.members);
+    // Everyone in the chat, even with nothing sent: you're the one it isn't named after, and
+    // a chat where only they wrote mustn't make them you.
+    for (const p of participants) if (!members.has(p)) members.set(p, 0);
     const dir = dirName(src.path);
 
     for (const m of data.messages) {
@@ -305,11 +314,16 @@ function metaParserWorker(self, lib) {
       } catch (err) {
         throw new Error(`${src.label} isn't valid JSON, so it can't be an ${app.name} export`);
       }
-      if (app === APPS.messenger && isEncrypted(data)) parseEncryptedThread(data, src, byPath);
-      else parseThread(fixAll(data), src, byTail);
+      if (app === APPS.messenger && isEncrypted(data)) {
+        parseEncryptedThread(data, src, byPath);
+        needChats.delete(src.chat);
+      } else if (src.chat == null) parseThread(fixAll(data), src, byTail);
+      // else: a .json in a zip that isn't a chat (some other part of an export)
       loaded += src.size;
       self.postMessage({ type: 'progress', loaded, total });
     }
+    const empty = [...needChats][0];
+    if (empty != null) throw new Error(`${files[empty].name} has no ${app.name} messages inside`);
 
     // Messages show your display name, or your username when you have none.
     const owner = ownerNames.find((n) => senders.has(n));

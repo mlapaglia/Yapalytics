@@ -6,7 +6,7 @@ import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab } fro
 import { zippedExport as instagramExport } from '../helpers/instagram.mjs';
 import { resultJson, singleChatExport } from '../helpers/telegram.mjs';
 import {
-  encryptedExport, encryptedThread, facebookExport, facebookHtmlExport, looseFacebookThread, plainThread,
+  e2eeMessage, encryptedExport, encryptedThread, facebookExport, facebookHtmlExport, looseFacebookThread, plainThread,
   samEncryptedThread, splitFacebookExport,
 } from '../helpers/messenger.mjs';
 
@@ -64,6 +64,12 @@ test.describe('spec 009 Messenger', () => {
     expect(await countsOf(page)).toEqual({ n: 2, sent: 1 });
   });
 
+  test('AC12: in a chat where only they wrote, you are still the one it is not named after', async ({ page }) => {
+    await loadFiles(page, encryptedThread({ participants: ['Jamie Park', 'Alex Rivera'], threadName: 'Alex Rivera_6', messages: [e2eeMessage(0, 'Alex Rivera', { text: 'you there?' }), e2eeMessage(60, 'Alex Rivera', { text: 'hello??' })] }));
+    await expect(picker(page)).toHaveValue('Jamie Park');
+    expect(await countsOf(page)).toEqual({ n: 2, sent: 0 });
+  });
+
   test('AC14: a photo in the encrypted download opens', async ({ page }) => {
     await loadFiles(page, encryptedExport());
     await scrollTo(page, '#galleryCard');
@@ -74,9 +80,18 @@ test.describe('spec 009 Messenger', () => {
     expect(await page.$eval('#viewer .viewer-stage img', (i) => [i.naturalWidth, i.naturalHeight])).toEqual([1600, 1200]);
   });
 
-  test('AC18: the same encrypted chat loaded twice counts once', async ({ page }) => {
-    await loadFiles(page, [encryptedThread(), encryptedExport()]);
+  test('AC18: the same encrypted chat loaded twice counts once, and keeps the photo the zip can open', async ({ page }) => {
+    // The zip keeps its chats in a folder, so the thread file on its own (read first) can't
+    // find the photo's file; the zip's copy of the message brings it.
+    await loadFiles(page, [encryptedThread(), encryptedExport('Messenger export/')]);
     expect(await page.evaluate(() => S.msgs.filter((m) => m.k === 'fb:e2ee:Alex Rivera_6').length)).toBe(7);
+    const photo = await page.evaluate(() => {
+      const m = S.msgs.find((x) => x.k === 'fb:e2ee:Alex Rivera_6' && x.ph);
+      return { att: (m.att || []).map((a) => [a.n, a.z]), bytes: m.mb > 0 };
+    });
+    expect(photo).toEqual({ att: [['482a04c4-6739-4871-aecf-9960208a707d.jpeg', 1]], bytes: true });
+    await scrollTo(page, '#galleryCard');
+    await expect(page.locator('#galleryGrid .tile[title^="482a04c4"]')).toHaveClass(/loaded/, { timeout: 30_000 });
   });
 
   test('AC7: Instagram and Facebook exports chosen together stay two apps', async ({ page }) => {

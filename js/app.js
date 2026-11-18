@@ -220,8 +220,14 @@ async function readFiles(entries) {
             const key = `${m.t}|${hasOwner(m.s) ? m.sn : m.o}|${m.k}|${m.l}|${m.m}`;
             const seen = S.seenMsgs.get(key);
             if (seen !== undefined) {
-              // The same message in an overlapping export: keep the reactions both list.
+              // The same message in an overlapping export: keep the reactions both list, and
+              // its files if only this copy can open them (a thread file read before its zip).
               if (seen && m.rx) seen.rx = mergeReactions(seen.rx, m.rx);
+              if (seen && m.att && !seen.att) {
+                if (job.attBase) for (const a of m.att) if (a.z != null) a.z += job.attBase;
+                seen.att = m.att;
+                seen.mb = m.mb;
+              }
               continue;
             }
             // Reactions sent as texts (tapbacks, "😂 to “…”") aren't messages. Reactions

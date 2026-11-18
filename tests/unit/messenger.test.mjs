@@ -59,6 +59,15 @@ describe('spec 009 Messenger: Facebook DYI export', () => {
     for (const c of out.contacts) assert.equal(c.owner, ME, c.key);
   });
 
+  it('AC1, AC10: a thread_path written from the export root still finds its folder', async () => {
+    const thread = (path) => ({ name: 'message_1.json', mimeType: 'application/json', buffer: Buffer.from(metaJson({ participants: [{ name: ALEX }, { name: ME }], title: ALEX, thread_path: path, messages: [fbMessage(0, ALEX, { content: 'hi' })] })) });
+    const kept = await parse(thread('your_facebook_activity/messages/inbox/alexrivera_1111'));
+    assert.deepEqual(kept.contacts.map((c) => c.key), [ALEX_DYI]);
+    assert.equal(kept.msgs.length, 1);
+    const skipped = await parse(thread('your_facebook_activity/messages/message_requests/spam_4444'));
+    assert.deepEqual([skipped.contacts.length, skipped.counts.skippedChats], [0, 1]);
+  });
+
   it('AC8: explains that the HTML export needs to be redone as JSON', async () => {
     await assert.rejects(parse(facebookHtmlExport()), /Facebook's HTML export.*JSON/);
   });
@@ -113,10 +122,27 @@ describe('spec 009 Messenger: encrypted chats download', () => {
     assert.deepEqual(kinds, ['vd', 'gf,au', 'ot']);
   });
 
+  it('R2: the download can keep its chats in a folder, even one called messages/', async () => {
+    const out = await parse(encryptedExport('messages/'));
+    assert.deepEqual(out.contacts.map((c) => c.key).sort(), [ALEX_E2EE, 'fb:e2ee:Sam Patel_2']);
+    assert.deepEqual(byKey(out, ALEX_E2EE).find((m) => m.ph).att.map((a) => a.p), [`messages/${ALEX_MEDIA}`]);
+  });
+
+  it('R2: a zip of .json files that are not chats has no Messenger messages', async () => {
+    const { makeZip } = await import('../helpers/zip.mjs');
+    await assert.rejects(parse({ name: 'notes.zip', mimeType: 'application/zip', buffer: makeZip([{ name: 'notes.json', data: '{"a":1}' }]) }), /notes\.zip has no Messenger messages/);
+  });
+
   it('AC18: is named after the other person, without the number', async () => {
     const out = await parse(encryptedThread());
     assert.equal(out.contacts[0].name, ALEX);
     assert.equal(out.contacts[0].title, ALEX);
+  });
+
+  it('AC12: everyone in the chat is a member, even with nothing sent, so you can be told apart', async () => {
+    const out = await parse(encryptedThread({ participants: [ME, ALEX], threadName: `${ALEX}_6`, messages: [e2eeMessage(0, ALEX, { text: 'you there?' })] }));
+    assert.deepEqual(Object.fromEntries(out.contacts[0].members), { [ME]: 0, [ALEX]: 1 });
+    assert.equal(out.msgs.length, 1, 'no messages are added');
   });
 
   it('AC12: both threads of the zip are read, and each names its other person', async () => {
