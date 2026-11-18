@@ -13,6 +13,13 @@ const WEEKDAY_PLURAL = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursda
 const pctText = (x) => Math.round(x * 100) + '%';
 const timesText = (x) => (x >= 10 ? Math.round(x) : Math.round(x * 10) / 10) + '×';
 const hourText = (h) => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' });
+const dateText = (t) => new Date(t).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+const monthYearText = (t) => new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
+const clockText = (t) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+const HL_DAY = 86400e3;
+const HL_YEAR = 365.25 * HL_DAY;
+const traitIndex = (bit) => TRAITS.findIndex((t) => t.bit === bit);
+const LOVE_EXAMPLES = ' (love you, ❤️, 😘)';
 
 /** Index of the busiest slot, adding [received, sent] arrays together. */
 function peakOf([r, s]) {
@@ -167,10 +174,258 @@ function buildHighlights(msgs, A, { labelFor = (k) => k, senderLabel = (x) => x,
     add('groups', 12, '👥', [{ b: senderLabel(loud[0]) }, single ? ' is the most active member here, with ' : ' is the most active in your group chats, with ', { b: fmtNum(loud[1]) }, ' messages.']);
   }
 
+  moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, total });
+
   // How a linked person moves between apps (spec 007 R5): crossAppHighlight's pick
   if (crossApp) out.push(crossApp);
 
   return out.sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+/** The larger of two counts over the smaller (at least 1), and whether the second is larger. */
+function leanOf(a, b) {
+  return { ratio: Math.max(a, b) / Math.max(Math.min(a, b), 1), second: b > a };
+}
+
+/** Spec 008: moments, relationships over time, how two people talk, and habits. */
+function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, total }) {
+  const firstT = msgs[0].t;
+  const lastT = msgs[msgs.length - 1].t;
+  // 1-on-1 conversations to compare the two sides of: the busy ones, or the one selected
+  const pairs = single ? rows.filter((r) => !r.group && r.n >= 50) : oneOnOne;
+  const solo = single && !rows[0].group ? rows[0] : null;
+
+  // AC1: the busiest day
+  const bd = A.busiestDay;
+  const avgDay = total / Math.max(A.activeDays, 1);
+  if (bd && bd.n >= 100 && bd.n >= 4 * avgDay) {
+    const score = 28 + Math.min(12, Math.log2(bd.n / avgDay) * 3);
+    const when = dateText(dayToTs(bd.d));
+    if (single) add('busiestDay', score, '🗓️', ['The busiest day here was ', when, ': ', { b: fmtNum(bd.n) }, ' messages.']);
+    else {
+      const top = busiestConversation(msgs.filter((m) => m.d === bd.d));
+      const parts = ['Your busiest day was ', when, ': ', { b: fmtNum(bd.n) }, ' messages'];
+      if (top.n / bd.n >= 0.5) parts.push(', ', { b: pctText(top.n / bd.n) }, ' with ', person(top.k));
+      add('busiestDay', score, '🗓️', [...parts, '.']);
+    }
+  }
+
+  // AC2: the longest conversation without a break
+  const ls = A.longestSession;
+  if (ls && ls.n >= 100) {
+    const over = { b: fmtDuration(ls.end - ls.start) };
+    add('marathon', 27 + Math.min(10, Math.log2(ls.n / 100) * 4), '🏃', single
+      ? ['The longest conversation here: ', { b: fmtNum(ls.n) }, ' messages over ', over, ' on ', dateText(ls.start), '.']
+      : ['Your longest conversation: ', { b: fmtNum(ls.n) }, ' messages with ', person(ls.k), ' over ', over, ' on ', dateText(ls.start), '.']);
+  }
+
+  // AC3: the message latest in the night
+  const ln = A.latestNight;
+  if (ln && ln.tod >= 180) {
+    add('latest', 16 + (ln.tod - 180) / 20, '🦉', single
+      ? ['The latest late-night message here: ', { b: clockText(ln.t) }, ', on ', dateText(ln.t), '.']
+      : ['Your latest late-night message: ', { b: clockText(ln.t) }, ', with ', person(ln.k), ' on ', dateText(ln.t), '.']);
+  }
+
+  // AC4: the biggest milestone in the last 6 months (a conversation's beats the total on a tie)
+  let ms = null;
+  for (const m of A.milestones) {
+    if (m.n < 1000 || m.t < lastT - 182 * HL_DAY || (single && m.k == null)) continue;
+    if (!ms || m.n > ms.n || (m.n === ms.n && ms.k == null)) ms = m;
+  }
+  if (ms) {
+    const n = { b: fmtNum(ms.n) };
+    add('milestone', ms.t >= lastT - 30 * HL_DAY ? 38 : 30, '🎉', single
+      ? ['This conversation passed ', n, ' messages on ', dateText(ms.t), '.']
+      : ms.k == null
+        ? ['You passed ', n, ' messages in total on ', dateText(ms.t), '.']
+        : ['You passed ', n, ' messages with ', person(ms.k), ' on ', dateText(ms.t), '.']);
+  }
+
+  // AC5: the oldest conversation that's still going
+  let old = null;
+  for (const r of single ? rows : busy) {
+    if (r.bc.last < lastT - 91 * HL_DAY) continue;
+    if (!old || r.bc.first < old.bc.first) old = r;
+  }
+  const oldFirst = single ? firstT : old?.bc.first;
+  const years = old ? Math.floor((lastT - oldFirst) / HL_YEAR) : 0;
+  if (years >= (single ? 2 : 3)) {
+    const since = [' since ', { b: monthYearText(oldFirst) }, ': over ', { b: years === 1 ? '1 year' : `${years} years` }, '.'];
+    add('oldest', 16 + Math.min(16, years * 1.5), '🕰️', single ? ["You've been talking here", ...since] : ["You've been texting ", person(old.k), ...since]);
+  }
+
+  // AC6: a new conversation that's already near the top
+  if (!single && lastT - firstT >= 365 * HL_DAY) {
+    for (let i = 1; i < Math.min(rows.length, 5); i++) {
+      const r = rows[i];
+      if (r.n < 50 || r.bc.first < lastT - 182 * HL_DAY) continue;
+      add('newcomer', 36 + (4 - i) * 2, '✨', ['Your conversation with ', person(r.k), ' started in ', { b: monthYearText(r.bc.first) }, ' and is already your ', { b: `#${i + 1}` }, '.']);
+      break;
+    }
+  }
+
+  // AC7: the longest silence in a conversation that picked back up
+  let gap = null;
+  for (const r of single ? rows : oneOnOne) {
+    for (const g of r.bc.silences) {
+      if (g.len < 90 || g.before < 20 || r.n - g.before < 20) continue;
+      if (!gap || g.len > gap.g.len) gap = { k: r.k, g };
+    }
+  }
+  if (gap) {
+    const days = { b: `${fmtNum(gap.g.len)} days` };
+    add('reunion', 24 + Math.min(14, gap.g.len / 60), '🤝', single
+      ? ['The longest silence here: ', days, ', until ', dateText(gap.g.end), '.']
+      : ['You and ', person(gap.k), ' went ', days, ' without a message, then picked back up on ', dateText(gap.g.end), '.']);
+  }
+
+  // AC8: the biggest calendar year
+  if (A.yearMonths.size >= 3) {
+    const byYear = new Map([...A.yearMonths].map(([y, months]) => [y, months.reduce((a, b) => a + b, 0)]));
+    const [year, n] = [...byYear].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+    const start = new Date(firstT);
+    const prevWhole = year - 1 > start.getFullYear() || (year - 1 === start.getFullYear() && start.getMonth() === 0 && start.getDate() === 1);
+    const ratio = prevWhole && byYear.get(year - 1) ? n / byYear.get(year - 1) : 0;
+    const parts = [{ b: String(year) }, single ? ' was the biggest year here: ' : ' was your biggest year: ', { b: fmtNum(n) }, ' messages'];
+    if (ratio >= 1.3) parts.push(', ', { b: timesText(ratio) }, ' as many as in ', String(year - 1));
+    add('year', 17 + (ratio >= 1.3 ? Math.min(8, Math.log2(ratio) * 4) : 0), '📅', [...parts, '.']);
+  }
+
+  // AC9: who laughs more, per message
+  const laughI = traitIndex(4);
+  let laugh = null;
+  for (const r of pairs) {
+    const { n, traits } = r.bc;
+    if (n[0] < 20 || n[1] < 20) continue;
+    const them = traits[0][laughI], you = traits[1][laughI];
+    const youMore = you / n[1] > them / n[0]; // by the real rates (laughs per message)
+    const [hi, hiN, lo, loN] = youMore ? [you, n[1], them, n[0]] : [them, n[0], you, n[1]];
+    if (hi < 20) continue;
+    // A side that never laughs counts as 1 laugh, so the ratio stays finite; that can only shrink it
+    const ratio = hi / hiN / (Math.max(lo, 1) / loN);
+    if (ratio >= 2 && (!laugh || ratio > laugh.ratio)) laugh = { k: r.k, ratio, you: youMore };
+  }
+  if (laugh) {
+    const x = { b: timesText(laugh.ratio) };
+    add('laughs', 24 + Math.min(10, Math.log2(laugh.ratio) * 4), '😂', laugh.you
+      ? ['You laugh (lol, haha, 😂) ', x, ' as often as ', person(laugh.k), ' does.']
+      : [person(laugh.k), ' laughs (lol, haha, 😂) ', x, ' as often as you do.']);
+  }
+
+  // AC10: who asks the questions
+  const askI = traitIndex(1);
+  let ask = null;
+  for (const r of pairs) {
+    const you = r.bc.traits[1][askI], all = you + r.bc.traits[0][askI];
+    if (all < 30) continue;
+    const share = you / all, lean = Math.abs(share - 0.5);
+    if (lean >= 0.15 && (!ask || lean > ask.lean)) ask = { k: r.k, share, lean };
+  }
+  if (ask) {
+    const pct = { b: pctText(Math.max(ask.share, 1 - ask.share)) };
+    const where = single ? [' of the questions here.'] : ask.share >= 0.5 ? [' of the questions with ', person(ask.k), '.'] : [' of the questions between you.'];
+    add('questions', 21 + ask.lean * 30, '❓', ask.share >= 0.5 ? ['You ask ', pct, ...where] : [person(ask.k), ' asks ', pct, ...where]);
+  }
+
+  // AC11: who double-texts
+  let dbl = null;
+  for (const r of pairs) {
+    const [them, you] = r.bc.doubles;
+    const { ratio, second } = leanOf(them, you);
+    if (Math.max(them, you) >= 30 && ratio >= 2.5 && (!dbl || ratio > dbl.ratio)) dbl = { k: r.k, ratio, you: second };
+  }
+  if (dbl) {
+    const x = { b: timesText(dbl.ratio) };
+    add('doubles', 23 + Math.min(10, Math.log2(dbl.ratio) * 3), '💬', dbl.you
+      ? ['You double-text ', person(dbl.k), ' ', x, ' as often as they double-text you.']
+      : [person(dbl.k), ' double-texts you ', x, ' as often as you double-text them.']);
+  }
+
+  // AC12: the fastest replier, out of at least two
+  if (!single) {
+    const fast = oneOnOne.filter((r) => r.bc.replyN[0] >= 30 && r.bc.replyMedian[0] != null).sort((a, b) => a.bc.replyMedian[0] - b.bc.replyMedian[0]);
+    if (fast.length >= 2 && fast[0].bc.replyMedian[0] <= 120e3) {
+      add('fastest', 19, '⚡', [person(fast[0].k), ' is your fastest replier: they usually answer in ', { b: fmtDuration(fast[0].bc.replyMedian[0]) }, '.']);
+    }
+  }
+
+  // AC13: an emoji that belongs to one conversation
+  if (!single) {
+    const all = emojiTotal(A.emojiFreq);
+    let sig = null;
+    for (const r of busy.slice(0, 15)) {
+      const e = signatureEmoji(r.bc, A.emojiFreq, all);
+      const uses = e && r.bc.emoji.get(e);
+      if (!uses || uses < 5) continue;
+      let mine = 0;
+      for (const n of r.bc.emoji.values()) mine += n;
+      const g = A.emojiFreq.get(e);
+      const lift = uses / mine / ((g[0] + g[1]) / all);
+      if (lift >= 5 && (!sig || lift > sig.lift)) sig = { k: r.k, e, lift };
+    }
+    if (sig) add('sigEmoji', 21 + Math.min(10, Math.log2(sig.lift) * 2), sig.e, [{ b: sig.e }, ' is your emoji with ', person(sig.k), ': used ', { b: timesText(sig.lift) }, ' as often there as across all your conversations.']);
+  }
+
+  // AC14: photos
+  if (!single) {
+    const topBy = (o) => rows.reduce((best, r) => (!best || r.bc.ph[o] > best.bc.ph[o] ? r : best), null);
+    const sent = A.media.ph[1], got = A.media.ph[0];
+    const to = topBy(1), from = topBy(0);
+    if (sent >= 30 && to.bc.ph[1] / sent >= 0.3) {
+      add('photos', 19 + (to.bc.ph[1] / sent) * 10, '📸', [person(to.k), ' gets ', { b: pctText(to.bc.ph[1] / sent) }, ' of the photos you send.']);
+    } else if (got >= 30 && from.bc.ph[0] / got >= 0.3) {
+      add('photos', 19 + (from.bc.ph[0] / got) * 10, '📸', [person(from.k), ' sends you the most photos: ', { b: fmtNum(from.bc.ph[0]) }, '.']);
+    }
+  } else if (solo) {
+    const [them, you] = A.media.ph;
+    const { ratio, second } = leanOf(them, you);
+    if (them + you >= 30 && ratio >= 2) {
+      const x = { b: timesText(ratio) };
+      add('photos', 19, '📸', second ? ['You send ', x, ' as many photos as ', person(solo.k), ' here.'] : [person(solo.k), ' sends ', x, ' as many photos as you here.']);
+    }
+  }
+
+  // AC15: the weekend conversation and the early-morning one
+  const windows = [
+    { kind: 'weekend', icon: '🛋️', min: 0.5, count: (bc) => bc.weekend, overall: (A.dow[0][0] + A.dow[1][0] + A.dow[0][6] + A.dow[1][6]) / total,
+      all: ' is your weekend conversation: ', what: 'on a Saturday or Sunday' },
+    { kind: 'morning', icon: '🌅', min: 0.35, count: (bc) => bc.morning, overall: [0, 1].reduce((a, o) => a + A.hour[o].slice(MORNING_HOURS[0], MORNING_HOURS[1]).reduce((x, y) => x + y, 0), 0) / total,
+      all: ' is your early-morning conversation: ', what: `between ${hourText(MORNING_HOURS[0])} and ${hourText(MORNING_HOURS[1])}` },
+  ];
+  for (const w of windows) {
+    const need = single ? w.min : Math.max(w.min, w.overall + 0.15);
+    let best = null;
+    for (const r of single ? rows : busy) {
+      if (r.n < 100) continue;
+      const share = w.count(r.bc) / r.n;
+      if (share >= need && (!best || share > best.share)) best = { k: r.k, share };
+    }
+    if (!best) continue;
+    const pct = { b: pctText(best.share) };
+    add(w.kind, 18 + (best.share - w.min) * 20, w.icon, single
+      ? [pct, ` of messages here are ${w.what}.`]
+      : [person(best.k), w.all, pct, ` of your messages with them are ${w.what}.`]);
+  }
+
+  // AC16: love-you messages
+  const loveI = traitIndex(32);
+  const loveAll = A.traits[0][loveI] + A.traits[1][loveI];
+  if (!single && loveAll >= 20) {
+    const top = rows.reduce((best, r) => {
+      const n = r.bc.traits[0][loveI] + r.bc.traits[1][loveI];
+      return !best || n > best.n ? { k: r.k, n } : best;
+    }, null);
+    if (top.n / loveAll >= 0.4) add('love', 22 + (top.n / loveAll) * 10, '❤️', [{ b: pctText(top.n / loveAll) }, ` of your love-you messages${LOVE_EXAMPLES} are with `, person(top.k), '.']);
+  } else if (solo && loveAll >= 20) {
+    const { ratio, second } = leanOf(A.traits[0][loveI], A.traits[1][loveI]);
+    if (ratio >= 2) {
+      const x = { b: timesText(ratio) };
+      add('love', 22, '❤️', second
+        ? ['You send ', x, ` as many love-you messages${LOVE_EXAMPLES} as `, person(solo.k), ' here.']
+        : [person(solo.k), ' sends ', x, ` as many love-you messages${LOVE_EXAMPLES} as you here.`]);
+    }
+  }
 }
 
 /** A highlight's parts as plain text (for tests and titles). */

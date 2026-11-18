@@ -11,12 +11,28 @@ test.describe('highlights', () => {
   });
 
   test('lists the notable findings with links to profiles', async ({ page }) => {
-    const items = page.locator('#highlights li');
+    const items = page.locator('#highlights li:not([hidden])');
     await expect(items.first()).toBeVisible();
     expect(await items.count()).toBeGreaterThanOrEqual(3);
     expect(await items.count()).toBeLessThanOrEqual(6);
     await expect(items.first()).toContainText('is your most-messaged conversation');
     await expect(page.locator('#highlights .person-link').first()).toBeVisible();
+  });
+
+  test('AC18 (spec 008): shows 6, and the rest behind Show more', async ({ page }) => {
+    const shown = page.locator('#highlights li:not([hidden])');
+    const more = page.locator('#highlightsMore');
+    const all = await page.locator('#highlights li').count();
+    expect(all).toBeGreaterThan(6);
+    await expect(shown).toHaveCount(6);
+    await expect(more).toHaveText(`Show ${all - 6} more`);
+    await more.click();
+    await expect(shown).toHaveCount(all);
+    await expect(more).toHaveText('Show fewer');
+    await expect(more).toHaveAttribute('aria-expanded', 'true');
+    await more.click();
+    await expect(shown).toHaveCount(6);
+    await expect(more).toHaveText(`Show ${all - 6} more`);
   });
 
   test('talk about one conversation when one is selected', async ({ page }) => {

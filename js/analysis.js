@@ -77,6 +77,8 @@ const SESSION_BINS = [
   { max: Infinity, label: '150+' },
 ];
 const NIGHT_END_HOUR = 5; // "night owl" = messages from midnight until 5am
+const MORNING_HOURS = [5, 9]; // "early morning" = messages from 5am until 9am
+const LONG_SILENCE_DAYS = 30; // silences in a conversation this long or longer are kept (byContact.silences)
 const CONTACT_MILESTONES = new Set([1, 1000, 10000, 50000, 100000]);
 const TOTAL_MILESTONES = new Set([10000, 50000, 100000, 250000, 500000, 1000000]);
 
@@ -203,7 +205,9 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
     wordFreq: new Map(), // word -> [r, s]
     first: null,
     last: null,
-    // key -> { n:[r,s], first, last, starters:[r,s], replyMedian:[r,s], lenSum, lenN, emoji: Map, months: Map, longestRun }
+    // key -> { n:[r,s], first, last, starters:[r,s], replyMedian:[r,s], replyN:[r,s], lenSum, lenN, emoji: Map,
+    //   months: Map, longestRun, traits:[[r],[s]], doubles:[r,s], ph:[r,s], weekend, morning,
+    //   silences: [{ len (silent days, at least LONG_SILENCE_DAYS), end (time messages resumed), before (messages before it) }] }
     byContact: new Map(),
     night: new Map(), // mo -> [night, total]
     latestNight: null, // { t, k, tod } latest time-of-night message
@@ -238,13 +242,22 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
 
     let bc = A.byContact.get(r.k);
     if (!bc) {
-      bc = { n: [0, 0], first: r.t, last: r.t, starters: [0, 0], replies: [[], []], lenSum: [0, 0], lenN: [0, 0], emoji: new Map(), months: new Map(), lastDay: null, run: 0, longestRun: 0 };
+      bc = {
+        n: [0, 0], first: r.t, last: r.t, starters: [0, 0], replies: [[], []], lenSum: [0, 0], lenN: [0, 0], emoji: new Map(), months: new Map(),
+        lastDay: null, run: 0, longestRun: 0, traits: pair(TRAITS.length), doubles: [0, 0], ph: [0, 0], weekend: 0, morning: 0, silences: [],
+      };
       A.byContact.set(r.k, bc);
     }
+    const before = bc.n[0] + bc.n[1];
     bc.n[o]++;
     bc.last = r.t;
+    if (r.w === 0 || r.w === 6) bc.weekend++;
+    if (r.h >= MORNING_HOURS[0] && r.h < MORNING_HOURS[1]) bc.morning++;
+    if (r.ph) bc.ph[o] += r.ph;
     bc.months.set(r.mo, (bc.months.get(r.mo) || 0) + 1);
     if (bc.lastDay !== r.d) {
+      const silent = bc.lastDay == null ? 0 : r.d - bc.lastDay - 1;
+      if (silent >= LONG_SILENCE_DAYS) bc.silences.push({ len: silent, end: r.t, before });
       bc.run = bc.lastDay === r.d - 1 ? bc.run + 1 : 1;
       bc.lastDay = r.d;
       if (bc.run > bc.longestRun) bc.longestRun = bc.run;
@@ -316,7 +329,9 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
       }
     }
 
-    for (let i = 0; i < TRAITS.length; i++) if (r.f & TRAITS[i].bit) A.traits[o][i]++;
+    for (let i = 0; i < TRAITS.length; i++) {
+      if (r.f & TRAITS[i].bit) { A.traits[o][i]++; bc.traits[o][i]++; }
+    }
 
     if (r.e) {
       A.emoji[o] += r.e.length;
@@ -358,6 +373,7 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
       A.replyByHour[o][r.h].push(wait);
     } else {
       A.doubleTexts[o]++;
+      bc.doubles[o]++;
     }
     prev.t = r.t;
     prev.o = o;
@@ -366,6 +382,7 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
   for (const ss of lastByThread.values()) closeSession(ss);
   for (const bc of A.byContact.values()) {
     bc.replyMedian = [median(bc.replies[0]), median(bc.replies[1])];
+    bc.replyN = [bc.replies[0].length, bc.replies[1].length];
     bc.replies = null;
   }
   A.replyHourMedian = A.replyByHour.map((hours) => hours.map(median));

@@ -629,6 +629,7 @@ table.leader .muted { color: var(--muted); }
 .highlights li:last-child { border-bottom: 0; }
 .highlights .hl-icon { flex: none; width: 22px; text-align: center; font-size: 16px; }
 .highlights .empty { color: var(--muted); }
+.hl-toggle { margin-top: 6px; }
 .person-link {
   padding: 0;
   border: 0;
