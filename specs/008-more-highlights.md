@@ -1,6 +1,6 @@
 # 008 More highlights
 
-Status: Approved · PR:
+Status: Approved · PR: [#15](https://github.com/mlapaglia/Yapalytics/pull/15)
 
 ## Problem
 
