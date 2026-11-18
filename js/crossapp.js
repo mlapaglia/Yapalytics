@@ -79,7 +79,7 @@ function addCrossApp(P, k, list, gap) {
     if (m.sh || (m.f & T_LINK)) a.links++;
     a.hour[m.h]++;
     let mm = P.months.get(m.mo);
-    if (!mm) P.months.set(m.mo, (mm = [0, 0, 0, 0, 0, 0]));
+    if (!mm) P.months.set(m.mo, (mm = [0, 0, 0, 0, 0, 0, 0]));
     mm[s]++;
     let da = dayApps.get(m.d);
     if (!da) dayApps.set(m.d, (da = new Set()));
@@ -176,7 +176,7 @@ const SHIFT_HOLD = 3; // windows after the change that must keep the new leader
 /**
  * M11: when the main app changed. A shift is when the app with the most messages over 3
  * months changes, that window has 30+ messages, and the next 3 windows keep the new
- * leader, so one busy month can't make a shift on its own. `months`: mo -> [6].
+ * leader, so one busy month can't make a shift on its own. `months`: mo -> [7], one count per app.
  * Returns [{ mo (the window's last month), from, to }].
  */
 function mainAppShifts(months) {
@@ -184,10 +184,10 @@ function mainAppShifts(months) {
   if (!mos.length) return [];
   const leaders = [];
   for (let mo = mos[0] + SHIFT_WINDOW - 1; mo <= mos[mos.length - 1]; mo++) {
-    const sum = [0, 0, 0, 0, 0, 0];
+    const sum = [0, 0, 0, 0, 0, 0, 0];
     for (let x = mo - SHIFT_WINDOW + 1; x <= mo; x++) {
       const v = months.get(x);
-      if (v) for (let i = 0; i < 6; i++) sum[i] += v[i];
+      if (v) for (let i = 0; i < sum.length; i++) sum[i] += v[i] || 0;
     }
     leaders.push({ mo, lead: leadingApp(sum, SHIFT_MIN) });
   }

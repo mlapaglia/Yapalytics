@@ -76,3 +76,23 @@ describe('spec 006 managing loaded files', () => {
     assert.equal(sameFile(a, { ...a, name: 'sms-2.xml' }), false);
   });
 });
+
+describe('spec 009 Messenger in the Files dialog', () => {
+  const as = (id, kind, on = true) => f(id, on, { kind });
+
+  it('AC16: reading a loaded file as the other app reads everything again', () => {
+    const plan = planFileChanges([as(1, 'sms'), as(2, 'instagram')], [as(1, 'sms'), as(2, 'messenger')]);
+    assert.deepEqual({ changed: plan.changed, rebuild: plan.rebuild, read: ids(plan.read) }, { changed: true, rebuild: true, read: [1, 2] });
+    assert.equal(canApplyFiles([as(2, 'instagram')], [as(2, 'messenger')]), true);
+  });
+
+  it('AC16: changing the app of an unchecked file is a change, with nothing to read', () => {
+    const plan = planFileChanges([as(1, 'sms'), as(2, 'instagram', false)], [as(1, 'sms'), as(2, 'messenger', false)]);
+    assert.deepEqual({ changed: plan.changed, rebuild: plan.rebuild, read: ids(plan.read) }, { changed: true, rebuild: false, read: [] });
+  });
+
+  it('R11: Messenger files are read together, like Instagram parts', () => {
+    const plan = planFileChanges([as(1, 'messenger'), as(2, 'messenger', false)], [as(1, 'messenger'), as(2, 'messenger')]);
+    assert.deepEqual({ rebuild: plan.rebuild, read: ids(plan.read) }, { rebuild: true, read: [1, 2] });
+  });
+});

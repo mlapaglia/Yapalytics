@@ -3,13 +3,13 @@
  *
  * Message record (from parser.js / googlechat.js):
  *   t  epoch ms      o  1 = sent, 0 = received      m  1 = MMS, 0 = SMS
- *   s  source: 0 = SMS Backup & Restore, 1 = Google Chat, 2 = WhatsApp, 3 = iMessage, 4 = Telegram, 5 = Instagram
- *   sn sender name (Google Chat: group messages you received; WhatsApp / iMessage / Telegram / Instagram: every message)
+ *   s  source: 0 = SMS Backup & Restore, 1 = Google Chat, 2 = WhatsApp, 3 = iMessage, 4 = Telegram, 5 = Instagram, 6 = Messenger
+ *   sn sender name (Google Chat: group messages you received; WhatsApp / iMessage / Telegram / Instagram / Messenger: every message)
  *   sk sender's 1-on-1 thread key (SMS group messages you received)
  *   v  mood: VADER compound score in [-1, 1] (messages with words; not reactions)
  *   ai mood from the AI model, once scored: [negative, neutral, positive] probabilities (spec 001)
  *   sw number of swear words (only set when > 0)
- *   k  thread key ('g:' prefix = group chat; Google Chat keys contain 'gc:', WhatsApp 'wa:', iMessage 'im:', Telegram 'tg:', Instagram 'ig:')
+ *   k  thread key ('g:' prefix = group chat; Google Chat keys contain 'gc:', WhatsApp 'wa:', iMessage 'im:', Telegram 'tg:', Instagram 'ig:', Messenger 'fb:' ('fb:e2ee:' from the encrypted chats download))
  *   b  text body                   l  length in characters
  *   wc word count    e  array of emoji or null      f  trait bit flags
  *   ph/gf/vd/au/ot   photo / gif / video / audio / other attachment counts
@@ -213,7 +213,7 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
     latestNight: null, // { t, k, tod } latest time-of-night message
     yearMonths: new Map(), // year -> [12 month counts]
     replyByHour: [Array.from({ length: 24 }, () => []), Array.from({ length: 24 }, () => [])],
-    sourceMonths: new Map(), // mo -> [sms, google chat, whatsapp, imessage]
+    sourceMonths: new Map(), // mo -> messages per source (index = s, see SOURCES)
     groupMonths: new Map(), // mo -> [1-on-1, group]
     groupSenders: new Map(), // sender ('You', name, or SMS 1-on-1 key) -> messages in group chats
     sessions: 0,
@@ -281,7 +281,7 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
     ym[r.mo % 12]++;
 
     let sm = A.sourceMonths.get(r.mo);
-    if (!sm) A.sourceMonths.set(r.mo, (sm = [0, 0, 0, 0, 0, 0]));
+    if (!sm) A.sourceMonths.set(r.mo, (sm = [0, 0, 0, 0, 0, 0, 0]));
     sm[r.s || 0]++;
 
     let gm = A.groupMonths.get(r.mo);

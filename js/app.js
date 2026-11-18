@@ -17,9 +17,9 @@ const S = {
   filesDraft: [], // the Files dialog's edited copy of `files` (rows it adds also have `added`, unreadable ones `error`)
   filter: { contact: 'all', source: 'all', groups: true, people: [], from: null, to: null },
   peopleKeys: null, // Set of thread keys matching filter.people, or null when not filtering
-  // Your sender name per source whose records carry sender names (WhatsApp, iMessage, Telegram, Instagram);
+  // Your sender name per source whose records carry sender names (WhatsApp, iMessage, Telegram, Instagram, Messenger);
   // `auto` is false once picked by hand.
-  owners: { 2: { name: '', auto: true }, 3: { name: '', auto: true }, 4: { name: '', auto: true }, 5: { name: '', auto: true } },
+  owners: { 2: { name: '', auto: true }, 3: { name: '', auto: true }, 4: { name: '', auto: true }, 5: { name: '', auto: true }, 6: { name: '', auto: true } },
   firstSeen: new Map(), // key -> time of the first message ever loaded for that conversation
   archives: [], // loaded export files (zips, SMS XML); message attachments point into these by index (att.z)
   docFreq: null, // { sig, value } cache for "What you talk about"
@@ -52,24 +52,32 @@ const $$ = (sel) => [...document.querySelectorAll(sel)];
 
 // ------------------------------------------------------------------ loading
 
-const SOURCES = { 0: 'SMS', 1: 'Google Chat', 2: 'WhatsApp', 3: 'iMessage', 4: 'Telegram', 5: 'Instagram' };
-const SOURCE_MARK = { 1: '💬', 2: '🟢', 3: '🔵', 4: '✈️', 5: '📸' };
+const SOURCES = { 0: 'SMS', 1: 'Google Chat', 2: 'WhatsApp', 3: 'iMessage', 4: 'Telegram', 5: 'Instagram', 6: 'Messenger' };
+const SOURCE_MARK = { 1: '💬', 2: '🟢', 3: '🔵', 4: '✈️', 5: '📸', 6: '⚡' };
 const isZip = (f) => /\.zip$/i.test(f.name) || /zip/.test(f.type);
 /** Records from these sources carry their sender in `sn` and get `o` from S.owners. */
-const hasOwner = (s) => s === 2 || s === 3 || s === 4 || s === 5;
+const hasOwner = (s) => s === 2 || s === 3 || s === 4 || s === 5 || s === 6;
 const TELEGRAM_HTML = "This is Telegram's HTML export, which can't be read. Export again and choose “Machine-readable JSON” as the format.";
 const INSTAGRAM_HTML = "This is Instagram's HTML export, which can't be read. Export again and choose “JSON” as the format.";
-/** Instagram keeps each conversation in messages/<folder>/<name>_<id>/message_N.json. */
+const MESSENGER_HTML = "This is Facebook's HTML export, which can't be read. Export again and choose “JSON” as the format.";
+/** Instagram and Facebook keep each conversation in messages/<folder>/<name>_<id>/message_N.json. */
 const INSTAGRAM_THREAD = /(?:^|\/)messages\/[^/]+\/[^/]+\/message_\d+\.(?:json|html)$/;
+/** Signs that a DYI export, or one of its threads, is Facebook's rather than Instagram's (spec 009 R6, R7). */
+const FACEBOOK_SIGN = /your_facebook_activity\/|"Facebook user"/i;
+/** A thread of Messenger's encrypted chats download (spec 009 R2), from the start of its JSON. */
+const looksLikeEncryptedChat = (text) => /"threadName"\s*:/.test(text) && /"(?:senderName|participants)"\s*:/.test(text);
+/** Enough of a JSON file to tell what it is. */
+const JSON_PEEK = 65536;
 
 /** imessage-exporter txt starts with "May 17, 2022  5:29:42 PM"; WhatsApp with "1/2/24, …". */
 const looksLikeIMessage = (text) =>
   /^\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{2}, \d{4} {1,2}\d{1,2}:\d{2}:\d{2} [AP]M/.test(text.replace(/^\ufeff/, ''));
 
-/** 'sms' | 'gchat' | 'whatsapp' | 'imessage' | 'telegram' | 'instagram', from the extension and what's inside. */
+/** 'sms' | 'gchat' | 'whatsapp' | 'imessage' | 'telegram' | 'instagram' | 'messenger', from the extension and what's inside. */
 async function fileKind(f) {
-  if (/^message_\d+\.json$/i.test(f.name)) return 'instagram';
-  if (/\.json$/i.test(f.name)) return 'telegram';
+  // A thread on its own: Instagram unless it shows Facebook's signs. A guess, so the Files dialog can change it (spec 009 R7, R13).
+  if (/^message_\d+\.json$/i.test(f.name)) return FACEBOOK_SIGN.test(await f.slice(0, JSON_PEEK).text()) ? 'messenger' : 'instagram';
+  if (/\.json$/i.test(f.name)) return looksLikeEncryptedChat(await f.slice(0, JSON_PEEK).text()) ? 'messenger' : 'telegram';
   if (/^message_\d+\.html$/i.test(f.name)) throw new Error(INSTAGRAM_HTML);
   if (/\.html?$/i.test(f.name)) throw new Error(/^messages\d*\.html$/i.test(f.name) ? TELEGRAM_HTML : `${f.name} isn't an export this app can read`);
   if (/\.txt$/i.test(f.name)) return looksLikeIMessage(await f.slice(0, 4096).text()) ? 'imessage' : 'whatsapp';
@@ -78,16 +86,25 @@ async function fileKind(f) {
   const entries = (await listZip(f)).filter((e) => !e.name.endsWith('/'));
   if (entries.some((e) => /(?:^|\/)Google Chat\//.test(e.name))) return 'gchat';
   const ig = entries.filter((e) => INSTAGRAM_THREAD.test(e.name));
-  if (ig.some((e) => e.name.endsWith('.json'))) return 'instagram';
-  if (ig.length) throw new Error(INSTAGRAM_HTML);
+  // Facebook's export: its folders, its profile file, or (older exports) a thread that points into Facebook's.
+  const facebook = entries.some((e) => /(?:^|\/)(?:your_facebook_activity\/|profile_information\.json$)/.test(e.name)) ||
+    (!entries.some((e) => /(?:^|\/)your_instagram_activity\//.test(e.name)) && ig.some((e) => e.name.endsWith('.json')) &&
+      FACEBOOK_SIGN.test((await readEntryText(ig.find((e) => e.name.endsWith('.json')))).slice(0, JSON_PEEK)));
+  if (ig.some((e) => e.name.endsWith('.json'))) return facebook ? 'messenger' : 'instagram';
+  if (ig.length) throw new Error(facebook ? MESSENGER_HTML : INSTAGRAM_HTML);
+  if (facebook) return 'messenger'; // another part of a split export: media, or your profile
   // The other parts of a split Instagram export: media, or your profile.
   if (entries.some((e) => /(?:^|\/)(?:your_instagram_activity\/|personal_information\/|messages\/(?:inbox|archived_threads|message_requests)\/)/.test(e.name))) return 'instagram';
   if (entries.some((e) => /(?:^|\/)result\.json$/.test(e.name))) return 'telegram';
+  // Messenger's encrypted chats download: a .json per chat, maybe next to other .json files.
+  for (const e of entries.filter((x) => /\.json$/i.test(x.name))) {
+    if (looksLikeEncryptedChat((await readEntryText(e)).slice(0, JSON_PEEK))) return 'messenger';
+  }
   if (entries.some((e) => /(?:^|\/)messages\d*\.html$/.test(e.name))) throw new Error(TELEGRAM_HTML);
   if (entries.some((e) => /(?:^|\/)(?:_chat|WhatsApp[^/]*)\.txt$/i.test(e.name))) return 'whatsapp';
   const txt = entries.find((e) => /\.txt$/i.test(e.name) && !/(?:^|\/)orphaned\.txt$/i.test(e.name)) || entries.find((e) => /\.txt$/i.test(e.name));
   if (txt) return looksLikeIMessage(await readEntryText(txt)) ? 'imessage' : 'whatsapp';
-  throw new Error(`${f.name} isn't a Google Takeout, WhatsApp, iMessage, Telegram or Instagram export`);
+  throw new Error(`${f.name} isn't a Google Takeout, WhatsApp, iMessage, Telegram, Instagram or Messenger export`);
 }
 
 let fileSeq = 0;
@@ -186,6 +203,13 @@ async function readFiles(entries) {
       S.archives.push(...ig);
       jobs.push({ files: ig, attBase, parse: (cb) => parseInstagramFiles(ig, cb) });
     }
+    const fb = of('messenger');
+    if (fb.length) {
+      // Same as Instagram, and the encrypted chats download goes with the DYI export (spec 009 R11).
+      const attBase = S.archives.length;
+      S.archives.push(...fb);
+      jobs.push({ files: fb, attBase, parse: (cb) => parseMessengerFiles(fb, cb) });
+    }
 
     for (let i = 0; i < jobs.length; i++) {
       job = jobs[i];
@@ -193,16 +217,22 @@ async function readFiles(entries) {
       const done = await job.parse({
         onBatch(msgs, calls) {
           for (const m of msgs) {
-            // WhatsApp / iMessage / Telegram / Instagram records get `o` later (see applyOwners), so key them by sender.
+            // WhatsApp / iMessage / Telegram / Instagram / Messenger records get `o` later (see applyOwners), so key them by sender.
             const key = `${m.t}|${hasOwner(m.s) ? m.sn : m.o}|${m.k}|${m.l}|${m.m}`;
             const seen = S.seenMsgs.get(key);
             if (seen !== undefined) {
-              // The same message in an overlapping export: keep the reactions both list.
+              // The same message in an overlapping export: keep the reactions both list, and
+              // its files if only this copy can open them (a thread file read before its zip).
               if (seen && m.rx) seen.rx = mergeReactions(seen.rx, m.rx);
+              if (seen && m.att && !seen.att) {
+                if (job.attBase) for (const a of m.att) if (a.z != null) a.z += job.attBase;
+                seen.att = m.att;
+                seen.mb = m.mb;
+              }
               continue;
             }
             // Reactions sent as texts (tapbacks, "😂 to “…”") aren't messages. Reactions
-            // on a message (Instagram, Telegram, Google Chat) ride along in its rx.
+            // on a message (Instagram, Messenger, Telegram, Google Chat) ride along in its rx.
             if (m.f & T_REACTION) { S.seenMsgs.set(key, null); S.reactions++; continue; }
             S.seenMsgs.set(key, m);
             if (m.att && job.attBase) for (const a of m.att) if (a.z != null) a.z += job.attBase;
@@ -247,7 +277,7 @@ async function readFiles(entries) {
     return {
       error: chatBadDates
         ? 'The Google Chat dates are in a language this app can\'t read yet. Set your Google account language to English, export again, and retry.'
-        : 'No messages or calls were found. Use an XML backup from SMS Backup & Restore (sms-*.xml or calls-*.xml), a Google Takeout zip that includes Google Chat, a WhatsApp chat export (.txt or .zip), an iMessage export, a Telegram export (result.json, or a zip of the export folder), or an Instagram export (.zip, JSON format).',
+        : 'No messages or calls were found. Use an XML backup from SMS Backup & Restore (sms-*.xml or calls-*.xml), a Google Takeout zip that includes Google Chat, a WhatsApp chat export (.txt or .zip), an iMessage export, a Telegram export (result.json, or a zip of the export folder), an Instagram export (.zip, JSON format), or a Facebook Messenger export (.zip, JSON format, or the encrypted chats download).',
       failed: entries.map((e) => e.file),
     };
   }
@@ -355,7 +385,7 @@ function keySources(key) {
   return c && c.person ? c.sources : [(c && c.s) || 0];
 }
 
-// ------------------------------------------------------------------ export owner (WhatsApp, iMessage, Telegram, Instagram)
+// ------------------------------------------------------------------ export owner (WhatsApp, iMessage, Telegram, Instagram, Messenger)
 
 const sameName = (a, b) => a.replace(/[\s~]/g, '').toLowerCase() === b.replace(/[\s~]/g, '').toLowerCase();
 
@@ -711,7 +741,9 @@ function initPeople() {
 
 // ------------------------------------------------------------------ loaded files (spec 006)
 
-const FILE_LOGO = { sms: 'sms', gchat: 'googlechat', whatsapp: 'whatsapp', imessage: 'imessage', telegram: 'telegram', instagram: 'instagram' };
+const FILE_LOGO = { sms: 'sms', gchat: 'googlechat', whatsapp: 'whatsapp', imessage: 'imessage', telegram: 'telegram', instagram: 'instagram', messenger: 'messenger' };
+/** A thread file on its own, whose app is a guess the user can change (spec 009 R13). */
+const isGuessedThread = (e) => !e.error && (e.kind === 'instagram' || e.kind === 'messenger') && /^message_\d+\.json$/i.test(e.name);
 
 /** The filter bar's Files button: how many files are loaded, and how many are in use (R1). Off while files are read (R15). */
 function updateFilesButton() {
@@ -741,9 +773,13 @@ function renderFilesDialog() {
       const mark = e.error
         ? '<span class="files-warn" aria-hidden="true">⚠</span>'
         : `<svg class="logo" aria-hidden="true"><use href="#logo-${FILE_LOGO[e.kind]}"/></svg>`;
+      // A thread file on its own could be either app: say which it's read as, and let the user change it (spec 009 R13).
+      const app = isGuessedThread(e)
+        ? `<select class="files-app" aria-label="App for ${name}">${['instagram', 'messenger'].map((k) => `<option value="${k}"${e.kind === k ? ' selected' : ''}>${k === 'instagram' ? 'Instagram' : 'Messenger'}</option>`).join('')}</select>`
+        : '';
       return `<li data-file="${e.id}"${e.on ? '' : ' class="off"'}>
         <label class="files-pick"><input type="checkbox"${e.on ? ' checked' : ''}${e.error ? ' disabled' : ''}>${mark}<span class="files-name">${name}</span>${e.added ? '<small class="files-new">new</small>' : ''}</label>
-        <span class="files-size">${fmtBytes(e.size)}</span>
+        ${app}<span class="files-size">${fmtBytes(e.size)}</span>
         <button class="chip-x files-x" type="button" data-remove="${e.id}" aria-label="Remove ${name}" title="Remove">✕</button>
         ${e.error ? `<p class="files-error">${escapeHtml(e.error)}</p>` : ''}
       </li>`;
@@ -850,13 +886,17 @@ function initFiles() {
     (left[Math.min(i, left.length - 1)] || $('#addFilesBtn')).focus();
   });
   dlg.addEventListener('change', (e) => {
-    if (e.target.type !== 'checkbox') return;
     const li = e.target.closest('[data-file]');
-    const d = S.filesDraft.find((d) => d.id === +li.dataset.file);
+    const d = li && S.filesDraft.find((d) => d.id === +li.dataset.file);
     if (!d) return;
-    // Update the row rather than redraw the list, so the checkbox keeps keyboard focus.
-    d.on = e.target.checked;
-    li.classList.toggle('off', !d.on);
+    // Update the row rather than redraw the list, so the control keeps keyboard focus.
+    if (e.target.type === 'checkbox') {
+      d.on = e.target.checked;
+      li.classList.toggle('off', !d.on);
+    } else if (e.target.classList.contains('files-app')) {
+      d.kind = e.target.value;
+      li.querySelector('.logo use').setAttribute('href', `#logo-${FILE_LOGO[d.kind]}`);
+    } else return;
     syncFilesActions();
   });
 }
@@ -1727,7 +1767,7 @@ function renderCrossApp(ui, X) {
 
   // M7, M8: routes and what sets off a switch
   Charts.set('c-routes', P.switches ? switchRoutesOption(ui, P.routes, SOURCES) : emptyOption(ui, 'No switches in this selection'));
-  const kinds = CROSS_TRIGGERS.filter((t) => t !== 'share' || P.apps.has(5) || P.triggers.share);
+  const kinds = CROSS_TRIGGERS.filter((t) => t !== 'share' || P.apps.has(5) || P.apps.has(6) || P.triggers.share);
   $('#appsTriggers').innerHTML = P.switches
     ? kinds.map((t) => `<li><span>${TRIGGER_TEXT[t]}</span><span class="meter" aria-hidden="true"><i style="width: ${(P.triggers[t] / P.switches) * 100}%"></i></span><span class="meta">${shareText(P.triggers[t], P.switches)} · ${fmtNum(P.triggers[t])}</span></li>`).join('')
     : '<li class="empty">No switches in this selection.</li>';

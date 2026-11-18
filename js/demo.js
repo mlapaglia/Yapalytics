@@ -2,8 +2,9 @@
  * Synthetic demo backup. Builds a realistic-looking sms-*.xml and calls-*.xml in the
  * same format SMS Backup & Restore writes (including emoji as surrogate entities and
  * base64 attachment data), plus a Google Takeout Google Chat export, WhatsApp
- * chat exports, an imessage-exporter export, a Telegram export and an Instagram export,
- * so the demo goes through the real parsers.
+ * chat exports, an imessage-exporter export, a Telegram export, an Instagram export and
+ * both Messenger exports (Facebook's and the encrypted chats download), so the demo goes
+ * through the real parsers.
  */
 function buildDemoFiles() {
   let seed = 20240611;
@@ -186,6 +187,7 @@ function buildDemoFiles() {
     ...buildDemoIMessage(rand, pick, lines, end.getTime()),
     buildDemoTelegram(rand, pick, lines, end.getTime()),
     buildDemoInstagram(rand, pick, lines, end.getTime()),
+    ...buildDemoMessenger(rand, pick, lines, end.getTime()),
   ];
 }
 
@@ -309,6 +311,147 @@ function buildDemoInstagram(rand, pick, lines, endT) {
     `instagram-jamiepark-${stamp}-dEmO01.zip`,
     { type: 'application/zip' },
   );
+}
+
+/*
+ * Synthetic Messenger exports (spec 009): Facebook's "Download your information" in JSON,
+ * and Messenger's download of end-to-end encrypted chats. Noor Haddad is also on Instagram:
+ * her older Messenger history is in the Facebook export's e2ee_cutover/ and the newer one
+ * in the encrypted download, so the People button suggests linking all three, and once
+ * linked the Across apps tab shows switches between Instagram and Messenger. Includes the
+ * formats' quirks: escaped UTF-8 and notices (calls, nicknames, themes) in the Facebook
+ * export; plain UTF-8, camelCase fields, unsent messages and ./media/ files in the
+ * encrypted one.
+ */
+function buildDemoMessenger(rand, pick, lines, endT) {
+  const DAY = 86400000;
+  const me = 'Jamie Park';
+  const noor = 'Noor Haddad';
+  const maya = 'Maya Chen';
+  const grace = 'Grace Okafor';
+  const textLines = lines.filter((l) => !/^(?:Liked|Loved|Laughed|\S+ to “)/.test(l));
+  const root = 'your_facebook_activity/messages/';
+  const dyiFiles = [];
+  const e2eeFiles = [];
+  let photoN = 1;
+
+  /** Messages between `people` on days from `from` to `to`, oldest first: [{ t, who }]. */
+  const days = (people, perDay, from, to) => {
+    const out = [];
+    for (let day = from; day < to; day += DAY) {
+      if (rand() > perDay) continue;
+      let t = day + (9 + Math.floor(rand() * 14)) * 3600e3 + Math.floor(rand() * 3600e3);
+      let who = pick(people);
+      for (let i = 0, n = 1 + Math.floor(rand() * rand() * 10); i < n && t < to; i++) {
+        out.push({ t, who });
+        who = rand() < 0.35 ? who : pick(people.filter((p) => p !== who));
+        t += Math.floor((rand() < 0.8 ? rand() * 6 : 6 + rand() * 120) * 60000) + 1000 + Math.floor(rand() * 1000);
+      }
+    }
+    return out;
+  };
+
+  /** A message in Facebook's DYI format. */
+  const dyiMessage = ({ t, who }, dir, other) => {
+    const m = { sender_name: who, timestamp_ms: t, is_geoblocked_for_viewer: false, is_unsent_image_by_messenger_kid_parent: false };
+    const r = rand();
+    if (r < 0.05) {
+      const uri = `${root}${dir}/photos/${400000000000000 + photoN++}.png`;
+      dyiFiles.push([uri, demoPng(rand)]);
+      m.content = `${who === me ? 'You' : who} sent a photo.`;
+      m.photos = [{ uri, creation_timestamp: Math.floor(t / 1000) }];
+    } else if (r < 0.08) {
+      m.content = 'https://www.youtube.com/watch?v=' + Math.floor(rand() * 1e9).toString(36);
+      m.share = { link: m.content };
+    } else {
+      m.content = pick(textLines);
+    }
+    if (rand() < 0.07) m.reactions = [{ reaction: pick(['❤️', '😆', '😮', '👍']), actor: who === me ? other : me }];
+    return m;
+  };
+
+  /** A message in the encrypted chats download's format. */
+  const e2eeMessage = ({ t, who }, other) => {
+    const m = { isUnsent: false, media: [], reactions: [], senderName: who, text: '', timestamp: t, type: 'text' };
+    const r = rand();
+    if (r < 0.05) {
+      const id = [8, 4, 4, 4, 12].map((n) => Array.from({ length: n }, () => Math.floor(rand() * 16).toString(16)).join('')).join('-');
+      e2eeFiles.push([`media/${id}.png`, demoPng(rand)]);
+      m.media = [{ uri: `./media/${id}.png` }];
+      m.type = 'media';
+    } else if (r < 0.065) {
+      m.isUnsent = true; // left out
+    } else {
+      m.text = pick(textLines);
+    }
+    if (rand() < 0.07) m.reactions = [{ actor: who === me ? other : me, reaction: pick(['❤️', '😆', '😮', '👍']) }];
+    return m;
+  };
+
+  const thread = (dir, title, people, messages) => ({
+    participants: people.map((name) => ({ name })),
+    messages: messages.reverse(), // newest first, like the real thing
+    title,
+    is_still_participant: true,
+    thread_path: dir,
+    magic_words: [],
+    image: { uri: '', creation_timestamp: 0 },
+  });
+  const enc = new TextEncoder();
+  const metaJson = (data) => JSON.stringify(data, null, 2).replace(/[^\x00-\x7f]/gu, (ch) => [...enc.encode(ch)].map((b) => '\\u00' + b.toString(16).padStart(2, '0')).join(''));
+  const e2eeThread = (threadName, other, messages) => JSON.stringify({ participants: [me, other], threadName, messages: messages.reverse() }, null, 2);
+
+  const cutover = endT - 200 * DAY;
+  const start = endT - 720 * DAY;
+
+  const noorDir = 'e2ee_cutover/noorhaddad_10160000000000001';
+  const noorOld = days([noor, me], 0.45, start, cutover).map((x) => dyiMessage(x, noorDir, noor));
+  const callAt = noorOld[Math.floor(noorOld.length / 2)].timestamp_ms + 60000;
+  noorOld.push(
+    { sender_name: noor, timestamp_ms: callAt, content: `${noor} called you.`, call_duration: 1260, is_geoblocked_for_viewer: false },
+    { sender_name: me, timestamp_ms: callAt + 2 * DAY, content: `You set the nickname for ${noor} to Noorie.`, is_geoblocked_for_viewer: false });
+  noorOld.sort((a, b) => a.timestamp_ms - b.timestamp_ms);
+
+  const mayaDir = 'inbox/mayachen_10160000000000002';
+  const mayaOld = days([maya, me], 0.3, start, cutover).map((x) => dyiMessage(x, mayaDir, maya));
+
+  const groupDir = 'inbox/bookclub_5432109876543210';
+  const groupStart = start + 30 * DAY;
+  const group = days([grace, me, maya, noor], 0.2, groupStart, endT).map((x) => dyiMessage(x, groupDir, grace));
+  group.unshift(
+    { sender_name: grace, timestamp_ms: groupStart - 3600e3, content: `${grace} named the group Book Club 📚.`, is_geoblocked_for_viewer: false },
+    { sender_name: maya, timestamp_ms: groupStart - 1800e3, content: `${maya} changed the theme to Lavender.`, is_geoblocked_for_viewer: false });
+
+  const requestDir = 'message_requests/cryptodeals_10160000000000003';
+
+  const noorNew = days([noor, me], 0.35, cutover, endT).map((x) => e2eeMessage(x, noor));
+  const mayaNew = days([maya, me], 0.25, cutover, endT).map((x) => e2eeMessage(x, maya));
+
+  const stamp = new Date(endT).toISOString().slice(0, 10);
+  const dyi = new File(
+    [buildStoredZip([
+      ['personal_information/profile_information/profile_information.json', metaJson({
+        profile_v2: { name: { full_name: me, first_name: 'Jamie', middle_name: '', last_name: 'Park' }, emails: { emails: ['jamie@example.com'] } },
+      })],
+      [`${root}${noorDir}/message_1.json`, metaJson(thread(noorDir, noor, [noor, me], noorOld))],
+      [`${root}${mayaDir}/message_1.json`, metaJson(thread(mayaDir, maya, [maya, me], mayaOld))],
+      [`${root}${groupDir}/message_1.json`, metaJson(thread(groupDir, 'Book Club 📚', [grace, me, maya, noor], group))],
+      [`${root}${requestDir}/message_1.json`, metaJson(thread(requestDir, 'Crypto Deals', ['Crypto Deals', me], [{ sender_name: 'Crypto Deals', timestamp_ms: endT - 5 * DAY, content: 'Double your money 💰' }]))],
+      ...dyiFiles,
+    ])],
+    `facebook-jamiepark-${stamp}-dEmO02.zip`,
+    { type: 'application/zip' },
+  );
+  const e2ee = new File(
+    [buildStoredZip([
+      [`${noor}_3.json`, e2eeThread(`${noor}_3`, noor, noorNew)],
+      [`${maya}_7.json`, e2eeThread(`${maya}_7`, maya, mayaNew)],
+      ...e2eeFiles,
+    ])],
+    `messenger-encrypted-chats-${stamp}.zip`,
+    { type: 'application/zip' },
+  );
+  return [dyi, e2ee];
 }
 
 /*

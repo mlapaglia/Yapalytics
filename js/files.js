@@ -9,7 +9,7 @@ const sameFile = (a, b) => a.name === b.name && a.size === b.size && a.lastModif
  * export keeps its media in another part, and WhatsApp date formats are worked out from
  * every export at once.
  */
-const READ_TOGETHER = new Set(['gchat', 'whatsapp', 'instagram']);
+const READ_TOGETHER = new Set(['gchat', 'whatsapp', 'instagram', 'messenger']);
 
 /**
  * What applying the Files dialog's `draft` to the loaded `current` list takes. Entries are
@@ -17,7 +17,8 @@ const READ_TOGETHER = new Set(['gchat', 'whatsapp', 'instagram']);
  * only ever adds, so newly checked files can usually load on their own. Everything is read
  * again (a rebuild) when a loaded file is left out, since overlapping exports are
  * deduplicated as they're read and one file's share can't be taken back out, or when a
- * new file must be read together with loaded files of its kind.
+ * new file must be read together with loaded files of its kind, or when a loaded file is
+ * to be read as another app (spec 009 R13).
  * Returns `{ changed, rebuild, read }`: `read` is the entries to read, in draft order.
  */
 function planFileChanges(current, draft) {
@@ -29,8 +30,10 @@ function planFileChanges(current, draft) {
   const fresh = usable.filter((e) => e.on && !loaded(e));
   const dropped = current.some((e) => e.on && !(now.has(e.id) && now.get(e.id).on));
   const joins = fresh.some((e) => READ_TOGETHER.has(e.kind) && kept.some((k) => k.kind === e.kind));
-  const rebuild = dropped || joins;
-  const changed = current.length !== usable.length || usable.some((e) => !was.has(e.id) || was.get(e.id).on !== e.on);
+  // A loaded file read as another app now (spec 009 R13): its messages have to come out and go back in.
+  const recast = kept.some((e) => was.get(e.id).kind !== e.kind);
+  const rebuild = dropped || joins || recast;
+  const changed = current.length !== usable.length || usable.some((e) => !was.has(e.id) || was.get(e.id).on !== e.on || was.get(e.id).kind !== e.kind);
   return { changed, rebuild, read: rebuild ? usable.filter((e) => e.on) : fresh };
 }
 

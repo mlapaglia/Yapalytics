@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Yapalytics</title>
-  <meta name="description" content="Charts and statistics for SMS Backup & Restore XML backups, Google Chat exports from Google Takeout, WhatsApp chat exports, iMessage exports, Telegram exports and Instagram exports, processed entirely in your browser.">
+  <meta name="description" content="Charts and statistics for SMS Backup & Restore XML backups, Google Chat exports from Google Takeout, WhatsApp chat exports, iMessage exports, Telegram exports, Instagram exports and Facebook Messenger exports, processed entirely in your browser.">
   <link rel="stylesheet" href="css/styles.css">
   <script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js"></script>
 </head>
@@ -15,6 +15,9 @@
       <linearGradient id="logo-instagram-fill" gradientUnits="userSpaceOnUse" x1="2" y1="22" x2="22" y2="2">
         <stop offset="0" stop-color="#ffd600"/><stop offset=".25" stop-color="#ff7a00"/><stop offset=".5" stop-color="#ff0069"/><stop offset=".75" stop-color="#d300c5"/><stop offset="1" stop-color="#7638fa"/>
       </linearGradient>
+      <linearGradient id="logo-messenger-fill" gradientUnits="userSpaceOnUse" x1="4" y1="24" x2="20" y2="0">
+        <stop offset="0" stop-color="#0099ff"/><stop offset=".6" stop-color="#a033ff"/><stop offset=".9" stop-color="#ff5280"/><stop offset="1" stop-color="#ff7061"/>
+      </linearGradient>
     </defs>
     <symbol id="logo-sms" viewBox="0 0 24 24"><path fill="currentColor" d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM9 11H7V9h2v2zm4 0h-2V9h2v2zm4 0h-2V9h2v2z"/></symbol>
     <symbol id="logo-googlechat" viewBox="0 0 24 24"><path fill="#34a853" d="M1.637 0C.733 0 0 .733 0 1.637v16.5c0 .904.733 1.636 1.637 1.636h3.955v3.323c0 .804.97 1.207 1.539.638l3.963-3.96h11.27c.903 0 1.636-.733 1.636-1.637V5.592L18.408 0Zm3.955 5.592h12.816v8.59H8.455l-2.863 2.863Z"/></symbol>
@@ -22,13 +25,14 @@
     <symbol id="logo-imessage" viewBox="0 0 24 24"><path fill="#34da50" d="M5.285 0A5.273 5.273 0 0 0 0 5.285v13.43A5.273 5.273 0 0 0 5.285 24h13.43A5.273 5.273 0 0 0 24 18.715V5.285A5.273 5.273 0 0 0 18.715 0ZM12 4.154a8.809 7.337 0 0 1 8.809 7.338A8.809 7.337 0 0 1 12 18.828a8.809 7.337 0 0 1-2.492-.303A8.656 7.337 0 0 1 5.93 19.93a9.929 7.337 0 0 0 1.54-2.155 8.809 7.337 0 0 1-4.279-6.283A8.809 7.337 0 0 1 12 4.154"/></symbol>
     <symbol id="logo-telegram" viewBox="0 0 24 24"><path fill="#26a5e4" d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></symbol>
     <symbol id="logo-instagram" viewBox="0 0 24 24"><path fill="url(#logo-instagram-fill)" d="M7.0301.084c-1.2768.0602-2.1487.264-2.911.5634-.7888.3075-1.4575.72-2.1228 1.3877-.6652.6677-1.075 1.3368-1.3802 2.127-.2954.7638-.4956 1.6365-.552 2.914-.0564 1.2775-.0689 1.6882-.0626 4.947.0062 3.2586.0206 3.6671.0825 4.9473.061 1.2765.264 2.1482.5635 2.9107.308.7889.72 1.4573 1.388 2.1228.6679.6655 1.3365 1.0743 2.1285 1.38.7632.295 1.6361.4961 2.9134.552 1.2773.056 1.6884.069 4.9462.0627 3.2578-.0062 3.668-.0207 4.9478-.0814 1.28-.0607 2.147-.2652 2.9098-.5633.7889-.3086 1.4578-.72 2.1228-1.3881.665-.6682 1.0745-1.3378 1.3795-2.1284.2957-.7632.4966-1.636.552-2.9124.056-1.2809.0692-1.6898.063-4.948-.0063-3.2583-.021-3.6668-.0817-4.9465-.0607-1.2797-.264-2.1487-.5633-2.9117-.3084-.7889-.72-1.4568-1.3876-2.1228C21.2982 1.33 20.628.9208 19.8378.6165 19.074.321 18.2017.1197 16.9244.0645 15.6471.0093 15.236-.005 11.977.0014 8.718.0076 8.31.0215 7.0301.0839m.1402 21.6932c-1.17-.0509-1.8053-.2453-2.2287-.408-.5606-.216-.96-.4771-1.3819-.895-.422-.4178-.6811-.8186-.9-1.378-.1644-.4234-.3624-1.058-.4171-2.228-.0595-1.2645-.072-1.6442-.079-4.848-.007-3.2037.0053-3.583.0607-4.848.05-1.169.2456-1.805.408-2.2282.216-.5613.4762-.96.895-1.3816.4188-.4217.8184-.6814 1.3783-.9003.423-.1651 1.0575-.3614 2.227-.4171 1.2655-.06 1.6447-.072 4.848-.079 3.2033-.007 3.5835.005 4.8495.0608 1.169.0508 1.8053.2445 2.228.408.5608.216.96.4754 1.3816.895.4217.4194.6816.8176.9005 1.3787.1653.4217.3617 1.056.4169 2.2263.0602 1.2655.0739 1.645.0796 4.848.0058 3.203-.0055 3.5834-.061 4.848-.051 1.17-.245 1.8055-.408 2.2294-.216.5604-.4763.96-.8954 1.3814-.419.4215-.8181.6811-1.3783.9-.4224.1649-1.0577.3617-2.2262.4174-1.2656.0595-1.6448.072-4.8493.079-3.2045.007-3.5825-.006-4.848-.0608M16.953 5.5864A1.44 1.44 0 1 0 18.39 4.144a1.44 1.44 0 0 0-1.437 1.4424M5.8385 12.012c.0067 3.4032 2.7706 6.1557 6.173 6.1493 3.4026-.0065 6.157-2.7701 6.1506-6.1733-.0065-3.4032-2.771-6.1565-6.174-6.1498-3.403.0067-6.156 2.771-6.1496 6.1738M8 12.0077a4 4 0 1 1 4.008 3.9921A3.9996 3.9996 0 0 1 8 12.0077"/></symbol>
+    <symbol id="logo-messenger" viewBox="0 0 24 24"><path fill="url(#logo-messenger-fill)" d="M.001 11.639C.001 4.949 5.241 0 12.001 0S24 4.95 24 11.639c0 6.689-5.24 11.638-12 11.638-1.21 0-2.38-.16-3.47-.46a.96.96 0 0 0-.64.05l-2.39 1.05a.96.96 0 0 1-1.35-.85l-.07-2.14a.97.97 0 0 0-.32-.68A11.39 11.389 0 0 1 .002 11.64zm8.32-2.19-3.52 5.6c-.35.53.32 1.139.82.75l3.79-2.87c.26-.2.6-.2.87 0l2.8 2.1c.84.63 2.04.4 2.6-.48l3.52-5.6c.35-.53-.32-1.13-.82-.75l-3.79 2.87c-.25.2-.6.2-.86 0l-2.8-2.1a1.8 1.8 0 0 0-2.61.48z"/></symbol>
   </svg>
   <header class="topbar">
     <div class="brand">
       <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm3 9v2h2v-2H7Zm4-4v6h2V9h-2Zm4-2v8h2V7h-2Z"/></svg>
       Yapalytics
     </div>
-    <span class="tagline">for SMS Backup &amp; Restore, Google Chat, WhatsApp, iMessage, Telegram and Instagram</span>
+    <span class="tagline">for SMS Backup &amp; Restore, Google Chat, WhatsApp, iMessage, Telegram, Instagram and Messenger</span>
     <div class="spacer"></div>
     <button id="themeBtn" class="btn ghost" data-mode="auto" title="Switch color theme">◐ Auto</button>
     <a class="btn ghost icon" href="https://github.com/mlapaglia/Yapalytics" target="_blank" rel="noopener" title="View the source on GitHub" aria-label="View the source on GitHub">
@@ -159,13 +163,31 @@
           </div>
         </article>
 
+        <article class="source">
+          <header>
+            <span class="source-icon" aria-hidden="true"><svg class="logo"><use href="#logo-messenger"/></svg></span>
+            <div><h3>Messenger</h3><p>Facebook, plus encrypted chats</p></div>
+          </header>
+          <ol>
+            <li>On Facebook, open <b>Accounts Center</b> → <b>Your information and permissions</b> → <b>Export your information</b>, then <b>Create export</b> → <b>Export to device</b>. Pick <b>Messages</b> (and <b>Personal information</b>, so the app knows which sender is you), <b>All time</b> and <b>JSON</b>.</li>
+            <li>That export leaves out end-to-end encrypted chats, which Messenger has used for personal chats since late 2023. Get those on a computer in Messenger: <b>Settings</b> → <b>Privacy &amp; safety</b> → <b>End-to-end encrypted chats</b> → <b>Message storage</b> → <b>Download secure storage data</b>.</li>
+            <li>Download both. Large Facebook exports come in several parts; download them all.</li>
+          </ol>
+          <p class="pick">Choose the <code>.zip</code> files together</p>
+          <p class="note">The HTML format can't be read. Encrypted chats are only there if secure storage was turned on. Message requests are left out.</p>
+          <div class="links">
+            <a class="btn small" href="https://accountscenter.facebook.com/info_and_permissions/dyi/" target="_blank" rel="noopener">Export your information <span aria-hidden="true">↗</span></a>
+            <a class="btn small ghost" href="https://www.messenger.com/help/820525008940780/" target="_blank" rel="noopener">Encrypted chats help <span aria-hidden="true">↗</span></a>
+          </div>
+        </article>
+
         <article class="source tips">
           <header>
             <span class="source-icon" aria-hidden="true">🧩</span>
             <div><h3>Mix and match</h3><p>Tips</p></div>
           </header>
           <ul>
-            <li>Choose exports from several apps at once. Each conversation is marked with its app <span class="nowrap">(💬 🟢 🔵 ✈️ 📸)</span>, and the source switch compares them.</li>
+            <li>Choose exports from several apps at once. Each conversation is marked with its app <span class="nowrap">(💬 🟢 🔵 ✈️ 📸 ⚡)</span>, and the source switch compares them.</li>
             <li>Use <b>📁 Files</b> on the dashboard to add more later, or to leave some out. Overlapping exports are merged, not counted twice.</li>
             <li>Not ready to export? The demo shows every chart with made-up conversations.</li>
           </ul>
@@ -201,6 +223,7 @@
         <button data-source="3"><svg class="logo" aria-hidden="true"><use href="#logo-imessage"/></svg>iMessage</button>
         <button data-source="4"><svg class="logo" aria-hidden="true"><use href="#logo-telegram"/></svg>Telegram</button>
         <button data-source="5"><svg class="logo" aria-hidden="true"><use href="#logo-instagram"/></svg>Instagram</button>
+        <button data-source="6"><svg class="logo" aria-hidden="true"><use href="#logo-messenger"/></svg>Messenger</button>
       </div>
       <div class="owner-fields" id="ownerFields"></div>
       <label class="check"><input type="checkbox" id="groupsChk" checked> Include group chats</label>
