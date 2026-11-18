@@ -96,9 +96,10 @@ async function fileKind(f) {
   // The other parts of a split Instagram export: media, or your profile.
   if (entries.some((e) => /(?:^|\/)(?:your_instagram_activity\/|personal_information\/|messages\/(?:inbox|archived_threads|message_requests)\/)/.test(e.name))) return 'instagram';
   if (entries.some((e) => /(?:^|\/)result\.json$/.test(e.name))) return 'telegram';
-  // Messenger's encrypted chats download: a .json per chat.
-  const chat = entries.find((e) => /\.json$/i.test(e.name));
-  if (chat && looksLikeEncryptedChat((await readEntryText(chat)).slice(0, JSON_PEEK))) return 'messenger';
+  // Messenger's encrypted chats download: a .json per chat, maybe next to other .json files.
+  for (const e of entries.filter((x) => /\.json$/i.test(x.name))) {
+    if (looksLikeEncryptedChat((await readEntryText(e)).slice(0, JSON_PEEK))) return 'messenger';
+  }
   if (entries.some((e) => /(?:^|\/)messages\d*\.html$/.test(e.name))) throw new Error(TELEGRAM_HTML);
   if (entries.some((e) => /(?:^|\/)(?:_chat|WhatsApp[^/]*)\.txt$/i.test(e.name))) return 'whatsapp';
   const txt = entries.find((e) => /\.txt$/i.test(e.name) && !/(?:^|\/)orphaned\.txt$/i.test(e.name)) || entries.find((e) => /\.txt$/i.test(e.name));

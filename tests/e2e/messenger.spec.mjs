@@ -6,7 +6,7 @@ import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab } fro
 import { zippedExport as instagramExport } from '../helpers/instagram.mjs';
 import { resultJson, singleChatExport } from '../helpers/telegram.mjs';
 import {
-  e2eeMessage, encryptedExport, encryptedThread, facebookExport, facebookHtmlExport, looseFacebookThread, plainThread,
+  alexEncrypted, e2eeMessage, encryptedExport, encryptedThread, facebookExport, facebookHtmlExport, looseFacebookThread, plainThread,
   samEncryptedThread, splitFacebookExport,
 } from '../helpers/messenger.mjs';
 
@@ -78,6 +78,19 @@ test.describe('spec 009 Messenger', () => {
     await tile.click();
     await page.waitForFunction(() => document.querySelector('#viewer .viewer-stage img')?.naturalWidth);
     expect(await page.$eval('#viewer .viewer-stage img', (i) => [i.naturalWidth, i.naturalHeight])).toEqual([1600, 1200]);
+  });
+
+  test('R2: an encrypted chats zip is recognised by any chat in it, not just its first .json', async ({ page }) => {
+    const { makeZip } = await import('../helpers/zip.mjs');
+    await loadFiles(page, {
+      name: 'messenger-encrypted-chats.zip',
+      mimeType: 'application/zip',
+      buffer: makeZip([
+        { name: 'a-settings.json', data: '{"theme":"dark"}' },
+        { name: 'Alex Rivera_6.json', data: JSON.stringify(alexEncrypted(), null, 2) },
+      ]),
+    });
+    expect((await countsOf(page)).n).toBe(7);
   });
 
   test('AC18: the same encrypted chat loaded twice counts once, and keeps the photo the zip can open', async ({ page }) => {
