@@ -85,3 +85,22 @@ describe('spec 005 linked people: names', () => {
     assert.equal(defaultPersonName([{ s: 0, name: '(555) 123-4567', n: 3 }, { s: 5, name: 'Instagram User', n: 1 }]), '(555) 123-4567');
   });
 });
+
+describe('spec 009 Messenger in linked people', () => {
+  const fb = (key, name) => ({ key, s: 6, name, title: name, addr: '', group: false });
+
+  it('AC15: a Facebook export chat and an encrypted chat with one name link with Instagram', () => {
+    const out = suggestLinks([ig('ig:alex_1', 'Alex Rivera'), fb('fb:alexrivera_1111', 'Alex Rivera'), fb('fb:e2ee:Alex Rivera_6', 'Alex Rivera')]);
+    assert.deepEqual(out, [{ keys: ['fb:alexrivera_1111', 'fb:e2ee:Alex Rivera_6', 'ig:alex_1'], reasons: ['name'] }]);
+  });
+
+  it('AC15: two Facebook export chats with one name are still ambiguous, and so are two encrypted ones', () => {
+    assert.deepEqual(suggestLinks([ig('ig:alex_1', 'Alex Rivera'), fb('fb:alex_1', 'Alex Rivera'), fb('fb:alex_2', 'Alex Rivera')]), []);
+    assert.deepEqual(suggestLinks([ig('ig:alex_1', 'Alex Rivera'), fb('fb:e2ee:Alex Rivera_1', 'Alex Rivera'), fb('fb:e2ee:Alex Rivera_2', 'Alex Rivera')]), []);
+  });
+
+  it('R10: a default name comes from Messenger after Instagram, and "Facebook user" is not a name', () => {
+    assert.equal(defaultPersonName([{ s: 6, name: 'Alex R', n: 900 }, { s: 5, name: 'alexr.99', n: 10 }]), 'alexr.99');
+    assert.deepEqual(identityTokens(fb('fb:x', 'Facebook user')), []);
+  });
+});

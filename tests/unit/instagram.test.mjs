@@ -4,7 +4,7 @@ import { runParser } from '../helpers/worker.mjs';
 import { asFile, igMessage, looseThread, splitExport, threadOf, zippedExport, zippedHtmlExport } from '../helpers/instagram.mjs';
 import { loadScripts } from '../helpers/load.mjs';
 
-const parse = (...specs) => runParser('instagram.js', 'instagramParserWorker', { files: specs.map(asFile) });
+const parse = (...specs) => runParser('instagram.js', 'metaParserWorker', { files: specs.map(asFile) });
 const T0 = Date.parse('2024-08-20T10:00:00Z');
 const T_REACTION = 16;
 const byKey = (out, k) => out.msgs.filter((m) => m.k === k).sort((a, b) => a.t - b.t);
@@ -128,7 +128,7 @@ describe('spec 004 Instagram shared posts: parser', () => {
   });
 
   it('AC5: the caption is not counted as the sender\'s words, emoji or mood', async () => {
-    const out = await runParser('instagram.js', 'instagramParserWorker', { files: [asFile(threadOf(igMessage(0, 'Alex', { content: 'Alex sent an attachment.', share: reel })))] }, { vader: true });
+    const out = await runParser('instagram.js', 'metaParserWorker', { files: [asFile(threadOf(igMessage(0, 'Alex', { content: 'Alex sent an attachment.', share: reel })))] }, { vader: true });
     const [m] = out.msgs;
     assert.equal(m.wc, 0);
     assert.equal(m.e, null);

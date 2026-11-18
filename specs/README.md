@@ -43,3 +43,4 @@ see, changes what data leaves the browser, or takes more than a day to build.
 | [006 Managing loaded files](006-file-manager.md) | Approved: built ([#13](https://github.com/mlapaglia/Yapalytics/pull/13)) |
 | [007 Cross-app habits](007-cross-app-habits.md) | Approved: built ([#14](https://github.com/mlapaglia/Yapalytics/pull/14)) |
 | [008 More highlights](008-more-highlights.md) | Approved: built ([#15](https://github.com/mlapaglia/Yapalytics/pull/15)) |
+| [009 Facebook Messenger import](009-messenger-import.md) | Approved: built |

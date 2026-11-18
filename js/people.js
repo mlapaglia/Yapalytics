@@ -8,8 +8,8 @@
 /** Names that stand for "someone" rather than a person, so they never match. */
 const PLACEHOLDER_NAMES = new Set(['instagram user', 'deleted account', 'me', 'unknown', 'facebook user']);
 
-/** Apps whose names come from your contact book first (R5): SMS, iMessage, WhatsApp, Google Chat, Telegram, Instagram. */
-const PERSON_NAME_ORDER = [0, 3, 2, 1, 4, 5];
+/** Apps whose names come from your contact book first (R5): SMS, iMessage, WhatsApp, Google Chat, Telegram, Instagram, Messenger. */
+const PERSON_NAME_ORDER = [0, 3, 2, 1, 4, 5, 6];
 
 const PERSON_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PERSON_PHONE_RE = /^[+\d\s\-().]+$/;
@@ -53,6 +53,13 @@ function identityTokens(c, ownNames = []) {
   return [...out];
 }
 
+/**
+ * Which export a conversation comes from, for telling apart two people with one name
+ * (R3): its app, except that Messenger's encrypted chats download counts apart from
+ * Facebook's DYI export, since a chat's older and newer history sit one in each (spec 009 R12).
+ */
+const exportOf = (t) => (t.s === 6 && /^(?:g:)?fb:e2ee:/.test(t.key) ? '6e' : String(t.s || 0));
+
 /** A suggestion's identity: its conversation keys, sorted. Dismissals are stored by it. */
 const linkSignature = (keys) => [...keys].sort().join('\n');
 
@@ -81,8 +88,8 @@ function suggestLinks(threads, { personOf = new Map(), dismissed = new Set(), ow
     const kind = KIND[tok[0]];
     if (kind === 'name') {
       const perApp = new Map();
-      for (const t of list) perApp.set(t.s || 0, (perApp.get(t.s || 0) || 0) + 1);
-      if ([...perApp.values()].some((n) => n > 1)) continue; // ambiguous: two people with this name on one app
+      for (const t of list) perApp.set(exportOf(t), (perApp.get(exportOf(t)) || 0) + 1);
+      if ([...perApp.values()].some((n) => n > 1)) continue; // ambiguous: two people with this name in one export
     }
     let root = find(list[0].key);
     const why = new Set(reasons.get(root) || []).add(kind);
@@ -115,7 +122,7 @@ function suggestLinks(threads, { personOf = new Map(), dismissed = new Set(), ow
 
 /**
  * The name a person goes by by default (R5): the first real name in app order
- * SMS → iMessage → WhatsApp → Google Chat → Telegram → Instagram, the busier
+ * SMS → iMessage → WhatsApp → Google Chat → Telegram → Instagram → Messenger, the busier
  * conversation first on a tie. `threads` are { s, name, n }.
  */
 function defaultPersonName(threads) {
