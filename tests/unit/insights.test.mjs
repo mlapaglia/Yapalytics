@@ -190,6 +190,13 @@ describe('spec 008 more highlights', () => {
     assert.equal(textOf(calm.msgs(), 'busiestDay'), null);
   });
 
+  it('AC1: a selection with only a few active days still gets its busiest day', () => {
+    const { at, msgs } = build();
+    chat(at, 'alex', START, 120, { step: MIN });
+    for (let d = 1; d <= 4; d++) at(START + d * DAY, 1, 'alex');
+    assert.match(textOf(msgs(), 'busiestDay'), /^Your busiest day was Mon, Jan 1, 2024: 120 messages, 100% with Alex\.$/);
+  });
+
   it('AC2: names the longest unbroken conversation', () => {
     const { at, msgs } = build();
     chat(at, 'alex', START, 150, { step: MIN });
@@ -239,6 +246,14 @@ describe('spec 008 more highlights', () => {
     assert.equal(textOf(msgs(), 'reunion', { single: true }), 'The longest silence here: 200 days, until Sun, Aug 18, 2024.');
   });
 
+  it('AC7: skips a longer silence without 20 messages on each side for a shorter one with them', () => {
+    const { at, msgs } = build();
+    chat(at, 'alex', START, 10); // days 0–9, then 200 silent days
+    chat(at, 'alex', START + 210 * DAY, 30); // days 210–239, then 100 silent days
+    chat(at, 'alex', START + 340 * DAY, 30);
+    assert.match(textOf(msgs(), 'reunion'), /^You and Alex went 100 days without a message/);
+  });
+
   it('AC8: names the biggest year, compared with a whole year before', () => {
     const years = (from) => {
       const { at, msgs } = build();
@@ -260,6 +275,20 @@ describe('spec 008 more highlights', () => {
     const want = 'Alex laughs (lol, haha, 😂) 20× as often as you do.';
     assert.equal(textOf(msgs(), 'laughs'), want);
     assert.equal(textOf(msgs(), 'laughs', { single: true }), want);
+  });
+
+  it('AC9: a side that never laughs, in few messages, is not called the one who laughs more', () => {
+    const { at, msgs } = build();
+    for (let i = 0; i < 1000; i++) at(START + i * HOUR, 0, 'alex', i < 20 ? 'haha nice' : 'ok');
+    for (let i = 0; i < 20; i++) at(START + i * HOUR + MIN, 1, 'alex', 'ok');
+    assert.equal(textOf(msgs(), 'laughs'), null);
+  });
+
+  it('AC9: needs 20 laughs from the side that laughs more', () => {
+    const { at, msgs } = build();
+    for (let i = 0; i < 1000; i++) at(START + i * HOUR, 0, 'alex', i < 20 ? 'haha nice' : 'ok');
+    for (let i = 0; i < 50; i++) at(START + i * HOUR + MIN, 1, 'alex', i < 10 ? 'lol' : 'ok');
+    assert.equal(textOf(msgs(), 'laughs'), null);
   });
 
   it('AC10: says who asks the questions', () => {

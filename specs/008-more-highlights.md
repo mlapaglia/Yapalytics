@@ -41,7 +41,7 @@ decade, the person who always laughs at your jokes.
 | `newcomer` | ✨ | *All only.* A conversation ranked #2–#5 by messages, with 50+, whose first message is in the last 6 months, in a selection that spans ≥ 12 months (the highest-ranked one) | "Your conversation with Sam started in **Jul 2026** and is already your **#3**." |
 | `reunion` | 🤝 | A busy 1-on-1 conversation with a silence of ≥ 90 days and ≥ 20 messages on each side of it (the longest such silence) | "You and Alex went **214 days** without a message, then picked back up on …" / "The longest silence here: **214 days**, until …" |
 | `year` | 📅 | The selection has messages in 3+ calendar years | "**2021** was your biggest year: **48,210** messages, **2×** as many as in 2020." The comparison appears when the selection covers the whole year before and the ratio is ≥ 1.3. / "**2021** was the biggest year here: …" |
-| `laughs` | 😂 | A busy 1-on-1 conversation where one side laughs (the Laughs trait) at ≥ 2× the other's rate per message, with ≥ 20 laughs on that side | "Alex laughs (lol, haha, 😂) **3×** as often as you do." / "You laugh (lol, haha, 😂) **3×** as often as Alex does." Single uses the same sentences. |
+| `laughs` | 😂 | A busy 1-on-1 conversation where one side laughs (the Laughs trait) at ≥ 2× the other's rate per message, with ≥ 20 laughs on that side. A side that never laughs counts as 1 laugh, which keeps the ratio finite and can only make it smaller. | "Alex laughs (lol, haha, 😂) **3×** as often as you do." / "You laugh (lol, haha, 😂) **3×** as often as Alex does." Single uses the same sentences. |
 | `questions` | ❓ | A busy 1-on-1 conversation with ≥ 30 questions where one side asks ≥ 65% | "You ask **72%** of the questions with Alex." / "Alex asks **72%** of the questions." Single: "You ask **72%** of the questions here." |
 | `doubles` | 💬 | A busy 1-on-1 conversation where one side has ≥ 30 double texts and ≥ 2.5× the other's | "You double-text Alex **4×** as often as they double-text you." / "Alex double-texts you **4×** as often as you double-text them." Single uses the same sentences. |
 | `fastest` | ⚡ | *All only.* Of the busy 1-on-1 conversations with ≥ 30 replies from them (at least two), the lowest median reply, when ≤ 2 minutes | "Alex is your fastest replier: they usually answer in **40s**." |
@@ -69,8 +69,9 @@ questions, love). No new code reads message text, and no message text is shown.
 - `doubles: [r, s]`: double texts per side
 - `ph: [r, s]`: photos per side
 - `weekend`, `morning`: messages on Saturday or Sunday; messages from 5 to 9 am
-- `longestGap: { len, end, before }`: the longest silence in days, when messages
-  resumed, and how many messages came before it (`null` when there is none)
+- `silences: [{ len, end, before }]`: each silence of 30+ days, when messages resumed,
+  and how many messages came before it. Keeping all of them lets `reunion` find the
+  longest one with 20 messages on each side, even when a longer one has fewer.
 - `replyN: [r, s]`: replies counted for the median
 
 **Code.** The new kinds go in `buildHighlights` in `js/insights.js`. `renderHighlights`

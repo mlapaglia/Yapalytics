@@ -198,7 +198,7 @@ function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, to
   // AC1: the busiest day
   const bd = A.busiestDay;
   const avgDay = total / Math.max(A.activeDays, 1);
-  if (bd && A.activeDays >= 7 && bd.n >= 100 && bd.n >= 4 * avgDay) {
+  if (bd && bd.n >= 100 && bd.n >= 4 * avgDay) {
     const score = 28 + Math.min(12, Math.log2(bd.n / avgDay) * 3);
     const when = dateText(dayToTs(bd.d));
     if (single) add('busiestDay', score, '🗓️', ['The busiest day here was ', when, ': ', { b: fmtNum(bd.n) }, ' messages.']);
@@ -268,9 +268,10 @@ function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, to
   // AC7: the longest silence in a conversation that picked back up
   let gap = null;
   for (const r of single ? rows : oneOnOne) {
-    const g = r.bc.longestGap;
-    if (!g || g.len < 90 || g.before < 20 || r.n - g.before < 20) continue;
-    if (!gap || g.len > gap.g.len) gap = { k: r.k, g };
+    for (const g of r.bc.silences) {
+      if (g.len < 90 || g.before < 20 || r.n - g.before < 20) continue;
+      if (!gap || g.len > gap.g.len) gap = { k: r.k, g };
+    }
   }
   if (gap) {
     const days = { b: `${fmtNum(gap.g.len)} days` };
@@ -298,10 +299,12 @@ function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, to
     const { n, traits } = r.bc;
     if (n[0] < 20 || n[1] < 20) continue;
     const them = traits[0][laughI], you = traits[1][laughI];
-    if (Math.max(them, you) < 20) continue;
-    const rThem = Math.max(them, 1) / n[0], rYou = Math.max(you, 1) / n[1]; // laughs per message, at least 1 laugh
-    const ratio = Math.max(rThem, rYou) / Math.min(rThem, rYou);
-    if (ratio >= 2 && (!laugh || ratio > laugh.ratio)) laugh = { k: r.k, ratio, you: rYou > rThem };
+    const youMore = you / n[1] > them / n[0]; // by the real rates (laughs per message)
+    const [hi, hiN, lo, loN] = youMore ? [you, n[1], them, n[0]] : [them, n[0], you, n[1]];
+    if (hi < 20) continue;
+    // A side that never laughs counts as 1 laugh, so the ratio stays finite; that can only shrink it
+    const ratio = hi / hiN / (Math.max(lo, 1) / loN);
+    if (ratio >= 2 && (!laugh || ratio > laugh.ratio)) laugh = { k: r.k, ratio, you: youMore };
   }
   if (laugh) {
     const x = { b: timesText(laugh.ratio) };

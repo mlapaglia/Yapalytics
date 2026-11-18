@@ -178,7 +178,8 @@ describe('spec 008: per-conversation counters', () => {
     at('2024-01-06T07:00:00Z', 1, 'lol how are you?'), // Saturday, early morning
     at('2024-01-06T07:01:00Z', 1, 'love you'), // double text
     at('2024-01-06T07:02:00Z', 0, 'haha good', { ph: 2 }),
-    at('2024-01-10T12:00:00Z', 0, 'hey'), // Wednesday, after 3 silent days
+    at('2024-01-10T12:00:00Z', 0, 'hey'), // Wednesday, after 3 silent days: too short to keep
+    at('2024-02-20T12:00:00Z', 1, 'hey'), // after 40 silent days
   ];
   const bc = aggregateMessages(msgs).byContact.get('alex');
 
@@ -192,7 +193,7 @@ describe('spec 008: per-conversation counters', () => {
     assert.deepEqual(bc.replyN, [1, 0]);
   });
 
-  it('keeps the longest silence and what came before it', () => {
-    assert.deepEqual(bc.longestGap, { len: 3, end: Date.parse('2024-01-10T12:00:00Z'), before: 3 });
+  it('keeps each long silence and what came before it', () => {
+    assert.deepEqual(bc.silences, [{ len: 40, end: Date.parse('2024-02-20T12:00:00Z'), before: 4 }]);
   });
 });

@@ -78,6 +78,7 @@ const SESSION_BINS = [
 ];
 const NIGHT_END_HOUR = 5; // "night owl" = messages from midnight until 5am
 const MORNING_HOURS = [5, 9]; // "early morning" = messages from 5am until 9am
+const LONG_SILENCE_DAYS = 30; // silences in a conversation this long or longer are kept (byContact.silences)
 const CONTACT_MILESTONES = new Set([1, 1000, 10000, 50000, 100000]);
 const TOTAL_MILESTONES = new Set([10000, 50000, 100000, 250000, 500000, 1000000]);
 
@@ -206,7 +207,7 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
     last: null,
     // key -> { n:[r,s], first, last, starters:[r,s], replyMedian:[r,s], replyN:[r,s], lenSum, lenN, emoji: Map,
     //   months: Map, longestRun, traits:[[r],[s]], doubles:[r,s], ph:[r,s], weekend, morning,
-    //   longestGap: { len (silent days), end (time messages resumed), before (messages before it) } | null }
+    //   silences: [{ len (silent days, at least LONG_SILENCE_DAYS), end (time messages resumed), before (messages before it) }] }
     byContact: new Map(),
     night: new Map(), // mo -> [night, total]
     latestNight: null, // { t, k, tod } latest time-of-night message
@@ -243,7 +244,7 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
     if (!bc) {
       bc = {
         n: [0, 0], first: r.t, last: r.t, starters: [0, 0], replies: [[], []], lenSum: [0, 0], lenN: [0, 0], emoji: new Map(), months: new Map(),
-        lastDay: null, run: 0, longestRun: 0, traits: pair(TRAITS.length), doubles: [0, 0], ph: [0, 0], weekend: 0, morning: 0, longestGap: null,
+        lastDay: null, run: 0, longestRun: 0, traits: pair(TRAITS.length), doubles: [0, 0], ph: [0, 0], weekend: 0, morning: 0, silences: [],
       };
       A.byContact.set(r.k, bc);
     }
@@ -256,7 +257,7 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
     bc.months.set(r.mo, (bc.months.get(r.mo) || 0) + 1);
     if (bc.lastDay !== r.d) {
       const silent = bc.lastDay == null ? 0 : r.d - bc.lastDay - 1;
-      if (silent > 0 && (!bc.longestGap || silent > bc.longestGap.len)) bc.longestGap = { len: silent, end: r.t, before };
+      if (silent >= LONG_SILENCE_DAYS) bc.silences.push({ len: silent, end: r.t, before });
       bc.run = bc.lastDay === r.d - 1 ? bc.run + 1 : 1;
       bc.lastDay = r.d;
       if (bc.run > bc.longestRun) bc.longestRun = bc.run;
