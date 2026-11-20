@@ -1,6 +1,6 @@
 # 010 App switches in the message list
 
-Status: Approved · PR:
+Status: Approved · PR: [#17](https://github.com/mlapaglia/Yapalytics/pull/17)
 
 ## Problem
 

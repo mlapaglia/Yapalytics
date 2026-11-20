@@ -44,4 +44,4 @@ see, changes what data leaves the browser, or takes more than a day to build.
 | [007 Cross-app habits](007-cross-app-habits.md) | Approved: built ([#14](https://github.com/mlapaglia/Yapalytics/pull/14)) |
 | [008 More highlights](008-more-highlights.md) | Approved: built ([#15](https://github.com/mlapaglia/Yapalytics/pull/15)) |
 | [009 Facebook Messenger import](009-messenger-import.md) | Approved: built ([#16](https://github.com/mlapaglia/Yapalytics/pull/16)) |
-| [010 App switches in the message list](010-app-switch-markers.md) | Approved: built |
+| [010 App switches in the message list](010-app-switch-markers.md) | Approved: built ([#17](https://github.com/mlapaglia/Yapalytics/pull/17)) |
