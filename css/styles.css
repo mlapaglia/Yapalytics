@@ -492,7 +492,8 @@ table.leader .muted { color: var(--muted); }
   padding: 3px 10px;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
-  white-space: nowrap;
+  text-align: center;
+  overflow-wrap: anywhere; /* a person named by a long email address still fits a narrow pane */
 }
 .app-route { color: var(--text-2); font-weight: 600; }
 .app-dot { display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 50%; background: var(--app); vertical-align: 0; }
