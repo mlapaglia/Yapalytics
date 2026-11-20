@@ -158,6 +158,25 @@ function aggregateCrossApp(msgs, gap) {
   return { people, total, busiest: total.busiest };
 }
 
+/**
+ * Spec 010: where one linked person's conversation moves between apps, for markers in
+ * the message list. `list` is that person's time-sorted messages. A switch is M2's: two
+ * consecutive messages in one conversation (no quiet longer than `gap`) on different
+ * apps. Returns Map(index in list -> { from, to, o }), o being who sent the first
+ * message on the new app.
+ */
+function appSwitchMarks(list, gap) {
+  const marks = new Map();
+  for (let i = 1; i < list.length; i++) {
+    const prev = list[i - 1];
+    const m = list[i];
+    const from = prev.s || 0;
+    const to = m.s || 0;
+    if (from !== to && m.t - prev.t <= gap) marks.set(i, { from, to, o: m.o });
+  }
+  return marks;
+}
+
 /** The app with the most messages in a [6] count, or null when there are fewer than `min`. */
 function leadingApp(counts, min) {
   let lead = 0;

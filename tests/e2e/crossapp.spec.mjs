@@ -142,3 +142,120 @@ test.describe('spec 007 cross-app habits', () => {
     expect(await page.evaluate(() => [S.convoGap, S.appsGap])).toEqual([6 * 3600e3, 15 * 60e3]);
   });
 });
+
+test.describe('spec 010 app switches in the message list', () => {
+  const markers = (page) => page.locator('#messages .app-switch');
+  const pickAlex = async (page) => {
+    await page.selectOption('#contactSel', PERSON);
+    await openTab(page, 'sec-messages');
+  };
+
+  test('AC4: reading the biggest juggle\'s day shows one marker per switch', async ({ page }) => {
+    await load(page);
+    await linkAlex(page);
+    await page.selectOption('#contactSel', PERSON);
+    await openTab(page, 'sec-apps');
+    await expect(page.locator('#appsJuggle')).toContainText('3 switches');
+    await page.click('#appsJuggle [data-otd-day]');
+    await expect(page.locator('#browserCount')).toContainText('5 messages · showing');
+    await expect(markers(page)).toHaveCount(3);
+  });
+
+  test('AC5: a marker names the route and who moved', async ({ page }) => {
+    await load(page);
+    await linkAlex(page);
+    await pickAlex(page);
+    await expect(markers(page)).toHaveCount(3);
+    await expect(markers(page).locator('.app-route')).toHaveText(['SMS → Instagram', 'Instagram → SMS', 'SMS → Instagram']);
+    await expect(markers(page).locator('.app-mover')).toHaveText(['Alex moved', 'You moved', 'Alex moved']);
+    await expect(markers(page).first()).toHaveAttribute('role', 'separator');
+    await expect(markers(page).first()).toHaveAttribute('aria-label', 'Switched from SMS to Instagram. Alex moved.');
+    // Each marker sits right before the first message on the new app.
+    const next = markers(page).nth(1).locator('xpath=following-sibling::div[1]');
+    await expect(next).toHaveClass(/app-0/);
+    await expect(next).toContainText('on my way');
+  });
+
+  test('AC6: 15 minutes on the Across apps picker drops the marker for a 20-minute switch', async ({ page }) => {
+    await load(page, [{ address: ALEX_NUMBER, name: 'Alex Rivera', at: '2024-08-20T10:26:00Z', sent: true, body: 'here now' }]);
+    await linkAlex(page);
+    await page.selectOption('#contactSel', PERSON);
+    await openTab(page, 'sec-apps');
+    await page.click('#appsGapSeg button:text-is("15m")');
+    await openTab(page, 'sec-messages');
+    await expect(markers(page)).toHaveCount(3);
+    await openTab(page, 'sec-apps');
+    await page.click('#appsGapSeg button:text-is("6h")');
+    await openTab(page, 'sec-messages');
+    await expect(markers(page)).toHaveCount(4);
+  });
+
+  test('AC7: every linked bubble has its app\'s edge and still names its app', async ({ page }) => {
+    await load(page);
+    await linkAlex(page);
+    await pickAlex(page);
+    const rows = page.locator('#messages .msg');
+    const n = await rows.count();
+    expect(n).toBe(8);
+    await expect(page.locator('#messages .msg.app-edge')).toHaveCount(n);
+    await expect(page.locator('#messages .msg.app-0 .who')).toHaveText(Array(4).fill('SMS'));
+    await expect(page.locator('#messages .msg.app-5 .who')).toHaveText(Array(4).fill('Instagram'));
+  });
+
+  test('AC8: a search hides the markers', async ({ page }) => {
+    await load(page);
+    await linkAlex(page);
+    await pickAlex(page);
+    await expect(markers(page)).toHaveCount(3);
+    await page.fill('#search', 'o');
+    await expect(page.locator('#browserCount')).toContainText('matching');
+    await expect(markers(page)).toHaveCount(0);
+    await expect(page.locator('#messages .msg.app-edge').first()).toBeVisible();
+  });
+
+  test('AC9: no markers under All conversations or with one app picked', async ({ page }) => {
+    await load(page);
+    await linkAlex(page);
+    await openTab(page, 'sec-messages');
+    await expect(page.locator('#messages .msg').first()).toBeVisible();
+    await expect(markers(page)).toHaveCount(0);
+    await expect(page.locator('#messages .msg.app-edge')).toHaveCount(0);
+    await expect(page.locator('#messages .who', { hasText: 'From 🔗 Alex Rivera · Instagram' }).first()).toBeVisible();
+    await page.selectOption('#contactSel', PERSON);
+    await expect(markers(page)).toHaveCount(3);
+    await page.click('#sourceSeg button[data-source="5"]');
+    await expect(page.locator('#messages .msg')).toHaveCount(4);
+    await expect(markers(page)).toHaveCount(0);
+    await expect(page.locator('#messages .msg.app-edge')).toHaveCount(0);
+  });
+
+  test('AC10: an unlinked conversation has no markers or edges', async ({ page }) => {
+    await load(page);
+    await page.selectOption('#contactSel', SMS_ALEX);
+    await openTab(page, 'sec-messages');
+    await expect(page.locator('#messages .msg')).toHaveCount(4);
+    await expect(markers(page)).toHaveCount(0);
+    await expect(page.locator('#messages .msg.app-edge')).toHaveCount(0);
+  });
+
+  test('AC11: showing earlier messages keeps the markers in place, once each', async ({ page }) => {
+    // 250 more SMS on Aug 19 from midnight: the first is 4 hours after Alex's Aug 18
+    // Instagram message, so it's a 4th switch, which only shows with the earlier messages.
+    const extra = Array.from({ length: 250 }, (_, i) => ({
+      address: ALEX_NUMBER, name: 'Alex Rivera', at: new Date(Date.parse('2024-08-19T00:00:00Z') + i * 60e3).toISOString(), sent: i % 2 === 0, body: `filler ${i}`,
+    }));
+    await load(page, extra);
+    await linkAlex(page);
+    await pickAlex(page);
+    await expect(page.locator('#moreBtn')).toBeVisible();
+    const labels = ['Switched from SMS to Instagram. Alex moved.', 'Switched from Instagram to SMS. You moved.', 'Switched from SMS to Instagram. Alex moved.'];
+    await expect(markers(page)).toHaveCount(3);
+    const before = await markers(page).evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') + ' / ' + el.nextElementSibling.textContent));
+    await page.click('#moreBtn');
+    await expect(page.locator('#moreBtn')).toBeHidden();
+    await expect(markers(page)).toHaveCount(4);
+    const after = await markers(page).evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') + ' / ' + el.nextElementSibling.textContent));
+    expect(after.slice(1)).toEqual(before);
+    expect(after.map((a) => a.split(' / ')[0])).toEqual(['Switched from Instagram to SMS. You moved.', ...labels]);
+  });
+});

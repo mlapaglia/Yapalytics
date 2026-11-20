@@ -2320,8 +2320,11 @@ function renderBrowser(msgs) {
 
   const frag = document.createDocumentFragment();
   const showWho = S.filter.contact === 'all' || S.filter.contact.startsWith('g:') || S.filter.contact.startsWith('p:');
+  // Spec 010: a linked person's app edges, and switch markers when the list is the whole conversation.
+  const appEdges = S.filter.contact.startsWith('p:') && S.filter.source === 'all';
+  const marks = appEdges && !q && !mood ? appSwitchMarks(list, S.appsGap) : null;
   let lastDay = null;
-  for (const m of shown) {
+  shown.forEach((m, j) => {
     if (m.d !== lastDay) {
       lastDay = m.d;
       const sep = document.createElement('div');
@@ -2329,8 +2332,10 @@ function renderBrowser(msgs) {
       sep.textContent = dayLabel(m.d);
       frag.appendChild(sep);
     }
+    const mark = marks && marks.get(start + j);
+    if (mark) frag.appendChild(appSwitchMarker(mark, m.k));
     const row = document.createElement('div');
-    row.className = 'msg ' + (m.o ? 'sent' : 'recv');
+    row.className = 'msg ' + (m.o ? 'sent' : 'recv') + (appEdges ? ` app-edge app-${m.s || 0}` : '');
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     const sender = !m.o && m.k.startsWith('g:') && (m.sn || m.sk) ? senderLabel(m.sn || m.sk) : '';
@@ -2375,7 +2380,7 @@ function renderBrowser(msgs) {
       const pill = document.createElement('button');
       pill.type = 'button';
       pill.className = `mood-pill ${kind}`;
-      pill.dataset.i = shown.indexOf(m);
+      pill.dataset.i = j;
       pill.textContent = score;
       pill.title = `Mood score ${score} (${MOOD_WORD[kind]}). Click to see why.`;
       time.appendChild(pill);
@@ -2384,9 +2389,24 @@ function renderBrowser(msgs) {
     bubble.appendChild(time);
     row.appendChild(bubble);
     frag.appendChild(row);
-  }
+  });
   box.appendChild(frag);
   scrollBrowserToEnd();
+}
+
+/** Spec 010 R2/R9: the divider where a linked person's conversation moves to another app. */
+function appSwitchMarker({ from, to, o }, key) {
+  const name = plainName(key);
+  // A first name reads best; a number or email is kept whole.
+  const them = /[\d@]/.test(name) ? name : name.split(' ')[0];
+  const who = o ? 'You moved' : `${them} moved`;
+  const el = document.createElement('div');
+  el.className = 'app-switch';
+  el.setAttribute('role', 'separator');
+  el.setAttribute('aria-label', `Switched from ${SOURCES[from]} to ${SOURCES[to]}. ${who}.`);
+  const app = (s) => `<span class="app-dot app-${s}"></span>${escapeHtml(SOURCES[s])}`;
+  el.innerHTML = `<span class="app-switch-pill"><span class="app-route">${app(from)} → ${app(to)}</span> · <span class="app-mover">${escapeHtml(who)}</span></span>`;
+  return el;
 }
 
 /**

@@ -456,6 +456,47 @@ table.leader .muted { color: var(--muted); }
 .msg.sent .bubble { background: var(--bubble-sent); color: var(--bubble-sent-ink); border-bottom-right-radius: 5px; }
 .msg.recv .bubble { border-bottom-left-radius: 5px; }
 .bubble .who { font-size: 11px; font-weight: 600; opacity: 0.75; margin-bottom: 2px; }
+/* Spec 010: a linked person's apps. Each app takes its chart colour. */
+.app-0 { --app: var(--series-1); }
+.app-1 { --app: var(--series-2); }
+.app-2 { --app: var(--series-3); }
+.app-3 { --app: var(--series-4); }
+.app-4 { --app: var(--series-5); }
+.app-5 { --app: var(--series-6); }
+.app-6 { --app: var(--series-7); }
+/* The edge sits just outside the bubble: inside, SMS's blue would vanish on a sent bubble. */
+.msg.app-edge.recv { padding-left: 8px; }
+.msg.app-edge.sent { padding-right: 8px; }
+.msg.app-edge .bubble { position: relative; }
+.msg.app-edge .bubble::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--app);
+}
+.msg.app-edge.recv .bubble::before { left: -7px; }
+.msg.app-edge.sent .bubble::before { right: -7px; }
+.app-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.app-switch::before, .app-switch::after { content: ''; flex: 1; border-top: 1px solid var(--border-strong); }
+.app-switch-pill {
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  text-align: center;
+  overflow-wrap: anywhere; /* a person named by a long email address still fits a narrow pane */
+}
+.app-route { color: var(--text-2); font-weight: 600; }
+.app-dot { display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 50%; background: var(--app); vertical-align: 0; }
 .bubble .body { white-space: pre-wrap; }
 .bubble .att { font-size: 13px; opacity: 0.9; margin-top: 2px; }
 
