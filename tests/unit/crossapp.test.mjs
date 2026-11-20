@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { loadScripts, makeMessage, messageLib } from '../helpers/load.mjs';
 
 const lib = messageLib();
-const { aggregateCrossApp, mainAppShifts, crossAppHighlight, switchTrigger } = loadScripts(
+const { aggregateCrossApp, mainAppShifts, crossAppHighlight, switchTrigger, appSwitchMarks, APPS_GAPS } = loadScripts(
   ['parser.js', 'analysis.js', 'insights.js', 'crossapp.js'],
-  ['aggregateCrossApp', 'mainAppShifts', 'crossAppHighlight', 'switchTrigger'],
+  ['aggregateCrossApp', 'mainAppShifts', 'crossAppHighlight', 'switchTrigger', 'appSwitchMarks', 'APPS_GAPS'],
 );
 
 const GAP = 6 * 3600e3;
@@ -179,5 +179,41 @@ describe('spec 007 highlight', () => {
     }
     const h = crossAppHighlight(run(out), { labelFor: () => 'Alex', names: NAMES });
     assert.equal(text(h), 'You and Alex bounce back and forth between SMS and Instagram in 100% of your conversations.');
+  });
+});
+
+describe('spec 010 app switches in the message list', () => {
+  it('AC1: SMS → Instagram → SMS in one conversation marks the first message on each new app', () => {
+    const list = [msg(0, SMS, 0), msg(1, SMS, 1), msg(5, IG, 0), msg(6, IG, 1), msg(10, SMS, 1)];
+    const marks = appSwitchMarks(list, GAP);
+    assert.deepEqual([...marks.entries()], [
+      [2, { from: SMS, to: IG, o: 0 }],
+      [4, { from: IG, to: SMS, o: 1 }],
+    ]);
+  });
+
+  it('AC2: an app change after a long quiet, or no app change, has no mark', () => {
+    const list = [msg(0, SMS, 0), msg(1, SMS, 1), msg(8 * 60, IG, 0), msg(8 * 60 + 1, IG, 1)];
+    assert.equal(appSwitchMarks(list, GAP).size, 0);
+    // Exactly the gap is still one conversation, as in aggregateCrossApp.
+    assert.equal(appSwitchMarks([msg(0, SMS, 0), msg(6 * 60, IG, 0)], GAP).size, 1);
+  });
+
+  it('AC3: there are as many marks as aggregateCrossApp counts switches, at every gap', () => {
+    // A long, varied conversation: three apps, waits from a minute to about 10 hours.
+    let seed = 7;
+    const rand = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+    const apps = [SMS, IG, 6];
+    let min = 0;
+    const list = [];
+    for (let i = 0; i < 400; i++) {
+      min += rand() < 0.8 ? 1 + Math.floor(rand() * 20) : Math.floor(rand() * 600);
+      list.push(msg(min, rand() < 0.7 && list.length ? list[list.length - 1].s : apps[Math.floor(rand() * 3)], rand() < 0.5 ? 1 : 0));
+    }
+    for (const gap of APPS_GAPS) {
+      const P = aggregateCrossApp(list, gap).people.get('p:alex');
+      assert.ok(P.switches > 0);
+      assert.equal(appSwitchMarks(list, gap).size, P.switches, `gap ${gap}`);
+    }
   });
 });
