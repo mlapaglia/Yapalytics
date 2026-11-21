@@ -47,8 +47,9 @@ you talk to someone on several apps, no view shows how much you actually talk to
 - **R7** In the message list, a linked person's messages say which app they came from:
   "From 🔗 Alex Rivera · Instagram" under All conversations, and just "Instagram" when
   the person is selected.
-- **R8** The People filter finds a person by any of its conversations' names or
-  numbers.
+- ~~**R8** The People filter finds a person by any of its conversations' names or
+  numbers.~~ The People filter was removed in spec 012; its Conversation picker finds a
+  person this way (spec 012 R1).
 - **R9** Links, chosen names and dismissed suggestions are saved in this browser
   (`localStorage` key `ms-people`) and apply again when the same conversations are
   loaded. A link applies only when at least two of its conversations are loaded.
@@ -141,7 +142,8 @@ picked.
   message count, and its message list shows only Instagram messages.
 - **AC11** In the message list, a linked person's messages name the app they came from.
 - **AC12** With no links, messages and leaderboard rows are the same as before.
-- **AC13** The People filter finds a person by any of its conversations' names.
+- ~~**AC13** The People filter finds a person by any of its conversations' names.~~
+  Moved to spec 012 AC4.
 - **AC14** The person's name defaults to the contact-book name over an Instagram handle,
   and can be changed to another of its conversations' names.
 - **AC15** Forgetting all links in one tab removes them from another open tab, and a

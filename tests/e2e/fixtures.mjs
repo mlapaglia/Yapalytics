@@ -1,6 +1,6 @@
 /*
  * Shared setup for the browser tests:
- * - the CDN scripts (echarts, heic-to) are served from node_modules, so runs don't
+ * - the CDN files (echarts, heic-to, tom-select) are served from node_modules, so runs don't
  *   depend on the network and use exactly the pinned versions;
  * - any page error or console error fails the test (opt out with failOnConsoleError).
  * Tests reach into the page's globals (S, aggregatePhrase…) to check numbers: the app
@@ -13,9 +13,13 @@ const nodeModule = (path) => fileURLToPath(new URL(`../../node_modules/${path}`,
 export const ECHARTS_URL = 'https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js';
 export const HEIC_TO_URL = 'https://cdn.jsdelivr.net/npm/heic-to@1.6.5/dist/iife/heic-to.js';
 export const HEIC_TO_PATH = nodeModule('heic-to/dist/iife/heic-to.js');
+export const TOM_SELECT_URL = 'https://cdn.jsdelivr.net/npm/tom-select@2.6.2/dist/js/tom-select.complete.min.js';
+export const TOM_SELECT_CSS_URL = 'https://cdn.jsdelivr.net/npm/tom-select@2.6.2/dist/css/tom-select.css';
 const LOCAL = {
   [ECHARTS_URL]: nodeModule('echarts/dist/echarts.min.js'),
   [HEIC_TO_URL]: HEIC_TO_PATH,
+  [TOM_SELECT_URL]: nodeModule('tom-select/dist/js/tom-select.complete.min.js'),
+  [TOM_SELECT_CSS_URL]: nodeModule('tom-select/dist/css/tom-select.css'),
 };
 
 export const test = base.extend({
@@ -31,7 +35,8 @@ export const test = base.extend({
     // Tests can add their own route for HEIC_TO_URL to delay or block it.
     await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
     for (const [url, path] of Object.entries(LOCAL)) {
-      await page.route(url, (route) => route.fulfill({ path, contentType: 'text/javascript' }));
+      const contentType = url.endsWith('.css') ? 'text/css' : 'text/javascript';
+      await page.route(url, (route) => route.fulfill({ path, contentType }));
     }
     await use(page);
     if (failOnConsoleError) expect(errors, 'page or console errors').toEqual([]);
