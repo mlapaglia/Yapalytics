@@ -1,6 +1,6 @@
 # 011 Bots in Google Chat conversations
 
-Status: Draft · PR: [#18](https://github.com/mlapaglia/Yapalytics/pull/18)
+Status: Implemented · PR: [#18](https://github.com/mlapaglia/Yapalytics/pull/18)
 
 ## Problem
 
@@ -71,5 +71,8 @@ text-only Takeout zip with any number of conversations, and `GIPHY`, a bot membe
 
 ## Open questions
 
-- Is GIPHY always `user_type: "Bot"` in old Hangouts exports? If an export lists it as
-  `"Human"`, it would need matching by name.
+None. Settled while building:
+
+- **How GIPHY is marked.** In a real Takeout export with an old Hangouts chat, GIPHY is
+  listed with `user_type: "Bot"`, so R1's check is enough and nothing needs matching by
+  name. With the fix, that chat loads as a 1-on-1 and links to the person's SMS.
