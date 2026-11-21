@@ -103,13 +103,18 @@ function googleChatParserWorker(self, lib) {
     if (msgBatch.length >= BATCH_SIZE) flush();
   }
 
-  /** Thread key and contact for one Groups/<dir> conversation. */
+  /**
+   * Thread key and contact for one Groups/<dir> conversation. Bots (GIPHY in old
+   * Hangouts chats) don't count as members: their messages are skipped anyway, and a
+   * chat with one other person plus a bot is a 1-on-1. A named space stays a group
+   * even with one other person in it.
+   */
   function describeGroup(dir, info, owner) {
-    const isSpace = dir.startsWith('Space ');
     const id = dir.slice(dir.indexOf(' ') + 1) || dir;
+    const namedSpace = dir.startsWith('Space ') && !!(info && info.name);
     const members = (info && info.members) || [];
-    const others = members.filter((p) => !owner || lower(p.email) !== owner);
-    if (!isSpace && others.length <= 1) {
+    const others = members.filter((p) => p && p.user_type !== 'Bot' && (!owner || lower(p.email) !== owner));
+    if (!namedSpace && others.length <= 1) {
       const other = others[0];
       const key = 'gc:' + (lower(other && other.email) || lower(personName(other)) || id);
       return { key, group: false, name: personName(other) || (others.length ? '' : 'Note to self'), addr: (other && other.email) || '' };
