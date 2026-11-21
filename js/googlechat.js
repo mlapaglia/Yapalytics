@@ -103,13 +103,18 @@ function googleChatParserWorker(self, lib) {
     if (msgBatch.length >= BATCH_SIZE) flush();
   }
 
-  /** Thread key and contact for one Groups/<dir> conversation. */
+  /**
+   * Thread key and contact for one Groups/<dir> conversation. Bots (GIPHY in old
+   * Hangouts chats) don't count as members: their messages are skipped anyway, and a
+   * chat with one other person plus a bot is a 1-on-1. A named space stays a group
+   * even with one other person in it.
+   */
   function describeGroup(dir, info, owner) {
-    const isSpace = dir.startsWith('Space ');
     const id = dir.slice(dir.indexOf(' ') + 1) || dir;
+    const namedSpace = dir.startsWith('Space ') && !!(info && info.name);
     const members = (info && info.members) || [];
-    const others = members.filter((p) => !owner || lower(p.email) !== owner);
-    if (!isSpace && others.length <= 1) {
+    const others = members.filter((p) => p && p.user_type !== 'Bot' && (!owner || lower(p.email) !== owner));
+    if (!namedSpace && others.length <= 1) {
       const other = others[0];
       const key = 'gc:' + (lower(other && other.email) || lower(personName(other)) || id);
       return { key, group: false, name: personName(other) || (others.length ? '' : 'Note to self'), addr: (other && other.email) || '' };
@@ -163,10 +168,12 @@ function googleChatParserWorker(self, lib) {
       if (g.info) g.info = await readEntryJson(g.info);
     }
     if (!owner) {
-      // Without user_info.json, the owner is the one person in every conversation.
+      // Without user_info.json, the owner is the one person in every conversation. A bot
+      // can be in every conversation too, so bots can't be the owner.
       let common = null;
       for (const [, g] of groups) {
-        const emails = new Set(((g.info && g.info.members) || []).map((p) => lower(p.email)).filter(Boolean));
+        const humans = ((g.info && g.info.members) || []).filter((p) => p && p.user_type !== 'Bot');
+        const emails = new Set(humans.map((p) => lower(p.email)).filter(Boolean));
         if (!emails.size) continue;
         common = common ? new Set([...common].filter((x) => emails.has(x))) : emails;
       }

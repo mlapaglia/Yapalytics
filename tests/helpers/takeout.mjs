@@ -14,8 +14,35 @@ export const FIXTURES = {
   landscapeJpg: () => fixture('landscape.jpg'), // 1600×1200, red block top-left
 };
 
-const ME = { name: 'Me', email: 'me@example.com', user_type: 'Human' };
-const ALEX = { name: 'Alex', email: 'alex@example.com', user_type: 'Human' };
+export const ME = { name: 'Me', email: 'me@example.com', user_type: 'Human' };
+export const ALEX = { name: 'Alex', email: 'alex@example.com', user_type: 'Human' };
+export const SAM = { name: 'Sam', email: 'sam@example.com', user_type: 'Human' };
+export const GIPHY = { name: 'GIPHY', user_type: 'Bot' };
+
+/**
+ * A text-only Takeout zip with several conversations.
+ * @param {{ dir: string, name?: string, members: object[], from: object[] }[]} chats
+ *   `dir` is the Groups/ folder ("DM x", "Space y"); `from` lists each message's sender,
+ *   one minute apart starting 2024-08-20 12:00 UTC.
+ * @param {{ userInfo?: boolean }} [opts] `userInfo: false` leaves out user_info.json, so
+ *   the parser has to work out whose export it is.
+ */
+export function takeoutChats(chats, { userInfo = true } = {}) {
+  const entries = userInfo ? [{ name: 'Takeout/Google Chat/Users/User 1/user_info.json', data: JSON.stringify({ user: ME }), deflate: true }] : [];
+  for (const c of chats) {
+    const dir = `Takeout/Google Chat/Groups/${c.dir}`;
+    const messages = c.from.map((creator, i) => ({
+      creator,
+      created_date: `Tuesday, August 20, 2024 at 12:${String(i).padStart(2, '0')}:00 PM UTC`,
+      text: `message ${i}`,
+    }));
+    entries.push(
+      { name: `${dir}/group_info.json`, data: JSON.stringify({ ...(c.name ? { name: c.name } : {}), members: c.members }), deflate: true },
+      { name: `${dir}/messages.json`, data: JSON.stringify({ messages }), deflate: true },
+    );
+  }
+  return { name: 'takeout-20240820T000000Z-001.zip', mimeType: 'application/zip', buffer: makeZip(entries) };
+}
 
 /**
  * @param {{ name: string, data: Buffer, fromMe?: boolean, reactions?: object[] }[]} attachments in time order,
