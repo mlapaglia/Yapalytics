@@ -91,6 +91,17 @@ test.describe('spec 013 which one is you', () => {
     await expect(row(page, 'WhatsApp').locator('.owner-origin')).toHaveText('Picked by you');
   });
 
+  test('R5: Backspace in an empty search keeps the owner shown', async ({ page }) => {
+    await openDialog(page);
+    await control(page, 'Instagram').click();
+    await expect(row(page, 'Instagram').locator('.ts-dropdown')).toBeVisible();
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Escape');
+    await expect(row(page, 'Instagram').locator('select')).toHaveValue('Jamie Park');
+    await expect(control(page, 'Instagram')).toContainText('Jamie Park');
+    expect(await page.evaluate(() => S.owners[5].name)).toBe('Jamie Park');
+  });
+
   test('AC7: ✕, the backdrop and Escape close the dialog', async ({ page }) => {
     await openDialog(page);
     await dialog(page).locator('.profile-close').click();

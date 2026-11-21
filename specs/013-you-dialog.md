@@ -36,6 +36,7 @@ more rows, for a setting you usually check once.
   export can have hundreds of senders.
 - **R5** Picking a name applies at once, as the dropdown did: messages from that name
   become sent, the rest received, and the dashboard redraws. The dialog stays open.
+  Backspace in an empty search doesn't clear a row: an app always has an owner.
 - **R6** A row says whether its current owner came from the export ("From your export
   profile"), was guessed ("Guessed: check this") or was picked by you ("Picked by
   you").

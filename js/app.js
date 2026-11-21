@@ -479,7 +479,8 @@ function renderOwnerDialog(sources) {
       }
       sel.value = S.owners[s].name;
       list.appendChild(li); // before makePicker, so it finds the <label for>
-      if (makePicker(sel)) sel.tomselect.control_input.placeholder = 'Search names';
+      // An app always has an owner, so Backspace can't empty the picker (as for #contactSel).
+      if (makePicker(sel, { onDelete: () => false })) sel.tomselect.control_input.placeholder = 'Search names';
       sel.onchange = () => setOwner(s, sel.value);
     }
   }
