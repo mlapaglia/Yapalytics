@@ -269,7 +269,6 @@ main { max-width: 1440px; margin: 0 auto; padding: 0 24px 64px; }
 }
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .field.grow { flex: 1 1 260px; max-width: 420px; }
-.owner-fields { display: contents; }
 .field > span, .field > label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 select, input[type="date"], input[type="search"] {
   font: inherit;
@@ -298,7 +297,8 @@ select { width: 100%; }
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 7px 10px;
-  min-height: 0;
+  min-height: 36px; /* keeps its height open and empty, when Tom Select hides the placeholder */
+  align-items: center;
   box-shadow: none;
   flex-wrap: nowrap;
 }
@@ -346,6 +346,12 @@ select { width: 100%; }
 .ts-dropdown .active { color: var(--text); background: var(--surface-2); }
 .ts-dropdown [data-selectable] .highlight { background: color-mix(in srgb, var(--accent) 22%, transparent); color: inherit; border-radius: 2px; }
 .ts-dropdown .selected { font-weight: 600; }
+/*
+ * In a dialog the list takes up room instead of floating: the dialog scrolls, so a
+ * floating list near its bottom was cut off. (A modal dialog is drawn above the page,
+ * so the list can't be moved out to <body> either.)
+ */
+dialog .ts-wrapper .ts-dropdown { position: static; box-shadow: none; }
 .pick-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .pick-logos { display: inline-flex; gap: 3px; flex: none; }
 .pick-logos .logo { width: 16px; height: 16px; }
@@ -835,7 +841,20 @@ table.leader .muted { color: var(--muted); }
 .person-chip small { color: var(--muted); }
 .chip-x { font: inherit; font-size: 11px; line-height: 1; color: var(--muted); background: none; border: 0; padding: 2px; margin-right: -4px; cursor: pointer; }
 .chip-x:hover { color: var(--text); }
-.people-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* Which one is you? (spec 013) */
+.owner-list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 16px; }
+.owner-row { display: grid; grid-template-columns: 130px minmax(0, 1fr); align-items: start; gap: 6px 12px; }
+.owner-app { display: flex; align-items: center; gap: 8px; font-weight: 600; padding-top: 8px; }
+.owner-app .logo { width: 18px; height: 18px; }
+.owner-pick { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.owner-origin { font-size: 12.5px; color: var(--muted); }
+.owner-origin.guess { color: var(--text-2); font-weight: 600; }
+@media (max-width: 560px) {
+  .owner-row { grid-template-columns: minmax(0, 1fr); }
+  .owner-app { padding-top: 0; }
+}
+.people-pick { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.people-pick > .sub { padding-top: 9px; } /* level with the pickers' text, which can grow when open */
 .people-pick select, .people-pick .ts-wrapper { flex: 1 1 200px; width: auto; min-width: 0; }
 .people-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border); }
 

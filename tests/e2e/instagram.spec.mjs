@@ -1,4 +1,4 @@
-import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab, addFiles } from './fixtures.mjs';
+import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab, addFiles, ownerPicker } from './fixtures.mjs';
 import { igMessage, looseThread, splitExport, threadOf, zippedExport, zippedHtmlExport } from '../helpers/instagram.mjs';
 
 /** Instagram messages loaded: total, and how many count as sent by you. */
@@ -13,7 +13,7 @@ test.describe('Instagram', () => {
     // 8 messages kept (2 likes are reactions); Jamie Park sent 2 of them.
     expect(await instagramCounts(page)).toEqual({ n: 8, sent: 2 });
     expect(await page.evaluate(() => S.reactions)).toBe(2);
-    const picker = page.locator('#ownerFields label', { hasText: 'You on Instagram' }).locator('select');
+    const picker = await ownerPicker(page, 'Instagram');
     await expect(picker).toHaveValue('Jamie Park');
     const options = await page.locator('#contactSel option').allTextContents();
     expect(options.some((o) => o.startsWith('📸 Alex Rivera'))).toBe(true);
@@ -23,7 +23,7 @@ test.describe('Instagram', () => {
 
   test('picking a different owner swaps sent and received', async ({ page }) => {
     await loadFiles(page, zippedExport());
-    const picker = page.locator('#ownerFields label', { hasText: 'You on Instagram' }).locator('select');
+    const picker = await ownerPicker(page, 'Instagram');
     await picker.selectOption('Alex Rivera');
     await expect.poll(async () => (await instagramCounts(page)).sent).toBe(4);
   });
@@ -41,7 +41,7 @@ test.describe('Instagram', () => {
 
   test('a message_1.json on its own guesses you from the chat title', async ({ page }) => {
     await loadFiles(page, looseThread());
-    await expect(page.locator('#ownerFields label', { hasText: 'You on Instagram' }).locator('select')).toHaveValue('Jamie Park');
+    await expect(await ownerPicker(page, 'Instagram')).toHaveValue('Jamie Park');
     expect(await instagramCounts(page)).toEqual({ n: 3, sent: 1 });
   });
 
@@ -201,8 +201,9 @@ test.describe('spec 004 reactions on messages', () => {
     const share = page.locator('#messages .bubble', { has: page.locator('.share-card') });
     await expect(share.locator('.rx')).toHaveAttribute('title', '😂 You');
 
-    const picker = page.locator('#ownerFields label', { hasText: 'You on Instagram' }).locator('select');
+    const picker = await ownerPicker(page, 'Instagram');
     await picker.selectOption('Alex Rivera');
+    await page.locator('#ownerDlg .profile-close').click(); // it stays open after a pick (spec 013 R5)
     await openTab(page, 'sec-messages');
     await expect(page.locator('#messages .bubble', { hasText: 'café later?' }).locator('.rx', { hasText: '❤️' })).toHaveAttribute('title', '❤️ You, Jamie Park');
     expect((await instagramCounts(page)).n).toBe(before.n);

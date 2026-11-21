@@ -2,7 +2,7 @@
  * specs/009-messenger-import.md in the browser: Facebook's export, Messenger's encrypted
  * chats download, and how they sit next to the other apps.
  */
-import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab } from './fixtures.mjs';
+import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab, ownerPicker } from './fixtures.mjs';
 import { zippedExport as instagramExport } from '../helpers/instagram.mjs';
 import { resultJson, singleChatExport } from '../helpers/telegram.mjs';
 import {
@@ -15,7 +15,7 @@ const countsOf = (page, s = 6) => page.evaluate((s) => {
   const msgs = S.msgs.filter((m) => m.s === s);
   return { n: msgs.length, sent: msgs.filter((m) => m.o === 1).length };
 }, s);
-const picker = (page) => page.locator('#ownerFields label', { hasText: 'You on Messenger' }).locator('select');
+const picker = (page) => ownerPicker(page, 'Messenger');
 const options = (page) => page.locator('#contactSel option').allTextContents();
 
 test.describe('spec 009 Messenger', () => {
@@ -24,7 +24,7 @@ test.describe('spec 009 Messenger', () => {
     // Alex: 4 kept (the like is a reaction), Road Trip: 2, Sam: 1. You sent 2.
     expect(await countsOf(page)).toEqual({ n: 7, sent: 2 });
     expect(await page.evaluate(() => S.reactions)).toBe(1);
-    await expect(picker(page)).toHaveValue('Jamie Park');
+    await expect(await picker(page)).toHaveValue('Jamie Park');
     const opts = await options(page);
     expect(opts.some((o) => o.startsWith('⚡ Alex Rivera'))).toBe(true);
     expect(opts.some((o) => o.startsWith('⚡👥 Road Trip 🚗'))).toBe(true);
@@ -33,7 +33,7 @@ test.describe('spec 009 Messenger', () => {
 
   test('AC6: picking another name under You on Messenger swaps sent and received', async ({ page }) => {
     await loadFiles(page, facebookExport());
-    await picker(page).selectOption('Alex Rivera');
+    await (await picker(page)).selectOption('Alex Rivera');
     await expect.poll(async () => (await countsOf(page)).sent).toBe(3);
   });
 
@@ -57,16 +57,16 @@ test.describe('spec 009 Messenger', () => {
 
   test('AC12: you are guessed from the encrypted threads, one or several', async ({ page }) => {
     await loadFiles(page, encryptedExport());
-    await expect(picker(page)).toHaveValue('Jamie Park');
+    await expect(await picker(page)).toHaveValue('Jamie Park');
     expect(await countsOf(page)).toEqual({ n: 9, sent: 5 });
     await loadFiles(page, samEncryptedThread());
-    await expect(picker(page)).toHaveValue('Jamie Park');
+    await expect(await picker(page)).toHaveValue('Jamie Park');
     expect(await countsOf(page)).toEqual({ n: 2, sent: 1 });
   });
 
   test('AC12: in a chat where only they wrote, you are still the one it is not named after', async ({ page }) => {
     await loadFiles(page, encryptedThread({ participants: ['Jamie Park', 'Alex Rivera'], threadName: 'Alex Rivera_6', messages: [e2eeMessage(0, 'Alex Rivera', { text: 'you there?' }), e2eeMessage(60, 'Alex Rivera', { text: 'hello??' })] }));
-    await expect(picker(page)).toHaveValue('Jamie Park');
+    await expect(await picker(page)).toHaveValue('Jamie Park');
     expect(await countsOf(page)).toEqual({ n: 2, sent: 0 });
   });
 

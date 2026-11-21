@@ -1,4 +1,4 @@
-import { test, expect, loadFiles, loadDemo, scrollTo, chartOption } from './fixtures.mjs';
+import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, ownerPicker } from './fixtures.mjs';
 import { fullExport, resultJson, singleGroupExport, zippedFullExport, zippedHtmlExport } from '../helpers/telegram.mjs';
 
 /** Telegram messages loaded: total, and how many count as sent by you. */
@@ -11,7 +11,7 @@ test.describe('Telegram', () => {
   test('loads a zipped full export and knows which messages are yours', async ({ page }) => {
     await loadFiles(page, zippedFullExport());
     expect(await telegramCounts(page)).toEqual({ n: 14, sent: 6 }); // Jamie Park sent 6 of the 14 kept messages
-    const picker = page.locator('#ownerFields label', { hasText: 'You on Telegram' }).locator('select');
+    const picker = await ownerPicker(page, 'Telegram');
     await expect(picker).toHaveValue('Jamie Park');
     const options = await page.locator('#contactSel option').allTextContents();
     expect(options.some((o) => o.startsWith('✈️ Alex Rivera'))).toBe(true);
@@ -21,7 +21,7 @@ test.describe('Telegram', () => {
 
   test('picking a different owner swaps sent and received', async ({ page }) => {
     await loadFiles(page, resultJson(fullExport()));
-    const picker = page.locator('#ownerFields label', { hasText: 'You on Telegram' }).locator('select');
+    const picker = await ownerPicker(page, 'Telegram');
     await picker.selectOption('Alex Rivera');
     // Alex Rivera's kept messages: 3 in your chat (the empty one is skipped) and 1 in the group.
     await expect.poll(async () => (await telegramCounts(page)).sent).toBe(4);
@@ -46,7 +46,8 @@ test.describe('Telegram', () => {
 
   test('a single group export leaves the owner to pick', async ({ page }) => {
     await loadFiles(page, resultJson(singleGroupExport()));
-    await expect(page.locator('#ownerFields label', { hasText: 'You on Telegram' })).toBeVisible();
+    await expect(page.locator('#ownerBtn')).toBeVisible();
+    await expect(await ownerPicker(page, 'Telegram')).toHaveCount(1);
     expect((await telegramCounts(page)).n).toBe(2);
   });
 
