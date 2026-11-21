@@ -1,6 +1,6 @@
 # 011 Bots in Google Chat conversations
 
-Status: Draft · PR:
+Status: Draft · PR: [#18](https://github.com/mlapaglia/Yapalytics/pull/18)
 
 ## Problem
 
