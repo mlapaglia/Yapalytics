@@ -213,6 +213,7 @@
         <select id="contactSel"></select>
       </div>
       <button class="btn people-btn" type="button" id="peopleBtn" hidden>🔗 Link people</button>
+      <button class="btn people-btn" type="button" id="ownerBtn" hidden>👤 Which one is you?</button>
       <div class="seg" id="sourceSeg" role="group" aria-label="Message source" hidden>
         <button data-source="all">All</button>
         <button data-source="0"><svg class="logo" aria-hidden="true"><use href="#logo-sms"/></svg>SMS</button>
@@ -223,7 +224,6 @@
         <button data-source="5"><svg class="logo" aria-hidden="true"><use href="#logo-instagram"/></svg>Instagram</button>
         <button data-source="6"><svg class="logo" aria-hidden="true"><use href="#logo-messenger"/></svg>Messenger</button>
       </div>
-      <div class="owner-fields" id="ownerFields"></div>
       <label class="check"><input type="checkbox" id="groupsChk" checked> Include group chats</label>
       <div class="field">
         <span>Date range</span>
@@ -685,6 +685,15 @@
       <span class="sub">Links are saved in this browser only. They use conversation names and numbers, never message text.</span>
       <button class="btn small ghost" type="button" id="peopleForget">Forget all links</button>
     </footer>
+  </dialog>
+
+  <dialog id="ownerDlg" class="profile people-dlg" aria-labelledby="ownerTitle">
+    <button class="btn ghost icon profile-close" type="button" aria-label="Close">✕</button>
+    <header class="people-head">
+      <h2 id="ownerTitle">Which one is you?</h2>
+      <p class="sub">These exports don't say which sender is you. Pick yourself so sent and received are right.</p>
+    </header>
+    <ul class="owner-list" id="ownerList"></ul>
   </dialog>
 
   <dialog id="filesDlg" class="profile files-dlg" aria-labelledby="filesTitle">

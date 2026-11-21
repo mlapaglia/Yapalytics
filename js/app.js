@@ -426,28 +426,89 @@ function guessOwner(source) {
   return [...score.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n)[0] || '';
 }
 
-/** Set sent/received on WhatsApp / iMessage / Telegram / Instagram records from S.owners, and rebuild the pickers. */
+/** Set sent/received on WhatsApp / iMessage / Telegram / Instagram / Messenger records from S.owners, and update the Which one is you? dialog. */
 function applyOwners() {
   for (const m of S.msgs) if (hasOwner(m.s)) m.o = m.sn === S.owners[m.s].name || isDefaultOwner(m.s, m.sn) ? 1 : 0;
   for (const c of S.contacts.values()) c.search = contactSearchText(c);
+  const sources = Object.keys(S.owners).map(Number).filter((s) => ownerChoices(s).length);
+  renderOwnerDialog(sources);
+  updateOwnerButton(sources);
+}
 
-  const box = $('#ownerFields');
-  box.innerHTML = '';
-  for (const source of Object.keys(S.owners).map(Number)) {
-    const names = new Map();
-    for (const c of ownerPool(source)) for (const [n, k] of c.members) names.set(n, (names.get(n) || 0) + k);
-    if (!names.size) continue; // nothing to pick, or every conversation names you "Me"
-    const owner = S.owners[source].name;
-    const field = document.createElement('label');
-    field.className = 'field';
-    field.title = `${SOURCES[source]} exports don't say which sender is you`;
-    field.innerHTML = `<span>You on ${SOURCES[source]}</span><select></select>`;
-    const sel = field.querySelector('select');
-    for (const [n] of [...names.entries()].sort((a, b) => b[1] - a[1])) sel.add(new Option(n, n));
-    sel.value = owner;
-    sel.onchange = () => setOwner(source, sel.value);
-    box.appendChild(field);
+// ------------------------------------------------------------------ which one is you (spec 013)
+
+/** An app's sender names with their message counts, most first. Empty when there's nothing to pick (every conversation names you "Me"). */
+function ownerChoices(source) {
+  const names = new Map();
+  for (const c of ownerPool(source)) for (const [n, k] of c.members) names.set(n, (names.get(n) || 0) + k);
+  return [...names.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+/** Where an app's owner came from: the export's own profile, a guess, or your pick (R6). */
+function ownerOrigin(source) {
+  const { name, auto } = S.owners[source];
+  if (!auto) return 'picked';
+  return ownerPool(source).some((c) => c.owner && c.owner === name) ? 'export' : 'guess';
+}
+const OWNER_ORIGIN_TEXT = { export: 'From your export profile', guess: 'Guessed: check this', picked: 'Picked by you' };
+
+/**
+ * One row per app with senders to pick. Rows are rebuilt only when the apps or their
+ * names change; picking a name only updates the row's value and origin, so focus stays
+ * in the dialog.
+ */
+function renderOwnerDialog(sources) {
+  const list = $('#ownerList');
+  const sig = JSON.stringify(sources.map((s) => [s, ownerChoices(s)]));
+  if (list.dataset.sig !== sig) {
+    list.dataset.sig = sig;
+    for (const sel of list.querySelectorAll('select')) sel.tomselect?.destroy();
+    list.innerHTML = '';
+    for (const s of sources) {
+      const li = document.createElement('li');
+      li.className = 'owner-row';
+      li.dataset.source = s;
+      li.dataset.app = SOURCES[s];
+      li.innerHTML = `<label class="owner-app" for="owner-${s}">${logoSvg(s)}${escapeHtml(SOURCES[s])}</label>
+        <div class="owner-pick"><select id="owner-${s}"></select><span class="owner-origin"></span></div>`;
+      const sel = li.querySelector('select');
+      for (const [n, k] of ownerChoices(s)) {
+        const opt = new Option(n, n);
+        Object.assign(opt.dataset, { search: n.toLowerCase(), name: n, count: fmtNum(k), aria: `${n}, ${countWords(k)}` });
+        sel.add(opt);
+      }
+      sel.value = S.owners[s].name;
+      list.appendChild(li); // before makePicker, so it finds the <label for>
+      if (makePicker(sel)) sel.tomselect.control_input.placeholder = 'Search names';
+      sel.onchange = () => setOwner(s, sel.value);
+    }
   }
+  for (const li of list.children) {
+    const s = +li.dataset.source;
+    setPickerValue(li.querySelector('select'), S.owners[s].name);
+    const origin = ownerOrigin(s);
+    const note = li.querySelector('.owner-origin');
+    note.className = `owner-origin ${origin}`;
+    note.textContent = OWNER_ORIGIN_TEXT[origin];
+  }
+}
+
+/** Shown when an app has senders to pick; counts the apps whose owner is only a guess (R2, R9). */
+function updateOwnerButton(sources) {
+  const btn = $('#ownerBtn');
+  const guessed = sources.filter((s) => ownerOrigin(s) === 'guess');
+  btn.hidden = !sources.length;
+  btn.textContent = guessed.length ? `👤 Which one is you? (${guessed.length})` : '👤 Which one is you?';
+  btn.title = guessed.length
+    ? `Check ${andList(guessed.map((s) => SOURCES[s]))}: who's you was guessed`
+    : "Pick which sender is you in apps whose exports don't say";
+}
+
+function initOwners() {
+  const dlg = $('#ownerDlg');
+  $('#ownerBtn').onclick = () => { if (!dlg.open) dlg.showModal(); };
+  dlg.querySelector('.profile-close').onclick = () => dlg.close();
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // the backdrop
 }
 
 function setOwner(source, name) {
@@ -962,6 +1023,8 @@ function makePicker(sel, opts = {}) {
     ts.refreshTimeout = null;
     ts.setTextboxValue('');
   });
+  // In a dialog the list takes up room (see styles.css), so bring all of it into view.
+  if (sel.closest('dialog')) ts.on('dropdown_open', () => ts.dropdown.scrollIntoView({ block: 'nearest' }));
   // Typing on the closed picker opens it, and the key lands in the search box (R9).
   ts.control.addEventListener('keydown', (e) => {
     if (!ts.isOpen && e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) ts.open();
@@ -2644,6 +2707,7 @@ function init() {
   $('#wrapSave').onclick = saveWrapped;
   initGlance();
   initPeople();
+  initOwners();
   initFiles();
   initMoodDetails();
   AiMood.init();

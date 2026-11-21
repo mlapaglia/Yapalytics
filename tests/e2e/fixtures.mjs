@@ -70,6 +70,15 @@ export async function addFiles(page, files) {
   await expect(page.locator('#dash')).toBeVisible();
 }
 
+/**
+ * The owner picker for an app ('Telegram', 'Instagram'…) in the Which one is you? dialog
+ * (spec 013), opening the dialog if needed. A <select>: Tom Select keeps it in step.
+ */
+export async function ownerPicker(page, app) {
+  if (!(await page.locator('#ownerDlg').evaluate((d) => d.open))) await page.click('#ownerBtn');
+  return page.locator(`#ownerList li[data-app="${app}"] select`);
+}
+
 /** Scrolls a card into view below the sticky filter bar (lazy sections render when visible). */
 /**
  * Opens the dashboard tab (spec 003) that holds an element, by clicking its tab. Does

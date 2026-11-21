@@ -75,8 +75,9 @@ Messenger has two exports, and a full history needs both:
   guess. The encrypted chats download has no profile, but a chat's `threadName` is the
   other person's name, so the guess is the participant the thread isn't named after (the
   rule the app already uses for 1-on-1s named after the other person), and failing that
-  the one participant in every thread. Either way, the filter bar shows **You on
-  Messenger** to set or correct it, as it does for Instagram.
+  the one participant in every thread. Either way, ~~the filter bar shows **You on
+  Messenger**~~ the **Which one is you?** dialog (spec 013) has a Messenger row to set
+  or correct it, as it does for Instagram.
 - **R6** A Facebook export is never read as Instagram, and an Instagram export never as
   Messenger, in the same pick or apart. A zip is Messenger when its paths start with
   `your_facebook_activity/`, it has Facebook's `profile_information.json`, its media
@@ -190,8 +191,8 @@ The existing Instagram tests must pass unchanged, apart from naming the worker t
 - **AC5** A DYI message whose text is escaped UTF-8 ("cafÃ©") shows as "café". An
   encrypted thread message "café 😃" shows unchanged.
 - **AC6** With `profile_information.json` in the zip, your messages are marked sent
-  with no picker change. Choosing another name under **You on Messenger** flips sent and
-  received.
+  with no picker change. Choosing another name for Messenger in **Which one is you?**
+  (spec 013; was **You on Messenger**) flips sent and received.
 - **AC7** An Instagram export and a Facebook export chosen together load as two apps:
   Instagram conversations keep `ig:` keys and source 5, Messenger ones `fb:` keys and
   source 6.
