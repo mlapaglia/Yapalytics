@@ -949,6 +949,11 @@ function makePicker(sel, opts = {}) {
     ...opts,
   });
   ts.control_input.placeholder = 'Search by name, number or member';
+  // With dropdown_input the control is the combobox. A <label for> names it (Tom Select
+  // links that up); a select named by aria-label needs its name copied across.
+  if (sel.hasAttribute('aria-label') && !ts.focus_node.hasAttribute('aria-labelledby')) {
+    ts.focus_node.setAttribute('aria-label', sel.getAttribute('aria-label'));
+  }
   // Each opening starts a new search. Tom Select ignores clicks on the picker while
   // its search box has text, so a leftover search would also keep it from reopening.
   // A search still waiting out refreshThrottle would reopen the list, so drop it too.
@@ -2569,7 +2574,9 @@ function init() {
     else loadFiles(e.dataTransfer.files);
   });
 
-  makePicker($('#contactSel'));
+  // Backspace in an empty search would remove the picked conversation, leaving the
+  // dashboard with none. Picking "All conversations" is the way back to everything.
+  makePicker($('#contactSel'), { onDelete: () => false });
   $('#contactSel').onchange = (e) => setContact(e.target.value);
   $('#sourceSeg').onclick = (e) => {
     // The buttons hold an app logo, so the click can land on the svg inside one.

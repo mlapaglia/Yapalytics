@@ -54,7 +54,9 @@ a second control for nearly the same job.
 - **R8** Logos are decorative to assistive tech (`aria-hidden`); each row's accessible
   text includes the app name, e.g. "Alex Rivera, Instagram, 120 messages".
 - **R9** The picker works with the keyboard: focus, type, arrow keys to move, Enter to
-  pick, Escape to close and keep the current conversation.
+  pick, Escape to close and keep the current conversation. Backspace in an empty search
+  doesn't clear the Conversation picker (the dashboard always has a selection). Each
+  picker's focusable control has the same accessible name as its `<select>`.
 - **R10** The scope line under the filters no longer names People terms; it says
   "All conversations" or the picked conversation, as without the People box.
 - **R11** Labels everywhere else (leaderboard, charts, message list, profile) are

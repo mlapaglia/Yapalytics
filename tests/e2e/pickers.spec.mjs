@@ -136,6 +136,26 @@ test.describe('spec 012 searchable conversation pickers', () => {
     await expect(row(page, 'contactSel', SMS_ALEX).locator('svg')).toHaveAttribute('aria-hidden', 'true');
   });
 
+  test('R9: each picker\'s combobox has a name', async ({ page }) => {
+    // The focusable control, not the hidden <select> (which keeps its own name).
+    await expect(control(page, 'contactSel')).toHaveAttribute('role', 'combobox');
+    await expect(control(page, 'contactSel')).toHaveAccessibleName('Conversation');
+    await page.click('#peopleBtn');
+    await expect(control(page, 'peopleA')).toHaveAccessibleName('Conversation to link');
+    await expect(control(page, 'peopleB')).toHaveAccessibleName('Conversation with the same person');
+  });
+
+  test('R9: Backspace in an empty search keeps the conversation', async ({ page }) => {
+    await pick(page, 'contactSel', 'pat lee', SMS_PAT);
+    await control(page, 'contactSel').click();
+    await expect(page.locator('#contactSel-ts-dropdown')).toBeVisible();
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#contactSel')).toHaveValue(SMS_PAT);
+    expect(await page.evaluate(() => S.filter.contact)).toBe(SMS_PAT);
+    await expect(control(page, 'contactSel')).toContainText('Pat Lee');
+  });
+
   test('AC13: the keyboard picks, and Escape keeps the conversation', async ({ page }) => {
     await control(page, 'contactSel').focus();
     await page.keyboard.type('alex');
@@ -172,11 +192,15 @@ test.describe('spec 012 searchable conversation pickers', () => {
   });
 
   test('R2: All conversations stays first, and the plain list keeps its order', async ({ page }) => {
+    const values = () => page.locator('#contactSel option').evaluateAll((els) => els.map((e) => e.value));
+    const before = await values();
+    expect(before[0]).toBe('all');
     await pick(page, 'contactSel', 'pat lee', SMS_PAT);
+    expect(await values()).toEqual(before);
     await pick(page, 'contactSel', 'all', 'all');
-    const opts = await page.locator('#contactSel option').evaluateAll((els) => els.map((e) => e.value));
-    expect(opts[0]).toBe('all');
-    expect(new Set(opts).size).toBe(opts.length);
+    const after = await values();
+    expect(after).toEqual(before);
+    expect(new Set(after).size).toBe(after.length);
   });
 });
 
