@@ -15,8 +15,7 @@ const S = {
   filesPending: 0, // files added in the open Files dialog that are still being checked
   files: [], // loaded export files (spec 006): { id, file, name, size, lastModified, kind, on }, in the order added
   filesDraft: [], // the Files dialog's edited copy of `files` (rows it adds also have `added`, unreadable ones `error`)
-  filter: { contact: 'all', source: 'all', groups: true, people: [], from: null, to: null },
-  peopleKeys: null, // Set of thread keys matching filter.people, or null when not filtering
+  filter: { contact: 'all', source: 'all', groups: true, from: null, to: null },
   // Your sender name per source whose records carry sender names (WhatsApp, iMessage, Telegram, Instagram, Messenger);
   // `auto` is false once picked by hand.
   owners: { 2: { name: '', auto: true }, 3: { name: '', auto: true }, 4: { name: '', auto: true }, 5: { name: '', auto: true }, 6: { name: '', auto: true } },
@@ -54,6 +53,8 @@ const $$ = (sel) => [...document.querySelectorAll(sel)];
 
 const SOURCES = { 0: 'SMS', 1: 'Google Chat', 2: 'WhatsApp', 3: 'iMessage', 4: 'Telegram', 5: 'Instagram', 6: 'Messenger' };
 const SOURCE_MARK = { 1: '💬', 2: '🟢', 3: '🔵', 4: '✈️', 5: '📸', 6: '⚡' };
+/** Each source's logo symbol in index.html (#logo-…), shown in the conversation pickers (spec 012 R7). */
+const SOURCE_LOGO = { 0: 'sms', 1: 'googlechat', 2: 'whatsapp', 3: 'imessage', 4: 'telegram', 5: 'instagram', 6: 'messenger' };
 const isZip = (f) => /\.zip$/i.test(f.name) || /zip/.test(f.type);
 /** Records from these sources carry their sender in `sn` and get `o` from S.owners. */
 const hasOwner = (s) => s === 2 || s === 3 || s === 4 || s === 5 || s === 6;
@@ -363,13 +364,17 @@ function formatAddr(a) {
 }
 
 function contactLabel(c) {
-  if (c.person) return '🔗 ' + (formatAddr(c.name) || c.key);
+  if (c.person) return '🔗 ' + contactName(c);
   const chat = SOURCE_MARK[c.s] || '';
-  if (c.group) {
-    if (c.name) return chat + '👥 ' + c.name.split(', ').map(formatAddr).join(', ');
-    return chat + '👥 ' + c.addr.split('~').map(formatAddr).join(', ');
-  }
-  return (chat ? chat + ' ' : '') + (formatAddr(c.name) || formatAddr(c.addr) || c.key);
+  if (c.group) return chat + '👥 ' + contactName(c);
+  return (chat ? chat + ' ' : '') + contactName(c);
+}
+
+/** A conversation's name without the app and group marks (the pickers draw those, spec 012 R7). */
+function contactName(c) {
+  if (c.person) return formatAddr(c.name) || c.key;
+  if (c.group) return (c.name ? c.name.split(', ') : c.addr.split('~')).map(formatAddr).join(', ');
+  return formatAddr(c.name) || formatAddr(c.addr) || c.key;
 }
 
 function loadedSources() {
@@ -425,7 +430,6 @@ function guessOwner(source) {
 function applyOwners() {
   for (const m of S.msgs) if (hasOwner(m.s)) m.o = m.sn === S.owners[m.s].name || isDefaultOwner(m.s, m.sn) ? 1 : 0;
   for (const c of S.contacts.values()) c.search = contactSearchText(c);
-  matchPeople();
 
   const box = $('#ownerFields');
   box.innerHTML = '';
@@ -454,7 +458,7 @@ function setOwner(source, name) {
 }
 
 /**
- * Lowercased text a people search matches against: the conversation's name and
+ * Lowercased text the conversation pickers search (spec 012 R1): the conversation's name and
  * addresses plus, for groups, every member's name. SMS group keys are 'g:' + the
  * members' 1-on-1 keys, so members' names come from their own contacts.
  */
@@ -470,25 +474,6 @@ function contactSearchText(c) {
     }
   }
   return parts.filter(Boolean).join('\n').toLowerCase();
-}
-
-/** Recompute S.peopleKeys from S.filter.people (any term matches). */
-function matchPeople() {
-  const terms = S.filter.people;
-  if (!terms.length) { S.peopleKeys = null; return; }
-  S.peopleKeys = new Set();
-  for (const c of S.contacts.values()) {
-    if (terms.some((t) => c.search.includes(t))) S.peopleKeys.add(c.key);
-  }
-}
-
-function setPeople(text) {
-  S.filter.people = [...new Set(text.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))];
-  matchPeople();
-  if (S.peopleKeys && !S.peopleKeys.has(S.filter.contact)) S.filter.contact = 'all';
-  S.browserLimit = 200;
-  populateContacts();
-  refresh();
 }
 
 function labelFor(key) {
@@ -578,7 +563,6 @@ function applyLinks() {
   for (const c of S.calls) relink(c);
   for (const c of S.contacts.values()) if (c.person) c.label = contactLabel(c);
   for (const c of S.contacts.values()) c.search = contactSearchText(c);
-  matchPeople();
   S.firstSeen = computeFirstSeen();
   S.docFreq = null;
   const sel = S.filter.contact;
@@ -667,12 +651,16 @@ function renderPeopleDialog() {
     : '<p class="sub">None yet.</p>') +
     (unloaded > 0 ? `<p class="sub">${fmtNum(unloaded)} more saved link${unloaded === 1 ? ' is' : 's are'} for conversations that aren't loaded.</p>` : '');
 
-  const opts = [...S.linkable].sort((a, b) => threadName(a).localeCompare(threadName(b)))
-    .map((c) => `<option value="${escapeHtml(c.key)}">${escapeHtml(`${threadName(c)} (${SOURCES[c.s || 0]}, ${fmtNum(S.threadN.get(c.key) || 0)})`)}</option>`).join('');
+  const linkable = [...S.linkable].sort((a, b) => threadName(a).localeCompare(threadName(b)));
   for (const sel of [$('#peopleA'), $('#peopleB')]) {
     const keep = sel.value;
-    sel.innerHTML = '<option value="">Choose a conversation…</option>' + opts;
+    sel.innerHTML = '<option value="">Choose a conversation…</option>';
+    for (const c of linkable) {
+      const n = S.threadN.get(c.key) || 0;
+      sel.add(pickerOption(c, `${threadName(c)} (${SOURCES[c.s || 0]}, ${fmtNum(n)})`, fmtNum(n), countWords(n)));
+    }
     sel.value = S.linkable.some((c) => c.key === keep) ? keep : '';
+    refreshPicker(sel);
   }
   syncPeopleLink();
 }
@@ -689,7 +677,7 @@ function openPeopleDialog(preselect) {
   computeSuggestions();
   renderPeopleDialog();
   if (preselect && S.linkable.some((c) => c.key === preselect)) {
-    $('#peopleA').value = preselect;
+    setPickerValue($('#peopleA'), preselect);
     syncPeopleLink();
   }
   const dlg = $('#peopleDlg');
@@ -699,6 +687,8 @@ function openPeopleDialog(preselect) {
 function initPeople() {
   readPeopleStore();
   const dlg = $('#peopleDlg');
+  // Their options come later, so the empty option can't give the placeholder yet.
+  for (const sel of [$('#peopleA'), $('#peopleB')]) makePicker(sel, { placeholder: 'Choose a conversation…' });
   $('#peopleBtn').onclick = () => openPeopleDialog();
   dlg.querySelector('.profile-close').onclick = () => dlg.close();
   dlg.addEventListener('click', (e) => {
@@ -723,7 +713,8 @@ function initPeople() {
   });
   $('#peopleLink').onclick = () => {
     const keys = [$('#peopleA').value, $('#peopleB').value];
-    $('#peopleA').value = $('#peopleB').value = '';
+    setPickerValue($('#peopleA'), '');
+    setPickerValue($('#peopleB'), '');
     changeLinks(() => linkThreads(keys));
   };
   $('#peopleForget').onclick = () => changeLinks(() => { S.people.clear(); S.dismissed.clear(); });
@@ -901,6 +892,104 @@ function initFiles() {
   });
 }
 
+// ------------------------------------------------------------------ conversation pickers (spec 012)
+
+const logoSvg = (s) => `<svg class="logo" aria-hidden="true"><use href="#logo-${SOURCE_LOGO[s]}"/></svg>`;
+const countWords = (n, calls = 0) => [n && `${fmtNum(n)} message${n === 1 ? '' : 's'}`, calls && `${fmtNum(calls)} call${calls === 1 ? '' : 's'}`].filter(Boolean).join(', ');
+
+/**
+ * Puts what a picker searches and draws on a conversation's <option> as data-*
+ * attributes, which Tom Select reads as option fields. The option's text stays the
+ * plain-dropdown label (R6).
+ */
+function pickerOption(c, text, count, words) {
+  const opt = new Option(text, c.key);
+  const sources = keySources(c.key);
+  const name = contactName(c);
+  Object.assign(opt.dataset, {
+    search: c.search || name.toLowerCase(),
+    name,
+    sources: sources.join(','),
+    kind: c.person ? 'person' : c.group ? 'group' : '',
+    count,
+    aria: [name, ...sources.map((s) => SOURCES[s]), words].filter(Boolean).join(', '),
+  });
+  return opt;
+}
+
+/**
+ * One picker row, and the picked item in the closed picker: logos, name, count (R7, R8).
+ * A linked person's several logos already say it's joined, so it has no 🔗.
+ */
+function pickerRowHtml(d, escape) {
+  if (!d.name) return `<div>${escape(d.text)}</div>`; // "Choose a conversation…"
+  const logos = d.sources ? d.sources.split(',').map((s) => logoSvg(+s)).join('') : '';
+  const mark = (m) => `<span class="pick-mark" aria-hidden="true">${m}</span>`;
+  return `<div class="pick-row" aria-label="${escape(d.aria || d.name)}">${logos ? `<span class="pick-logos">${logos}</span>` : ''}${d.kind === 'group' ? mark('👥') : ''}<span class="pick-name">${escape(d.name)}</span>${d.count ? `<span class="pick-count">${escape(d.count)}</span>` : ''}</div>`;
+}
+
+/** Makes a <select> searchable with Tom Select; null (a plain dropdown) when the library didn't load (R6). */
+function makePicker(sel, opts = {}) {
+  if (typeof TomSelect === 'undefined') return null;
+  const ts = new TomSelect(sel, {
+    // The search box sits at the top of the open list, so the closed picker keeps
+    // showing the picked conversation instead of mixing it with what's typed.
+    plugins: ['dropdown_input'],
+    searchField: ['search'],
+    maxOptions: null,
+    refreshThrottle: 100, // ms after a key before the list filters (300 by default felt slow)
+    closeAfterSelect: true,
+    // Every match scores the same, so results keep the list's own order (most messages
+    // first), and "All conversations" always stays (R2).
+    score(query) {
+      const match = this.getScoreFunction(query);
+      return (item) => (item.value === 'all' || match(item) > 0 ? 1 : 0);
+    },
+    render: { option: pickerRowHtml, item: pickerRowHtml, no_results: () => '<div class="no-results">No conversations match</div>' },
+    ...opts,
+  });
+  ts.control_input.placeholder = 'Search by name, number or member';
+  // Each opening starts a new search. Tom Select ignores clicks on the picker while
+  // its search box has text, so a leftover search would also keep it from reopening.
+  // A search still waiting out refreshThrottle would reopen the list, so drop it too.
+  ts.on('dropdown_close', () => {
+    clearTimeout(ts.refreshTimeout);
+    ts.refreshTimeout = null;
+    ts.setTextboxValue('');
+  });
+  // Typing on the closed picker opens it, and the key lands in the search box (R9).
+  ts.control.addEventListener('keydown', (e) => {
+    if (!ts.isOpen && e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) ts.open();
+  });
+  // Tom Select moves the picked <option> to the end of the <select>, which would
+  // reorder the plain list. One value is all a single picker needs to write back.
+  ts.updateOriginalInput = (o = {}) => {
+    sel.value = ts.items[0] ?? '';
+    if (ts.isSetup && !o.silent) ts.trigger('change', ts.getValue());
+  };
+  return ts;
+}
+
+/** Re-reads a picker's <option>s after they were rebuilt. */
+function refreshPicker(sel) {
+  const ts = sel.tomselect;
+  if (!ts) return;
+  const value = sel.value;
+  ts.clear(true);
+  ts.clearOptions();
+  ts.sync();
+  ts.setValue(value, true);
+}
+
+/**
+ * Sets a picker's value without a change event. Skips a picker that already shows it
+ * (it was just picked there): setting it again would reopen the list.
+ */
+function setPickerValue(sel, value) {
+  sel.value = value;
+  if (sel.tomselect && sel.tomselect.getValue() !== value) sel.tomselect.setValue(value, true);
+}
+
 // ------------------------------------------------------------------ filters
 
 function populateContacts() {
@@ -910,15 +999,15 @@ function populateContacts() {
   for (const m of S.msgs) if (source === 'all' || (m.s || 0) === source) totals.set(m.k, (totals.get(m.k) || 0) + 1);
   const callTotals = new Map();
   if (source === 'all' || source === 0) for (const c of S.calls) callTotals.set(c.k, (callTotals.get(c.k) || 0) + 1);
-  const people = S.peopleKeys;
   const keys = [...new Set([...totals.keys(), ...callTotals.keys()])]
-    .filter((k) => (source === 'all' || keySources(k).includes(source)) && (!people || people.has(k)));
+    .filter((k) => source === 'all' || keySources(k).includes(source));
   keys.sort((a, b) => (totals.get(b) || 0) - (totals.get(a) || 0) || (callTotals.get(b) || 0) - (callTotals.get(a) || 0));
 
   const sel = $('#contactSel');
   sel.innerHTML = '';
-  const shown = source === 'all' && !people ? S.msgs.length : keys.reduce((s, k) => s + (totals.get(k) || 0), 0);
+  const shown = source === 'all' ? S.msgs.length : keys.reduce((s, k) => s + (totals.get(k) || 0), 0);
   const all = new Option(`All conversations (${fmtNum(shown)})`, 'all');
+  Object.assign(all.dataset, { search: 'all conversations', name: 'All conversations', count: fmtNum(shown), aria: `All conversations, ${countWords(shown)}` });
   sel.add(all);
   for (const k of keys) {
     const n = totals.get(k) || 0;
@@ -926,9 +1015,11 @@ function populateContacts() {
     const parts = [];
     if (n) parts.push(fmtNum(n));
     if (cn) parts.push(`${fmtNum(cn)} calls`);
-    sel.add(new Option(`${labelFor(k)} (${parts.join(', ')})`, k));
+    const c = S.contacts.get(k);
+    sel.add(c ? pickerOption(c, `${labelFor(k)} (${parts.join(', ')})`, parts.join(', '), countWords(n, cn)) : new Option(`${labelFor(k)} (${parts.join(', ')})`, k));
   }
   sel.value = S.filter.contact;
+  refreshPicker(sel);
   const present = loadedSources();
   $('#sourceSeg').hidden = present.size < 2;
   $$('#sourceSeg button').forEach((b) => {
@@ -941,7 +1032,7 @@ function populateContacts() {
 
 function setContact(key) {
   S.filter.contact = key;
-  $('#contactSel').value = key;
+  setPickerValue($('#contactSel'), key);
   S.browserLimit = 200;
   refresh();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -952,17 +1043,14 @@ function baseMessages(contact = S.filter.contact) {
   const { groups, source } = S.filter;
   // A linked person (spec 005) spans apps, so the app filter still applies to it.
   if (contact !== 'all') return S.msgs.filter((m) => m.k === contact && (source === 'all' || (m.s || 0) === source));
-  const people = S.peopleKeys;
-  if (source === 'all' && groups && !people) return S.msgs;
-  return S.msgs.filter((m) =>
-    (source === 'all' || (m.s || 0) === source) && (groups || !m.k.startsWith('g:')) && (!people || people.has(m.k)));
+  if (source === 'all' && groups) return S.msgs;
+  return S.msgs.filter((m) => (source === 'all' || (m.s || 0) === source) && (groups || !m.k.startsWith('g:')));
 }
 
 function baseCalls() {
   const { contact, source } = S.filter;
   if (source !== 'all' && source !== 0) return []; // calls only come from SMS Backup & Restore
   if (contact !== 'all') return S.calls.filter((c) => c.k === contact);
-  if (S.peopleKeys) return S.calls.filter((c) => S.peopleKeys.has(c.k));
   return S.calls;
 }
 
@@ -1214,7 +1302,7 @@ function senderLabel(x) {
 
 /** Document frequencies for "What you talk about", cached per filter combination. */
 function docFreqFor() {
-  const sig = `${S.filter.source}|${S.filter.groups}|${S.filter.people.join(',')}|${S.msgs.length}`;
+  const sig = `${S.filter.source}|${S.filter.groups}|${S.msgs.length}`;
   if (!S.docFreq || S.docFreq.sig !== sig) S.docFreq = { sig, value: buildDocFreq(baseMessages('all')) };
   return S.docFreq.value;
 }
@@ -1650,7 +1738,7 @@ function initGlance() {
     else if (t.dataset.otdDay) {
       if (t.dataset.contact && S.contacts.has(t.dataset.contact)) { // the biggest juggle (spec 007) names its person
         S.filter.contact = t.dataset.contact;
-        $('#contactSel').value = t.dataset.contact;
+        setPickerValue($('#contactSel'), t.dataset.contact);
       }
       S.browserMood = null;
       readDay(+t.dataset.otdDay);
@@ -1996,10 +2084,7 @@ function saveWrapped() {
 
 function renderScope(n) {
   const src = S.filter.source === 'all' ? '' : ` (${SOURCES[S.filter.source]})`;
-  const { people, groups } = S.filter;
-  const all = people.length
-    ? `${groups ? 'Conversations' : '1-on-1 conversations'} with ${people.map((p) => `“${p}”`).join(' or ')}`
-    : groups ? 'All conversations' : 'All 1-on-1 conversations';
+  const all = S.filter.groups ? 'All conversations' : 'All 1-on-1 conversations';
   const who = S.filter.contact === 'all' ? all + src : labelFor(S.filter.contact);
   const { first, last } = dataBounds();
   const from = new Date(S.filter.from ?? first).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
@@ -2484,6 +2569,7 @@ function init() {
     else loadFiles(e.dataTransfer.files);
   });
 
+  makePicker($('#contactSel'));
   $('#contactSel').onchange = (e) => setContact(e.target.value);
   $('#sourceSeg').onclick = (e) => {
     // The buttons hold an app logo, so the click can land on the svg inside one.
@@ -2525,11 +2611,6 @@ function init() {
     if (!g) return;
     S.gran = g;
     renderTimeline(S.ui, baseMessages());
-  };
-
-  $('#peopleInput').oninput = (e) => {
-    clearTimeout(S.peopleTimer);
-    S.peopleTimer = setTimeout(() => setPeople(e.target.value), 200);
   };
 
   $('#leaderTable').onclick = (e) => {

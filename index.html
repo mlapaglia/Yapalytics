@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Yapalytics</title>
   <meta name="description" content="Charts and statistics for SMS Backup & Restore XML backups, Google Chat exports from Google Takeout, WhatsApp chat exports, iMessage exports, Telegram exports, Instagram exports and Facebook Messenger exports, processed entirely in your browser.">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.6.2/dist/css/tom-select.css">
   <link rel="stylesheet" href="css/styles.css">
   <script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tom-select@2.6.2/dist/js/tom-select.complete.min.js"></script>
 </head>
 <body>
   <!-- App logos: Simple Icons (CC0), SMS from Material Icons (Apache 2.0). Kept out of view rather than display:none so the Instagram gradient renders. -->
@@ -206,15 +208,11 @@
   <!-- ============================================================ dashboard -->
   <main id="dash" hidden>
     <div class="filters">
-      <label class="field grow">
-        <span>Conversation</span>
+      <div class="field grow">
+        <label for="contactSel">Conversation</label>
         <select id="contactSel"></select>
-      </label>
+      </div>
       <button class="btn people-btn" type="button" id="peopleBtn" hidden>🔗 Link people</button>
-      <label class="field people">
-        <span>People</span>
-        <input type="search" id="peopleInput" placeholder="e.g. Alex, Mom" aria-label="Show only conversations with these people">
-      </label>
       <div class="seg" id="sourceSeg" role="group" aria-label="Message source" hidden>
         <button data-source="all">All</button>
         <button data-source="0"><svg class="logo" aria-hidden="true"><use href="#logo-sms"/></svg>SMS</button>
@@ -591,7 +589,7 @@
       <div class="grid">
         <article class="card wide">
           <header>
-            <div><h2>Your year in messages</h2><p class="sub">A shareable summary of one year (follows the conversation, source and people filters)</p></div>
+            <div><h2>Your year in messages</h2><p class="sub">A shareable summary of one year (follows the conversation and source filters)</p></div>
             <div class="wrap-actions"><div class="seg" id="wrapYears" role="group" aria-label="Year"></div><button class="btn small" id="wrapSave">Save PNG</button></div>
           </header>
           <div class="wrapped"><canvas id="wrapCanvas" width="1080" height="1350" aria-label="Year in review image"></canvas></div>

@@ -12,6 +12,7 @@
   "devDependencies": {
     "@playwright/test": "1.63.0",
     "echarts": "6.1.0",
-    "heic-to": "1.6.5"
+    "heic-to": "1.6.5",
+    "tom-select": "2.6.2"
   }
 }

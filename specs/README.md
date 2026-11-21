@@ -46,3 +46,4 @@ see, changes what data leaves the browser, or takes more than a day to build.
 | [009 Facebook Messenger import](009-messenger-import.md) | Approved: built ([#16](https://github.com/mlapaglia/Yapalytics/pull/16)) |
 | [010 App switches in the message list](010-app-switch-markers.md) | Approved: built ([#17](https://github.com/mlapaglia/Yapalytics/pull/17)) |
 | [011 Bots in Google Chat conversations](011-google-chat-bot-members.md) | Implemented ([#18](https://github.com/mlapaglia/Yapalytics/pull/18)) |
+| [012 Searchable conversation pickers](012-searchable-conversation-pickers.md) | Draft: built, awaiting review |

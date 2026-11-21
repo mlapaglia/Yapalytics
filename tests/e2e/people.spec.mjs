@@ -159,12 +159,7 @@ test.describe('spec 005 linked people', () => {
     expect(opts[0]).toBe('All conversations (13)');
   });
 
-  test('AC13: the People filter finds a person by any of its names', async ({ page }) => {
-    await linkByHand(page, SMS_PAT, IG_SAM);
-    await page.locator('#peopleDlg .profile-close').click();
-    await page.fill('#peopleInput', 'sam patel');
-    await expect.poll(() => options(page)).toContain('🔗 Pat Lee (3)');
-  });
+  // AC13 (the People filter) moved to spec 012 AC4, in pickers.spec.mjs.
 
   test('AC14: the name defaults to the contact name and can be changed', async ({ page }) => {
     await linkByHand(page, IG_SAM, SMS_PAT);

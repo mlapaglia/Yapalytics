@@ -269,9 +269,8 @@ main { max-width: 1440px; margin: 0 auto; padding: 0 24px 64px; }
 }
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .field.grow { flex: 1 1 260px; max-width: 420px; }
-.field.people { flex: 0 1 220px; }
 .owner-fields { display: contents; }
-.field > span { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.field > span, .field > label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 select, input[type="date"], input[type="search"] {
   font: inherit;
   color: var(--text);
@@ -282,6 +281,77 @@ select, input[type="date"], input[type="search"] {
   min-width: 0;
 }
 select { width: 100%; }
+
+/*
+ * Searchable conversation pickers (Tom Select, spec 012), in the app's colours. The
+ * selectors match tom-select.css's own (.full, .input-active) so the theme wins in
+ * every state, not just while the picker is open.
+ */
+.ts-wrapper { min-width: 0; --ts-pr-caret: 28px; } /* room for the caret */
+.ts-wrapper.single .ts-control, .ts-wrapper.single .ts-control input { cursor: pointer; }
+.ts-wrapper .ts-control,
+.ts-wrapper.full .ts-control,
+.ts-wrapper.single.input-active .ts-control {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 7px 10px;
+  min-height: 0;
+  box-shadow: none;
+  flex-wrap: nowrap;
+}
+.ts-wrapper.single .ts-control::after { /* caret */
+  content: '';
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-top: -6px;
+  border: solid var(--muted);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+.ts-wrapper.single.dropdown-active .ts-control::after { margin-top: -2px; transform: rotate(-135deg); }
+.ts-wrapper.focus .ts-control,
+.ts-wrapper.plugin-dropdown_input.focus.dropdown-active .ts-control { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.ts-wrapper .ts-control > input { font: inherit; color: var(--text); }
+.ts-wrapper .ts-control > input::placeholder { color: var(--muted); }
+.ts-wrapper .ts-control > .item { min-width: 0; flex: 1 1 auto; }
+.ts-dropdown {
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  margin-top: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  z-index: 20;
+}
+.ts-wrapper .ts-control > .items-placeholder { font: inherit; color: var(--text); background: transparent; padding: 0; }
+.ts-wrapper .ts-control > .items-placeholder::placeholder { color: var(--muted); }
+.plugin-dropdown_input .dropdown-input {
+  font: inherit;
+  color: var(--text);
+  border-color: var(--border);
+  padding: 8px 10px;
+  outline: none;
+}
+.plugin-dropdown_input .dropdown-input::placeholder { color: var(--muted); }
+.ts-dropdown .ts-dropdown-content { max-height: min(360px, 60vh); }
+.ts-dropdown .option, .ts-dropdown .no-results { padding: 7px 10px; }
+.ts-dropdown .no-results { color: var(--muted); }
+.ts-dropdown .active { color: var(--text); background: var(--surface-2); }
+.ts-dropdown [data-selectable] .highlight { background: color-mix(in srgb, var(--accent) 22%, transparent); color: inherit; border-radius: 2px; }
+.ts-dropdown .selected { font-weight: 600; }
+.pick-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pick-logos { display: inline-flex; gap: 3px; flex: none; }
+.pick-logos .logo { width: 16px; height: 16px; }
+.pick-mark { flex: none; }
+.pick-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-count { flex: none; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .dates { display: flex; align-items: center; gap: 6px; }
 .dash-sep { color: var(--muted); }
 .check { display: flex; align-items: center; gap: 6px; color: var(--text-2); padding-bottom: 8px; cursor: pointer; }
@@ -651,7 +721,7 @@ table.leader .muted { color: var(--muted); }
   .tabs { top: 0; }
   .dash-section .card { scroll-margin-top: calc(var(--tabs-h) + 12px); }
   #jumpSel { width: 104px; }
-  .field.grow, .field.people { max-width: none; flex-basis: 100%; }
+  .field.grow { max-width: none; flex-basis: 100%; }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kpi-value { font-size: 20px; }
   #landing { padding: 24px 16px 48px; }
@@ -766,7 +836,7 @@ table.leader .muted { color: var(--muted); }
 .chip-x { font: inherit; font-size: 11px; line-height: 1; color: var(--muted); background: none; border: 0; padding: 2px; margin-right: -4px; cursor: pointer; }
 .chip-x:hover { color: var(--text); }
 .people-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.people-pick select { flex: 1 1 200px; width: auto; }
+.people-pick select, .people-pick .ts-wrapper { flex: 1 1 200px; width: auto; min-width: 0; }
 .people-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border); }
 
 /* ------------------------------------------------------------------ loaded files (spec 006) */

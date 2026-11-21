@@ -50,8 +50,8 @@ gap, but with this tab's own gap (`S.appsGap`, R7) instead of the dashboard's
 - **R2** With **All conversations** selected, the tab shows totals across linked people
   and a table with one row per linked person. With a person selected, it shows that
   person alone.
-- **R3** The date range and People filter apply, as on every other tab. The
-  conversation gap is this tab's own (R7).
+- **R3** The date range ~~and People filter~~ applies, as on every other tab (spec 012
+  removed the People filter). The conversation gap is this tab's own (R7).
 - **R4** A linked person's profile has a short **Across apps** section: the app split
   bar, plus switches per conversation, who switches, and cross-app replies.
 - **R5** Highlights can include one cross-app finding, the strongest of: who switches
