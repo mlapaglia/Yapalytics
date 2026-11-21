@@ -24,9 +24,11 @@ export const GIPHY = { name: 'GIPHY', user_type: 'Bot' };
  * @param {{ dir: string, name?: string, members: object[], from: object[] }[]} chats
  *   `dir` is the Groups/ folder ("DM x", "Space y"); `from` lists each message's sender,
  *   one minute apart starting 2024-08-20 12:00 UTC.
+ * @param {{ userInfo?: boolean }} [opts] `userInfo: false` leaves out user_info.json, so
+ *   the parser has to work out whose export it is.
  */
-export function takeoutChats(chats) {
-  const entries = [{ name: 'Takeout/Google Chat/Users/User 1/user_info.json', data: JSON.stringify({ user: ME }), deflate: true }];
+export function takeoutChats(chats, { userInfo = true } = {}) {
+  const entries = userInfo ? [{ name: 'Takeout/Google Chat/Users/User 1/user_info.json', data: JSON.stringify({ user: ME }), deflate: true }] : [];
   for (const c of chats) {
     const dir = `Takeout/Google Chat/Groups/${c.dir}`;
     const messages = c.from.map((creator, i) => ({

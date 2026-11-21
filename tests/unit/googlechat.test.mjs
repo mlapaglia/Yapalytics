@@ -77,4 +77,14 @@ describe('spec 011 bots in Google Chat conversations', () => {
     assert.deepEqual(out.contacts.map((c) => c.key), ['gc:alex@example.com']);
     assert.equal(out.msgs.length, 3);
   });
+
+  it('AC6: without user_info.json, a bot in every chat is not taken for you', async () => {
+    const bot = { ...GIPHY, email: 'giphy@example.com' };
+    const out = await parse(takeoutChats([
+      { dir: 'DM old1', members: [bot, ME, ALEX], from: [ME, ALEX] },
+      { dir: 'DM old2', members: [bot, ME, SAM], from: [ME, SAM] },
+    ], { userInfo: false }));
+    assert.deepEqual(out.contacts.map((c) => [c.key, c.group]).sort(), [['gc:alex@example.com', false], ['gc:sam@example.com', false]]);
+    assert.deepEqual(out.msgs.map((m) => m.o).sort(), [0, 0, 1, 1], 'your messages are yours');
+  });
 });

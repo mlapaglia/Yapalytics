@@ -32,6 +32,9 @@ matters when deciding who is in the conversation.
 - **R4** A conversation with two or more other humans stays a group.
 - **R5** When the bot conversation and a newer DM are with the same person, they have the
   same key and show as one conversation.
+- **R6** When the export has no `user_info.json`, the parser guesses whose export it is
+  from the person in every conversation (as before). A bot is never that person, even if
+  it is in every conversation, so R2 still finds the one other human. Found in review.
 
 ## Privacy
 
@@ -49,12 +52,16 @@ only named ones are, because it isn't known which folder type Takeout uses for o
 Hangouts chats. Group chats with several people still have more than one other human, so
 they stay groups.
 
+When there's no `user_info.json`, the owner fallback leaves bots out of the members it
+intersects (R6).
+
 Bot messages are still skipped as before (`creator.user_type === 'Bot'`). When
 `group_info.json` is missing, members are rebuilt from message senders, which can
 include the bot, and R1 then drops it.
 
 **Tests.** `tests/helpers/takeout.mjs` gains `takeoutChats(chats)`, which builds a
-text-only Takeout zip with any number of conversations, and `GIPHY`, a bot member.
+text-only Takeout zip with any number of conversations (optionally without
+`user_info.json`), and `GIPHY`, a bot member.
 
 ## Acceptance criteria
 
@@ -68,6 +75,8 @@ text-only Takeout zip with any number of conversations, and `GIPHY`, a bot membe
   `Alex~Sam`, without GIPHY.
 - **AC5** A GIPHY conversation and a newer `DM` with Alex give one contact,
   `gc:alex@example.com`, with the messages from both.
+- **AC6** With no `user_info.json` and GIPHY (with an email) listed first in two DMs, one
+  with Alex and one with Sam, both are 1-on-1s and your messages are marked as yours.
 
 ## Open questions
 

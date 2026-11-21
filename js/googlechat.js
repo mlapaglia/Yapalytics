@@ -168,10 +168,12 @@ function googleChatParserWorker(self, lib) {
       if (g.info) g.info = await readEntryJson(g.info);
     }
     if (!owner) {
-      // Without user_info.json, the owner is the one person in every conversation.
+      // Without user_info.json, the owner is the one person in every conversation. A bot
+      // can be in every conversation too, so bots can't be the owner.
       let common = null;
       for (const [, g] of groups) {
-        const emails = new Set(((g.info && g.info.members) || []).map((p) => lower(p.email)).filter(Boolean));
+        const humans = ((g.info && g.info.members) || []).filter((p) => p && p.user_type !== 'Bot');
+        const emails = new Set(humans.map((p) => lower(p.email)).filter(Boolean));
         if (!emails.size) continue;
         common = common ? new Set([...common].filter((x) => emails.has(x))) : emails;
       }
