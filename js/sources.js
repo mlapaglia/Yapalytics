@@ -17,7 +17,7 @@
  *                 files go to one parse (split exports, WhatsApp date formats).
  *   readTogether  a file added later must be read again with the app's files already
  *                 loaded (planFileChanges, spec 006 R7).
- *   archives      its files are kept so attachments can be opened (att.z indexes S.archives).
+ *   archives      its files are kept so attachments can be opened (att.z indexes Data.archives).
  *   metaFormat    Meta's download format: a thread file on its own could be either app.
  *   shares        its messages can be shared posts (spec 004).
  *   nameRank      which app's name a linked person goes by first (lower first, spec 005 R5).

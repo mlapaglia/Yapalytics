@@ -1,16 +1,12 @@
 /* UI wiring: file loading, filters, KPIs, chart rendering, message browser. */
 
+/** What's loaded from files, and what's worked out from it (js/dataset.js). */
+const Data = createDataset();
+
 const S = {
-  msgs: [],
-  calls: [],
-  contacts: new Map(), // key -> { key, name, addr, group, lastT, s, label }; linked people (spec 005) add { person: true, threads, sources }
   people: new Map(), // person key -> { key, name, threads }: saved links (spec 005), loaded or not; name '' = the default
-  personOf: new Map(), // conversation key -> person key, for the links that apply to what's loaded
   dismissed: new Set(), // signatures (linkSignature) of dismissed link suggestions
   suggestions: [], // suggestLinks result behind the People dialog
-  seenMsgs: new Map(), // dedupe key -> the message kept (null for reactions sent as texts)
-  seenCalls: new Set(),
-  reactions: 0, // reactions sent as texts, left out of the messages
   filesBusy: 0, // file loads and Files dialog changes queued or running (spec 006 R15)
   filesPending: 0, // files added in the open Files dialog that are still being checked
   files: [], // loaded export files (spec 006): { id, file, name, size, lastModified, kind, on }, in the order added
@@ -19,8 +15,6 @@ const S = {
   // Your sender name per app whose records carry sender names (Sources: senderNames);
   // `auto` is false once picked by hand.
   owners: Object.fromEntries(Sources.list.filter((s) => s.senderNames).map((s) => [s.id, { name: '', auto: true }])),
-  firstSeen: new Map(), // key -> time of the first message ever loaded for that conversation
-  archives: [], // loaded export files (zips, SMS XML); message attachments point into these by index (att.z)
   docFreq: null, // { sig, value } cache for "What you talk about"
   leader: { sort: 'n', asc: false, all: false }, // leaderboard sorting
   wrapYear: null,
@@ -115,17 +109,14 @@ async function readFiles(entries) {
 
   try {
     // One job per file or per app (Sources: jobs). Attachments point at their file by
-    // index into the job's files (att.z); attBase moves that into S.archives.
+    // index into the job's files (att.z); attBase moves that into Data.archives.
     const jobs = [];
     for (const src of Sources.list) {
       const files = entries.filter((e) => e.kind === src.kind).map((e) => e.file);
       if (!files.length) continue;
       for (const group of src.jobs === 'each' ? files.map((f) => [f]) : [files]) {
         const job = { files: group, src, parse: (cb) => src.parse(group, cb) };
-        if (src.archives) {
-          job.attBase = S.archives.length;
-          S.archives.push(...group);
-        }
+        if (src.archives) job.attBase = Data.archive(group);
         jobs.push(job);
       }
     }
@@ -134,57 +125,14 @@ async function readFiles(entries) {
       job = jobs[i];
       const label = job.files.length > 1 ? `${job.files.length} files` : job.files[0].name;
       const done = await job.parse({
-        onBatch(msgs, calls) {
-          for (const m of msgs) {
-            // WhatsApp / iMessage / Telegram / Instagram / Messenger records get `o` later (see applyOwners), so key them by sender.
-            const key = `${m.t}|${hasOwner(m.s) ? m.sn : m.o}|${m.k}|${m.l}|${m.m}`;
-            const seen = S.seenMsgs.get(key);
-            if (seen !== undefined) {
-              // The same message in an overlapping export: keep the reactions both list, and
-              // its files if only this copy can open them (a thread file read before its zip).
-              if (seen && m.rx) seen.rx = mergeReactions(seen.rx, m.rx);
-              if (seen && m.att && !seen.att) {
-                if (job.attBase) for (const a of m.att) if (a.z != null) a.z += job.attBase;
-                seen.att = m.att;
-                seen.mb = m.mb;
-              }
-              continue;
-            }
-            // Reactions sent as texts (tapbacks, "😂 to “…”") aren't messages. Reactions
-            // on a message (Instagram, Messenger, Telegram, Google Chat) ride along in its rx.
-            if (m.f & T_REACTION) { S.seenMsgs.set(key, null); S.reactions++; continue; }
-            S.seenMsgs.set(key, m);
-            if (m.att && job.attBase) for (const a of m.att) if (a.z != null) a.z += job.attBase;
-            S.msgs.push(m);
-          }
-          for (const c of calls) {
-            const key = `${c.t}|${c.ty}|${c.k}`;
-            if (S.seenCalls.has(key)) continue;
-            S.seenCalls.add(key);
-            S.calls.push(c);
-          }
-        },
+        onBatch: (msgs, calls) => Data.addBatch(msgs, calls, job.attBase),
         onProgress(loaded, total) {
           const pct = ((i + loaded / total) / jobs.length) * 100;
           bar.style.width = pct.toFixed(1) + '%';
-          text.textContent = `Reading ${label} (${i + 1}/${jobs.length}) · ${fmtBytes(loaded)} of ${fmtBytes(total)} · ${fmtNum(S.msgs.length)} messages, ${fmtNum(S.calls.length)} calls`;
+          text.textContent = `Reading ${label} (${i + 1}/${jobs.length}) · ${fmtBytes(loaded)} of ${fmtBytes(total)} · ${fmtNum(Data.msgs.length)} messages, ${fmtNum(Data.calls.length)} calls`;
         },
       });
-      for (const c of done.contacts) {
-        const cur = S.contacts.get(c.key);
-        if (!cur) S.contacts.set(c.key, c);
-        else {
-          if (c.name && c.lastT >= cur.lastT) { cur.name = c.name; cur.lastT = c.lastT; }
-          if (!cur.addr) cur.addr = c.addr;
-          if (c.owner && !cur.owner) cur.owner = c.owner;
-          if (c.members) {
-            const all = new Map(cur.members);
-            for (const [n, k] of c.members) all.set(n, Math.max(all.get(n) || 0, k));
-            cur.members = [...all];
-            cur.addr = [...all.keys()].join('~');
-          }
-        }
-      }
+      Data.addContacts(done.contacts);
       if (job.src.badDatesError && done.counts.badDates) badDates = job.src.badDatesError;
     }
   } catch (err) {
@@ -192,7 +140,7 @@ async function readFiles(entries) {
     return { error: 'Could not read that file: ' + err.message, failed: job ? job.files : entries.map((e) => e.file) };
   }
 
-  if (!S.msgs.length && !S.calls.length) {
+  if (!Data.msgs.length && !Data.calls.length) {
     return {
       error: badDates || 'No messages or calls were found. Use an XML backup from SMS Backup & Restore (sms-*.xml or calls-*.xml), a Google Takeout zip that includes Google Chat, a WhatsApp chat export (.txt or .zip), an iMessage export, a Telegram export (result.json, or a zip of the export folder), an Instagram export (.zip, JSON format), or a Facebook Messenger export (.zip, JSON format, or the encrypted chats download).',
       failed: entries.map((e) => e.file),
@@ -203,19 +151,14 @@ async function readFiles(entries) {
 
 /** After files are read: sort, work out owners and links, keep the filters that still apply, and show the dashboard. */
 function finishLoad() {
-  S.msgs.sort((a, b) => a.t - b.t);
-  S.calls.sort((a, b) => a.t - b.t);
-  S.firstSeen = computeFirstSeen();
-  S.docFreq = null;
-  $('#igPreviewsLabel').hidden = !S.msgs.some((m) => m.sh && instagramEmbedUrl(m.sh.u));
-  for (const c of S.contacts.values()) c.label = contactLabel(c);
-  for (const s of Object.keys(S.owners)) if (S.owners[s].auto) S.owners[s].name = guessOwner(+s);
-  applyOwners();
-  applyLinks();
+  Data.finish();
+  $('#igPreviewsLabel').hidden = !Data.msgs.some((m) => m.sh && instagramEmbedUrl(m.sh.u));
+  Data.guessOwners(S.owners);
+  rederive();
   // Files were left out or removed (spec 006 R10): an app or conversation that's gone goes back to All.
   const f = S.filter;
-  if (f.source !== 'all' && !loadedSources().has(f.source)) f.source = 'all';
-  if (f.contact !== 'all' && (!S.contacts.has(f.contact) || (f.source !== 'all' && !keySources(f.contact).includes(f.source)))) f.contact = 'all';
+  if (f.source !== 'all' && !Data.loadedSources().has(f.source)) f.source = 'all';
+  if (f.contact !== 'all' && (!Data.contacts.has(f.contact) || (f.source !== 'all' && !Data.keySources(f.contact).includes(f.source)))) f.contact = 'all';
   $('#landing').hidden = true;
   $('#dash').hidden = false;
   populateContacts();
@@ -231,20 +174,13 @@ function resetLoaded() {
   if (AiAnalysis.busy) AiAnalysis.stop();
   AiAnalysis.clearReport();
   $('#dash').hidden = true; // its data is gone until the files are read again
-  S.msgs = [];
-  S.calls = [];
-  S.contacts = new Map();
-  S.personOf = new Map();
-  S.seenMsgs = new Map();
-  S.seenCalls = new Set();
-  S.reactions = 0;
-  S.firstSeen = new Map();
+  Data.reset();
   S.docFreq = null;
   S.vocab = null;
   S.vocabMo = null;
   S.browserMood = null;
   S.browserLimit = 200;
-  // S.archives stays: it's append-only, so an attachment index (att.z) from before never
+  // Data.archives stays: it's append-only, so an attachment index (att.z) from before never
   // points at a different file. Attachment previews are cached by that index.
 }
 
@@ -265,104 +201,30 @@ function showLoadError(msg) {
   const el = $('#loadError');
   el.textContent = msg;
   el.hidden = false;
-  if (S.msgs.length || S.calls.length) {
+  if (Data.msgs.length || Data.calls.length) {
     $('#landing').hidden = true;
     $('#dash').hidden = false;
     alert(msg);
   }
 }
 
-function formatAddr(a) {
-  if (!a) return '';
-  const d = a.replace(/[^\d+]/g, '');
-  const m = d.match(/^\+?1?(\d{3})(\d{3})(\d{4})$/);
-  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : a;
-}
-
-function contactLabel(c) {
-  if (c.person) return '🔗 ' + contactName(c);
-  const chat = Sources.byId(c.s).mark;
-  if (c.group) return chat + '👥 ' + contactName(c);
-  return (chat ? chat + ' ' : '') + contactName(c);
-}
-
-/** A conversation's name without the app and group marks (the pickers draw those, spec 012 R7). */
-function contactName(c) {
-  if (c.person) return formatAddr(c.name) || c.key;
-  if (c.group) return (c.name ? c.name.split(', ') : c.addr.split('~')).map(formatAddr).join(', ');
-  return formatAddr(c.name) || formatAddr(c.addr) || c.key;
-}
-
-function loadedSources() {
-  return new Set([...S.contacts.values()].filter((c) => !c.person).map((c) => c.s || 0));
-}
-
 /**
- * Message sources of a conversation key (0 = SMS, 1 = Google Chat, 2 = WhatsApp,
- * 3 = iMessage, 4 = Telegram, 5 = Instagram): one, or several for a linked person.
+ * Work out owners, links and what hangs off them again (Data.rederive, spec 014 R6), then
+ * bring the filter and the "Which one is you?" button and dialog in line.
  */
-function keySources(key) {
-  const c = S.contacts.get(key);
-  return c && c.person ? c.sources : [(c && c.s) || 0];
-}
-
-// ------------------------------------------------------------------ export owner (WhatsApp, iMessage, Telegram, Instagram, Messenger)
-
-const sameName = (a, b) => a.replace(/[\s~]/g, '').toLowerCase() === b.replace(/[\s~]/g, '').toLowerCase();
-
-/**
- * Conversations whose owner has to be worked out: every WhatsApp, Telegram and Instagram
- * chat, and the iMessage ones exported with a custom name (no "Me" in them).
- */
-function ownerPool(source) {
-  return [...S.contacts.values()].filter((c) => c.s === source && !c.members.some(([n]) => isDefaultOwner(source, n)));
-}
-
-/**
- * WhatsApp and (custom-named) iMessage exports don't mark which sender is you. A
- * Telegram export often does, and so does an Instagram one that includes your personal
- * information (`owner` on their contacts: certain). Otherwise a 1-on-1
- * chat is named after the other person, so its other sender is you (strong evidence);
- * failing that you're the sender who shows up in the most chats, then the one with the
- * most messages.
- */
-function guessOwner(source) {
-  const score = new Map();
-  const add = (name, n) => score.set(name, (score.get(name) || 0) + n);
-  for (const c of ownerPool(source)) {
-    if (c.owner) add(c.owner, 1e6);
-    for (const [name, count] of c.members) add(name, 1 + count / 1e9);
-    if (!c.group && c.members.length === 2 && c.members.some(([n]) => sameName(n, c.title))) {
-      add(c.members.find(([n]) => !sameName(n, c.title))[0], 1000);
-    }
-  }
-  return [...score.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n)[0] || '';
-}
-
-/** Set sent/received on WhatsApp / iMessage / Telegram / Instagram / Messenger records from S.owners, and update the Which one is you? dialog. */
-function applyOwners() {
-  for (const m of S.msgs) if (hasOwner(m.s)) m.o = m.sn === S.owners[m.s].name || isDefaultOwner(m.s, m.sn) ? 1 : 0;
-  for (const c of S.contacts.values()) c.search = contactSearchText(c);
-  const sources = Object.keys(S.owners).map(Number).filter((s) => ownerChoices(s).length);
+function rederive() {
+  Data.rederive({ owners: S.owners, people: S.people });
+  S.docFreq = null;
+  const sel = S.filter.contact;
+  if (Data.personOf.has(sel)) S.filter.contact = Data.personOf.get(sel);
+  else if (sel.startsWith('p:') && !Data.contacts.has(sel)) S.filter.contact = 'all';
+  const sources = Object.keys(S.owners).map(Number).filter((s) => Data.ownerChoices(s).length);
   renderOwnerDialog(sources);
   updateOwnerButton(sources);
 }
 
 // ------------------------------------------------------------------ which one is you (spec 013)
 
-/** An app's sender names with their message counts, most first. Empty when there's nothing to pick (every conversation names you "Me"). */
-function ownerChoices(source) {
-  const names = new Map();
-  for (const c of ownerPool(source)) for (const [n, k] of c.members) names.set(n, (names.get(n) || 0) + k);
-  return [...names.entries()].sort((a, b) => b[1] - a[1]);
-}
-
-/** Where an app's owner came from: the export's own profile, a guess, or your pick (R6). */
-function ownerOrigin(source) {
-  const { name, auto } = S.owners[source];
-  if (!auto) return 'picked';
-  return ownerPool(source).some((c) => c.owner && c.owner === name) ? 'export' : 'guess';
-}
 const OWNER_ORIGIN_TEXT = { export: 'From your export profile', guess: 'Guessed: check this', picked: 'Picked by you' };
 
 /**
@@ -372,7 +234,7 @@ const OWNER_ORIGIN_TEXT = { export: 'From your export profile', guess: 'Guessed:
  */
 function renderOwnerDialog(sources) {
   const list = $('#ownerList');
-  const sig = JSON.stringify(sources.map((s) => [s, ownerChoices(s)]));
+  const sig = JSON.stringify(sources.map((s) => [s, Data.ownerChoices(s)]));
   if (list.dataset.sig !== sig) {
     list.dataset.sig = sig;
     for (const sel of list.querySelectorAll('select')) sel.tomselect?.destroy();
@@ -385,7 +247,7 @@ function renderOwnerDialog(sources) {
       li.innerHTML = html`<label class="owner-app" for="owner-${s}">${logoSvg(s)}${sourceName(s)}</label>
         <div class="owner-pick"><select id="owner-${s}"></select><span class="owner-origin"></span></div>`;
       const sel = li.querySelector('select');
-      for (const [n, k] of ownerChoices(s)) {
+      for (const [n, k] of Data.ownerChoices(s)) {
         const opt = new Option(n, n);
         Object.assign(opt.dataset, { search: n.toLowerCase(), name: n, count: fmtNum(k), aria: `${n}, ${countWords(k)}` });
         sel.add(opt);
@@ -400,7 +262,7 @@ function renderOwnerDialog(sources) {
   for (const li of list.children) {
     const s = +li.dataset.source;
     setPickerValue(li.querySelector('select'), S.owners[s].name);
-    const origin = ownerOrigin(s);
+    const origin = Data.ownerOrigin(s, S.owners[s]);
     const note = li.querySelector('.owner-origin');
     note.className = `owner-origin ${origin}`;
     note.textContent = OWNER_ORIGIN_TEXT[origin];
@@ -410,7 +272,7 @@ function renderOwnerDialog(sources) {
 /** Shown when an app has senders to pick; counts the apps whose owner is only a guess (R2, R9). */
 function updateOwnerButton(sources) {
   const btn = $('#ownerBtn');
-  const guessed = sources.filter((s) => ownerOrigin(s) === 'guess');
+  const guessed = sources.filter((s) => Data.ownerOrigin(s, S.owners[s]) === 'guess');
   btn.hidden = !sources.length;
   btn.textContent = guessed.length ? `👤 Which one is you? (${guessed.length})` : '👤 Which one is you?';
   btn.title = guessed.length
@@ -427,43 +289,19 @@ function initOwners() {
 
 function setOwner(source, name) {
   S.owners[source] = { name, auto: false };
-  applyOwners();
+  rederive();
   populateContacts();
   refresh();
 }
 
-/**
- * Lowercased text the conversation pickers search (spec 012 R1): the conversation's name and
- * addresses plus, for groups, every member's name. SMS group keys are 'g:' + the
- * members' 1-on-1 keys, so members' names come from their own contacts.
- */
-function contactSearchText(c) {
-  if (c.person) {
-    return [c.label, c.name, ...c.threads.map((k) => S.contacts.get(k)).filter(Boolean).map(contactSearchText)].filter(Boolean).join('\n').toLowerCase();
-  }
-  const parts = [c.label, c.name, ...c.addr.split('~').filter((n) => !hasOwner(c.s) || (n !== S.owners[c.s].name && !isDefaultOwner(c.s, n)))];
-  if (c.group && !c.s) {
-    for (const k of c.key.slice(2).split('~')) {
-      const member = S.contacts.get(k);
-      if (member) parts.push(member.name, member.addr);
-    }
-  }
-  return parts.filter(Boolean).join('\n').toLowerCase();
-}
-
 function labelFor(key) {
-  const c = S.contacts.get(key);
+  const c = Data.contacts.get(key);
   return c ? c.label : key;
 }
 
 // ------------------------------------------------------------------ linked people (spec 005)
 
 const PEOPLE_STORE = 'ms-people';
-/** A person's key: 'p:' + the first of its conversation keys, so it stays the same across reloads. */
-const personKeyOf = (threads) => 'p:' + [...threads].sort()[0];
-/** A conversation's own name, formatted: what its person can be called. */
-const threadName = (c) => formatAddr(c.name) || formatAddr(c.addr) || c.key;
-const isLinkable = (c) => !!c && !c.group && !c.person && c.key !== 'unknown';
 const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const REASON_TEXT = { name: 'name', phone: 'phone number', email: 'email' };
 
@@ -499,58 +337,12 @@ function savedPersonOf(threadKey) {
   return null;
 }
 
-/** Messages per conversation, by the key each had before any link (calls-only conversations count 0). */
-function threadCounts() {
-  const n = new Map();
-  for (const m of S.msgs) { const k = m.tk || m.k; n.set(k, (n.get(k) || 0) + 1); }
-  for (const c of S.calls) { const k = c.tk || c.k; if (!n.has(k)) n.set(k, 0); }
-  return n;
-}
-
-/**
- * Apply the saved links to what's loaded: a person with 2+ loaded conversations gets a
- * contact, and its messages and calls carry its key in `k` (the conversation's own key
- * moves to `tk`). Everything that groups by `k` then sees one conversation.
- */
-function applyLinks() {
-  for (const [k, c] of S.contacts) if (c.person) S.contacts.delete(k);
-  const counts = threadCounts();
-  S.personOf = new Map();
-  for (const p of S.people.values()) {
-    const parts = p.threads.filter((k) => counts.has(k)).map((k) => S.contacts.get(k)).filter(isLinkable);
-    if (parts.length < 2) continue;
-    const names = parts.map(threadName);
-    const name = p.name && names.includes(p.name) ? p.name : defaultPersonName(parts.map((c) => ({ s: c.s, name: threadName(c), n: counts.get(c.key) })));
-    for (const c of parts) S.personOf.set(c.key, p.key);
-    S.contacts.set(p.key, {
-      key: p.key, name, addr: '', group: false, person: true, members: [],
-      threads: parts.map((c) => c.key),
-      sources: [...new Set(parts.map((c) => c.s || 0))].sort((a, b) => a - b),
-      lastT: Math.max(...parts.map((c) => c.lastT || 0)),
-    });
-  }
-  const relink = (r) => {
-    const own = r.tk || r.k;
-    const p = S.personOf.get(own);
-    if (p) { r.tk = own; r.k = p; } else if (r.tk) { r.k = r.tk; delete r.tk; }
-  };
-  for (const m of S.msgs) relink(m);
-  for (const c of S.calls) relink(c);
-  for (const c of S.contacts.values()) if (c.person) c.label = contactLabel(c);
-  for (const c of S.contacts.values()) c.search = contactSearchText(c);
-  S.firstSeen = computeFirstSeen();
-  S.docFreq = null;
-  const sel = S.filter.contact;
-  if (S.personOf.has(sel)) S.filter.contact = S.personOf.get(sel);
-  else if (sel.startsWith('p:') && !S.contacts.has(sel)) S.filter.contact = 'all';
-}
-
 /** Loaded 1-on-1 conversations, their message counts, and the links worth suggesting. */
 function computeSuggestions() {
-  S.threadN = threadCounts();
-  S.linkable = [...S.threadN.keys()].map((k) => S.contacts.get(k)).filter(isLinkable);
+  S.threadN = Data.threadCounts();
+  S.linkable = [...S.threadN.keys()].map((k) => Data.contacts.get(k)).filter(isLinkable);
   S.suggestions = suggestLinks(S.linkable, {
-    personOf: S.personOf,
+    personOf: Data.personOf,
     dismissed: S.dismissed,
     ownNames: (s) => (hasOwner(s) ? [S.owners[s].name] : []),
   });
@@ -570,7 +362,7 @@ function updatePeopleButton() {
 function changeLinks(fn) {
   fn();
   writePeopleStore();
-  applyLinks();
+  rederive();
   populateContacts(); // also re-renders the People dialog
   refresh();
 }
@@ -598,7 +390,7 @@ function unlinkThread(key) {
 }
 
 function threadChip(key, extra = '') {
-  const c = S.contacts.get(key);
+  const c = Data.contacts.get(key);
   return html`<span class="chip person-chip">${threadName(c)} <small>${sourceName(c.s)} · ${fmtNum(S.threadN.get(key) || 0)}</small>${extra}</span>`;
 }
 
@@ -612,14 +404,14 @@ function renderPeopleDialog() {
       </li>`)}</ul>`
     : html`<p class="sub">Nothing to suggest. Conversations that share a name, phone number or email show up here.</p>`}`;
 
-  const linked = [...S.contacts.values()].filter((c) => c.person).sort((a, b) => a.name.localeCompare(b.name));
+  const linked = [...Data.contacts.values()].filter((c) => c.person).sort((a, b) => a.name.localeCompare(b.name));
   const unloaded = S.people.size - linked.length;
   $('#peopleLinked').innerHTML = html`<h3 class="profile-h">Linked people</h3>${linked.length
     ? html`<ul class="people-list">${linked.map((p) => {
-      const names = [...new Set(p.threads.map((k) => threadName(S.contacts.get(k))))];
+      const names = [...new Set(p.threads.map((k) => threadName(Data.contacts.get(k))))];
       return html`<li data-person="${p.key}">
         <select class="person-name" aria-label="Name for this person">${names.map((n) => html`<option${n === p.name ? raw(' selected') : ''}>${n}</option>`)}</select>
-        <div class="chips">${p.threads.map((k) => threadChip(k, html`<button type="button" class="chip-x" data-unlink="${k}" aria-label="Unlink ${threadName(S.contacts.get(k))}" title="Unlink">✕</button>`))}</div>
+        <div class="chips">${p.threads.map((k) => threadChip(k, html`<button type="button" class="chip-x" data-unlink="${k}" aria-label="Unlink ${threadName(Data.contacts.get(k))}" title="Unlink">✕</button>`))}</div>
         <button class="btn small ghost" type="button" data-unlink-all="${p.key}">Unlink all</button>
       </li>`;
     })}</ul>`
@@ -642,7 +434,7 @@ function renderPeopleDialog() {
 function syncPeopleLink() {
   const a = $('#peopleA').value;
   const b = $('#peopleB').value;
-  const same = a && S.personOf.has(a) && S.personOf.get(a) === S.personOf.get(b);
+  const same = a && Data.personOf.has(a) && Data.personOf.get(a) === Data.personOf.get(b);
   $('#peopleLink').disabled = !a || !b || a === b || !!same;
 }
 
@@ -698,7 +490,7 @@ function initPeople() {
     if (e.key !== PEOPLE_STORE && e.key !== null) return; // null: all of the site's storage was cleared
     readPeopleStore();
     if ($('#dash').hidden) return;
-    applyLinks();
+    rederive();
     populateContacts();
     refresh();
   });
@@ -879,7 +671,7 @@ const countWords = (n, calls = 0) => [n && `${fmtNum(n)} message${n === 1 ? '' :
  */
 function pickerOption(c, text, count, words) {
   const opt = new Option(text, c.key);
-  const sources = keySources(c.key);
+  const sources = Data.keySources(c.key);
   const name = contactName(c);
   Object.assign(opt.dataset, {
     search: c.search || name.toLowerCase(),
@@ -978,16 +770,16 @@ function populateContacts() {
   const { source } = S.filter;
   // A linked person spans apps, so with an app picked only that app's messages count (spec 005 R6).
   const totals = new Map();
-  for (const m of S.msgs) if (source === 'all' || (m.s || 0) === source) totals.set(m.k, (totals.get(m.k) || 0) + 1);
+  for (const m of Data.msgs) if (source === 'all' || (m.s || 0) === source) totals.set(m.k, (totals.get(m.k) || 0) + 1);
   const callTotals = new Map();
-  if (source === 'all' || source === 0) for (const c of S.calls) callTotals.set(c.k, (callTotals.get(c.k) || 0) + 1);
+  if (source === 'all' || source === 0) for (const c of Data.calls) callTotals.set(c.k, (callTotals.get(c.k) || 0) + 1);
   const keys = [...new Set([...totals.keys(), ...callTotals.keys()])]
-    .filter((k) => source === 'all' || keySources(k).includes(source));
+    .filter((k) => source === 'all' || Data.keySources(k).includes(source));
   keys.sort((a, b) => (totals.get(b) || 0) - (totals.get(a) || 0) || (callTotals.get(b) || 0) - (callTotals.get(a) || 0));
 
   const sel = $('#contactSel');
   sel.innerHTML = '';
-  const shown = source === 'all' ? S.msgs.length : keys.reduce((s, k) => s + (totals.get(k) || 0), 0);
+  const shown = source === 'all' ? Data.msgs.length : keys.reduce((s, k) => s + (totals.get(k) || 0), 0);
   const all = new Option(`All conversations (${fmtNum(shown)})`, 'all');
   Object.assign(all.dataset, { search: 'all conversations', name: 'All conversations', count: fmtNum(shown), aria: `All conversations, ${countWords(shown)}` });
   sel.add(all);
@@ -997,12 +789,12 @@ function populateContacts() {
     const parts = [];
     if (n) parts.push(fmtNum(n));
     if (cn) parts.push(`${fmtNum(cn)} calls`);
-    const c = S.contacts.get(k);
+    const c = Data.contacts.get(k);
     sel.add(c ? pickerOption(c, `${labelFor(k)} (${parts.join(', ')})`, parts.join(', '), countWords(n, cn)) : new Option(`${labelFor(k)} (${parts.join(', ')})`, k));
   }
   sel.value = S.filter.contact;
   refreshPicker(sel);
-  const present = loadedSources();
+  const present = Data.loadedSources();
   addSourceButtons();
   $('#sourceSeg').hidden = present.size < 2;
   $$('#sourceSeg button').forEach((b) => {
@@ -1034,16 +826,19 @@ function setContact(key) {
 function baseMessages(contact = S.filter.contact) {
   const { groups, source } = S.filter;
   // A linked person (spec 005) spans apps, so the app filter still applies to it.
-  if (contact !== 'all') return S.msgs.filter((m) => m.k === contact && (source === 'all' || (m.s || 0) === source));
-  if (source === 'all' && groups) return S.msgs;
-  return S.msgs.filter((m) => (source === 'all' || (m.s || 0) === source) && (groups || !m.k.startsWith('g:')));
+  if (contact !== 'all') {
+    const own = Data.messagesOf(contact); // R11: the index, not a scan of every message
+    return source === 'all' ? own : own.filter((m) => (m.s || 0) === source);
+  }
+  if (source === 'all' && groups) return Data.msgs;
+  return Data.msgs.filter((m) => (source === 'all' || (m.s || 0) === source) && (groups || !m.k.startsWith('g:')));
 }
 
 function baseCalls() {
   const { contact, source } = S.filter;
   if (source !== 'all' && source !== 0) return []; // calls only come from SMS Backup & Restore
-  if (contact !== 'all') return S.calls.filter((c) => c.k === contact);
-  return S.calls;
+  if (contact !== 'all') return Data.calls.filter((c) => c.k === contact);
+  return Data.calls;
 }
 
 function setSource(source) {
@@ -1069,7 +864,7 @@ function inRange(arr) {
 }
 
 function dataBounds() {
-  const all = [S.msgs, S.calls].filter((a) => a.length);
+  const all = [Data.msgs, Data.calls].filter((a) => a.length);
   const first = Math.min(...all.map((a) => a[0].t));
   const last = Math.max(...all.map((a) => a[a.length - 1].t));
   return { first, last };
@@ -1272,21 +1067,14 @@ const show = (sel, on) => ($(sel).hidden = !on);
 const DAY_MS = 86400000;
 const ordinal = (n) => fmtNum(n) + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
 
-/** First-ever message time per conversation, over everything loaded. */
-function computeFirstSeen() {
-  const first = new Map();
-  for (const m of S.msgs) if (!first.has(m.k)) first.set(m.k, m.t);
-  return first;
-}
-
 /** A person's display name for a group sender: a name, a phone number, or an SMS 1-on-1 key. */
 function senderLabel(x) {
   if (x === 'You') return 'You';
-  const own = S.contacts.get(x);
+  const own = Data.contacts.get(x);
   if (own) return own.name || formatAddr(own.addr) || x;
   const digits = x.replace(/[^\d]/g, '');
   if (digits.length >= 7 && /^[+\d\s().-]+$/.test(x)) {
-    const sms = S.contacts.get(digits.length > 8 ? digits.slice(-8) : digits);
+    const sms = Data.contacts.get(digits.length > 8 ? digits.slice(-8) : digits);
     if (sms && sms.name) return sms.name;
   }
   return formatAddr(x);
@@ -1294,7 +1082,7 @@ function senderLabel(x) {
 
 /** Document frequencies for "What you talk about", cached per filter combination. */
 function docFreqFor() {
-  const sig = `${S.filter.source}|${S.filter.groups}|${S.msgs.length}`;
+  const sig = `${S.filter.source}|${S.filter.groups}|${Data.msgs.length}`;
   if (!S.docFreq || S.docFreq.sig !== sig) S.docFreq = { sig, value: buildDocFreq(baseMessages('all')) };
   return S.docFreq.value;
 }
@@ -1360,7 +1148,7 @@ function renderDrifted(A) {
 function newPeopleRows(A) {
   const byMonth = new Map();
   for (const k of A.byContact.keys()) {
-    const t = S.firstSeen.get(k);
+    const t = Data.firstSeen.get(k);
     if (t == null || t < A.first) continue; // first message is before this range
     const d = new Date(t);
     const mo = d.getFullYear() * 12 + d.getMonth();
@@ -1518,7 +1306,7 @@ function initMoodDetails() {
 
 /** A conversation's name without its app mark, for sentences. */
 function plainName(key) {
-  const c = S.contacts.get(key);
+  const c = Data.contacts.get(key);
   if (!c) return key;
   if (c.person) return formatAddr(c.name) || key;
   if (c.group) return c.name ? c.name.split(', ').map(formatAddr).join(', ') : c.addr.split('~').map(formatAddr).join(', ') || 'Group chat';
@@ -1621,11 +1409,11 @@ function profileCrossApp(key, msgs, name) {
 
 /** A profile of one conversation, over all its messages (filters and dates aside). */
 function openProfile(key) {
-  const msgs = S.msgs.filter((m) => m.k === key);
+  const msgs = Data.messagesOf(key);
   if (!msgs.length) return;
   const A = aggregateMessages(msgs, S.convoGap);
   const F = profileFacts(msgs, A);
-  const c = S.contacts.get(key) || {};
+  const c = Data.contacts.get(key) || {};
   const group = key.startsWith('g:');
   const name = plainName(key);
   const them = group ? 'Everyone else' : name;
@@ -1671,7 +1459,7 @@ function openProfile(key) {
       <div>
         <h2 id="profileName">${name}</h2>
         <p class="sub">${group ? `Group chat · ${fmtNum(members)} people` : '1-on-1'} on ${c.person ? andList(c.sources.map((s) => sourceName(s))) : sourceName(c.s)} · all time</p>
-        ${c.person ? html`<p class="sub profile-linked">Linked: ${c.threads.map((k) => `${threadName(S.contacts.get(k))} (${sourceName(S.contacts.get(k).s)})`).join(', ')}</p>` : ''}
+        ${c.person ? html`<p class="sub profile-linked">Linked: ${c.threads.map((k) => `${threadName(Data.contacts.get(k))} (${sourceName(Data.contacts.get(k).s)})`).join(', ')}</p>` : ''}
       </div>
     </header>
     <div class="kpis profile-kpis">${tiles}</div>
@@ -1723,7 +1511,7 @@ function initGlance() {
     if (!t) return;
     if (t.dataset.profile) openProfile(t.dataset.profile);
     else if (t.dataset.otdDay) {
-      if (t.dataset.contact && S.contacts.has(t.dataset.contact)) { // the biggest juggle (spec 007) names its person
+      if (t.dataset.contact && Data.contacts.has(t.dataset.contact)) { // the biggest juggle (spec 007) names its person
         S.filter.contact = t.dataset.contact;
         setPickerValue($('#contactSel'), t.dataset.contact);
       }
@@ -1933,7 +1721,7 @@ function wrappedStats(base, year) {
   for (const [n] of A.night.values()) night += n;
   let newPeople = 0;
   for (const k of A.byContact.keys()) {
-    const t = S.firstSeen.get(k);
+    const t = Data.firstSeen.get(k);
     if (t >= from && t < to) newPeople++;
   }
   return { year, A, people, peopleTitle: single ? 'Who sent what' : 'Your people', emoji, word: word && word[0], site: site && site[0], nightPct: A.n ? (night / A.n) * 100 : 0, newPeople };

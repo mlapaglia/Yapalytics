@@ -175,22 +175,30 @@ The parsers stay where they are: worker code is unchanged.
 
 ### Step 5 · Dataset
 
-`js/dataset.js` exports `createDataset()`, which returns:
+`js/dataset.js` exports `createDataset()`; `app.js` holds one as `Data`. It returns:
 
-- **State:** `msgs`, `calls`, `contacts`, `archives`, `reactions`, `version`.
-- **Loading:** `addBatch(msgs, calls, attBase)` (dedup and reaction merge, today's
-  `onBatch`), `addContacts(list)` (today's contact merge), `finish()` (sort), `reset()`.
-  It keeps `archives`, which is append-only, as `resetLoaded` does today.
-- **`rederive({ owners, people, dismissed })`** (R6): sets `m.o` from owners, applies
-  links (`m.k` / `m.tk`, person contacts), then labels, search text, `firstSeen` and
-  `byKey: Map<key, msg[]>` (R11), then bumps `version`. The order is the one
-  `finishLoad`, `setOwner` and `changeLinks` follow today, written down once.
-- **Moved here from `app.js`:** `guessOwner`, `ownerPool`, `ownerChoices`, `ownerOrigin`,
-  `threadCounts`, `contactLabel`, `contactName`, `contactSearchText`, `keySources`,
-  `loadedSources`.
+- **State:** `msgs`, `calls`, `contacts`, `archives`, `reactions`, `personOf`,
+  `firstSeen`, `byKey`, `version`.
+- **Loading:** `archive(files)` (keeps files for attachments, returns their first
+  index), `addBatch(msgs, calls, attBase)` (dedup and reaction merge, the old `onBatch`),
+  `addContacts(list)` (the old contact merge), `finish()` (sort), `reset()`. `reset`
+  keeps `archives`, which is append-only, as `resetLoaded` did.
+- **Who's you:** `ownerPool`, `guessOwner`, `guessOwners(owners)`, `ownerChoices`,
+  `ownerOrigin(source, owner)`.
+- **Conversations:** `loadedSources`, `keySources`, `threadCounts`, `messagesOf(key)`
+  (from `byKey`, R11), `searchText(contact, owners)`.
+- **`rederive({ owners, people })`** (R6): sets `m.o` from owners, applies links (`m.k` /
+  `m.tk`, person contacts), then labels, search text, `firstSeen` and `byKey`, then
+  bumps `version`. That's the order `finishLoad`, `setOwner` and `changeLinks` followed,
+  now written down once.
+- **Plain helpers** that need no state also move here: `formatAddr`, `contactName`,
+  `contactLabel`, `threadName`, `isLinkable`, `personKeyOf`, `sameName`.
 
-`readFiles` and its progress bar stay in a loader (`js/ui/loader.js`), which calls the
-dataset. The file list and the Files dialog move to `js/ui/files-dialog.js`.
+`app.js` keeps a small `rederive()` that calls `Data.rederive`, keeps the picked
+conversation valid and redraws the "Which one is you?" button and dialog. `readFiles`,
+with its progress bar, and the Files dialog stay in `app.js` until step 7 splits the UI
+into files. Picking a conversation and opening a profile use `Data.messagesOf` instead
+of scanning every message.
 
 ### Step 6 · State and caches
 
