@@ -1,4 +1,4 @@
-import { test, expect, loadDemo, scrollTo, chartOption } from './fixtures.mjs';
+import { test, expect, loadDemo, scrollTo, chartOption, openTab } from './fixtures.mjs';
 import { inApp } from './state.mjs';
 
 test.describe('demo data', () => {
@@ -20,6 +20,7 @@ test.describe('demo data', () => {
     for (const s of ['0', '1', '2', '3', '4', '5', '6']) expect(bySource[s], `source ${s}`).toBeGreaterThan(100);
     await expect(page.locator('#kpis .kpi').first()).toBeVisible();
     await expect(page.locator('#sourceSeg')).toBeVisible();
+    await openTab(page, 'sec-activity'); // drawn when its tab opens (spec 014 R9)
     const timeline = await chartOption(page, 'c-timeline');
     expect(timeline.series[0].data.length).toBeGreaterThan(10);
   });

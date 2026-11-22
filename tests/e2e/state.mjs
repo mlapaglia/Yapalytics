@@ -24,7 +24,7 @@ function VIEW() {
     get personOf() { return Data.personOf; },
     get owners() { return Prefs.owners; },
     get reactions() { return Data.reactions; },
-    get files() { return S.files; },
+    get files() { return Files.loaded; },
 
     // What's picked
     get filter() { return View.filter; },
@@ -34,11 +34,11 @@ function VIEW() {
     get phrase() { return View.phrase; },
 
     // What's shown
-    get topRows() { return S.topRows; },
-    get browserShown() { return S.browserShown; },
+    get topRows() { return topConversations(Select.agg()); },
+    get browserShown() { return Shown.msgs; },
     get browserMood() { return View.browser.mood; },
-    get phraseMsgs() { return S.phraseMsgs; },
-    get vocab() { return S.vocab; },
+    get phraseMsgs() { return Select.range(); },
+    get vocab() { return Select.content(); },
 
     /** Messages matching the filters and the date range. */
     selection: () => Select.range(),
@@ -47,12 +47,11 @@ function VIEW() {
       Data.addBatch(list, []);
       Data.finish();
       rederive();
-      refresh();
+      Panels.invalidate(['data']);
     },
     /** Picks a month on the Vocabulary card. */
     setVocabMonth(mo) {
-      View.vocabMo = mo;
-      renderVocab();
+      View.set({ vocabMo: mo });
     },
     openProfile: (key) => openProfile(key),
     plainName: (key) => plainName(key),

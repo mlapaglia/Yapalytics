@@ -572,6 +572,7 @@ const AiAnalysis = {
   engineModel: null,
   gpu: null, // Promise<boolean>
   report: null, // { id }: the conversation() id it belongs to
+  app: { nameOf: (key) => key, senderOf: (x) => x, readDay() {} }, // from init
 
   hasWebGPU() {
     if (!this.gpu) {
@@ -600,10 +601,10 @@ const AiAnalysis = {
       id: c.person ? `${key}|${c.threads.join('|')}` : key,
       msgs,
       group,
-      title: plainName(key),
+      title: this.app.nameOf(key),
       names,
       ownNames: own,
-      speakerOf: (m) => (group ? (m.sn || m.sk ? senderLabel(m.sn || m.sk) : 'Someone') : plainName(key)),
+      speakerOf: (m) => (group ? (m.sn || m.sk ? this.app.senderOf(m.sn || m.sk) : 'Someone') : this.app.nameOf(key)),
     };
   },
 
@@ -938,7 +939,9 @@ const AiAnalysis = {
     if (!CLAUDE_MODELS.some((m) => m.id === this.settings.claudeModel)) this.settings.claudeModel = CLAUDE_MODELS[0].id;
   },
 
-  init() {
+  /** `app`: { nameOf(key), senderOf(name or key), readDay(dayStart) } from the dashboard. */
+  init(app) {
+    this.app = app;
     this.load();
     $('#aiWebllmModel').innerHTML = html`${WEBLLM_MODELS.map((m) => html`<option value="${m.id}">${m.label}</option>`)}`;
     $('#aiClaudeModel').innerHTML = html`${CLAUDE_MODELS.map((m) => html`<option value="${m.id}">${m.label}</option>`)}`;
@@ -978,7 +981,7 @@ const AiAnalysis = {
       const b = e.target.closest('[data-day]');
       if (!b) return;
       const [y, m, d] = b.dataset.day.split('-').map(Number);
-      readDay(new Date(y, m - 1, d).getTime());
+      this.app.readDay(new Date(y, m - 1, d).getTime());
     };
     this.render();
   },

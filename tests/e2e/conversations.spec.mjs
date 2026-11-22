@@ -1,4 +1,4 @@
-import { test, expect, loadDemo, scrollTo, chartOption } from './fixtures.mjs';
+import { test, expect, loadDemo, scrollTo, chartOption, openTab } from './fixtures.mjs';
 import { inApp } from './state.mjs';
 
 const GAPS = [
@@ -42,7 +42,6 @@ test.describe('conversation cutoff', () => {
       await expect(page.locator('#sessionNote')).toContainText(`A conversation ends after ${gap.words} of quiet`);
       await expect(page.locator('#replyNote')).toHaveText(`How quickly each side answers (within ${gap.words})`);
       await expect(page.locator('#habitsNote')).toContainText(`Conversation starters (after ${gap.label} of quiet)`);
-      await expect(page.locator('.kpi', { hasText: 'reply time' })).toHaveAttribute('title', `Median time to answer, within ${gap.words}`);
 
       const s = await stats(page);
       expect(s.starters + s.replies + s.doubles, 'every message is a starter, a reply or a double text').toBe(s.n);
@@ -51,6 +50,10 @@ test.describe('conversation cutoff', () => {
       expect(sessions.series[0].data.reduce((a, d) => a + (d.value ?? d), 0)).toBe(s.sessions);
       const reply = await chartOption(page, 'c-reply');
       expect(reply.xAxis[0].data.at(-1)).toBe(gap.lastBin);
+
+      // Overview's tiles catch up when it opens (spec 014 R9).
+      await openTab(page, 'sec-glance');
+      await expect(page.locator('.kpi', { hasText: 'reply time' })).toHaveAttribute('title', `Median time to answer, within ${gap.words}`);
     });
   }
 

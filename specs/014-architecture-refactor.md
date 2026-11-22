@@ -67,7 +67,8 @@ four ways:
 - **R9** Only the open tab is drawn. Other tabs are marked out of date and drawn when opened.
 - **R10** Word counts for the Words chart and Year in review are worked out in the same
   pass as the other text statistics, only when one of those is shown. `aggregateMessages`
-  no longer splits text into words.
+  no longer splits text into words. That pass splits each message's text once, and a
+  message with a link once more without its links, for the vocabulary.
 - **R11** Picking a conversation or opening a profile uses an index by conversation
   instead of scanning every message.
 - **R12** Browser tests read the page only through `tests/e2e/state.mjs`, not `S` or
@@ -245,42 +246,57 @@ replacing `baseMessages`, `baseCalls` and `inRange`.
 ```js
 Panels.register({
   id: 'leaderboard', tab: 'sec-people', topics: ['data', 'selection', 'gap', 'leader'],
-  init(ctx) { /* wire its own controls once */ },
-  render(ctx) { /* ctx.agg(), ctx.view, ctx.ui, ctx.html … computed on first use */ },
+  init() { /* wire its own controls, once */ },
+  render(ctx) { /* ctx.agg(), ctx.content(), ctx.ui, ctx.all, ctx.put(id, fn) … */ },
 });
 ```
 
-- `Panels.invalidate(topics)` marks each panel that lists a matching topic. Marked
-  panels in the open tab render at once, and so do those with `tab: null` (scope line,
-  filter bar, tab bar). The rest render when `Tabs` opens their tab (R9). This replaces
-  `refresh()`, `lazyRender`, the `Lazy` object and its IntersectionObserver. The gallery
-  keeps its own batching and thumbnail observer.
-- `ctx` reads `Select` lazily, so a tab that needs no message aggregates doesn't compute
-  them. Theme changes (`theme` topic) redraw the open tab's charts from cached aggregates.
-- `Charts.set(id, option, { on: { click: fn } })` attaches handlers the first time a
-  chart is created, replacing the `__wired` / `__moodWired` flags.
-- `wordFreq` moves out of `aggregateMessages` into `aggregateContent`, which already
-  splits each message into words once; link messages are split once too (R10). Year in
-  review reads it from `content()` for its year.
+- `Panels.invalidate(topics, { except })` marks each panel that lists a matching
+  topic (`'*'` for all). Marked panels with `tab: null` draw first, since they decide
+  which sections exist. Then `Tabs.sync()` runs, then the open tab's marked panels draw.
+  The rest draw when `Tabs` opens their tab (R9). This replaces `refresh()`,
+  `lazyRender`, the `Lazy` object and its IntersectionObserver.
+- `View.set(patch, opts)` (defined in `panels.js`) changes what's picked and
+  invalidates the topics it touches: `filter` changes give `selection` plus
+  `filter.contact` / `filter.source` / `filter.groups` / `filter.dates`; every other
+  field has its own topic (`gap`, `appsGap`, `gran`, `scorer`, `phrase`, `vocab`,
+  `calendar`, `wrapped`, `otd`, `leader`, `browser`). A new selection starts the message
+  list at the latest messages again. The other topics are `data` (a load, owners, links)
+  and `theme`. The timeline's own zoom passes `{ except: ['timeline'] }`, so its window
+  isn't redrawn under it.
+- `ctx` reads `Select` lazily, so a tab that needs no aggregates doesn't compute them.
+  A theme change clears the cached theme and redraws the open tab's charts from cached
+  numbers.
+- `Charts.set(id, option, { on: { click: fn, 'zr:click': fn } })` attaches handlers when
+  a chart is created, replacing the `__wired` / `__moodWired` flags.
+- `wordFreq` moves out of `aggregateMessages` into `aggregateContent` (R10). Year in
+  review reads it from that year's `aggregateContent`.
+
+**Panels without a tab.** `filters` (the conversation picker and app buttons, topics
+`data` and `filter.source`), `scope` (the scope line and date fields), `sections` (which
+sections and cards have anything to show, from one cheap pass over the selection rather
+than `aggregateMessages`, so the tab bar and "Jump to…" are right whatever tab is open),
+and `mood-scoring` (AI mood follows the selection).
 
 **Files.** The renderers leave `app.js` for one file per tab: `js/panels/overview.js`,
-`activity.js`, `people.js`, `groups.js`, `replies.js`, `words.js`, `mood.js`, `media.js`,
-`calls.js`, `sources.js`, `apps.js`, `wrapped.js`, `messages.js` and `ai.js`. Dialogs
-and controls go in `js/ui/`: `files-dialog.js`, `people-dialog.js`, `owner-dialog.js`,
-`profile.js`, `pickers.js`, `filters.js`, `theme.js`. `app.js` keeps only startup.
+`activity.js`, `people.js`, `groups.js`, `replies.js`, `words.js`, `mood.js`, `media.js`
+(with the attachments panel, which is on that tab), `calls.js`, `sources.js`, `apps.js`,
+`wrapped.js`, `messages.js`, `ai.js`, and `layout.js` for `sections` and `mood-scoring`.
+Dialogs and controls go in `js/ui/`: `common.js` (shared helpers), `pickers.js`,
+`filters.js`, `loader.js` (reading files, drag and drop, `rederive()`),
+`files-dialog.js`, `owner-dialog.js`, `people-dialog.js`, `profile.js` and `theme.js`.
+Each dialog keeps its working state in its own object (`Files`, `PeopleDlg`), and each
+panel keeps what its clicks need (the rows behind a chart's bars) beside it. `app.js`
+keeps only startup.
 
-**Dependencies are passed in.** `AiMood`, `AiAnalysis`, `Tabs`, `Thumbs` and `Viewer`
-get what they use through `init({ selection, setScorer, onShown, … })` instead of
-reading `S`, `inRange`, `baseMessages`, `setMoodScorer` or `onTabShown`. A unit test
-fails if a file other than `app.js` mentions `S.` once `S` is gone.
+**Dependencies are passed in.** `Tabs.init({ onShown, onHidden })`,
+`AiMood.init({ setScorer })` and `AiAnalysis.init({ nameOf, senderOf, readDay })` get the
+dashboard's functions instead of calling them by name. They read `View`, `Select`,
+`Data` and `Prefs` like any other module. A unit test fails if any app file mentions
+`S.`.
 
-The tabs move in this order, with `refresh()` drawing what hasn't moved yet:
-
-1. Overview and Activity, with the panel machinery.
-2. People, Groups and Replies.
-3. Words, Mood and Media, together because they share `content()`.
-4. Calls, Sources, Across apps, Year in review, Messages and AI analysis. Then
-   `refresh()` is deleted.
+It lands as one PR: the panels share `View.set` and topics, so moving some tabs while
+`refresh()` drew the rest would have meant building both ways of drawing.
 
 ### Step 8 · Cleanups
 
@@ -293,20 +309,23 @@ The tabs move in this order, with `refresh()` drawing what hasn't moved yet:
 - Event wiring uses `addEventListener` throughout. The page-wide click handler in
   `initGlance` splits so each panel handles its own `data-*` actions.
 
-### Expected effect
+### Effect
 
-Measured the same way as in Problem (302,700 messages, Apple silicon, Overview open).
-These figures are estimates, not acceptance criteria:
+Measured after step 7 the same way as in Problem: the demo copied to 302,700 messages,
+headless Chromium on an Apple-silicon Mac, the median of four runs. These numbers inform;
+they aren't acceptance criteria.
 
-| Action | Today | Expected |
+| Action | Before | After |
 |---|---|---|
-| Change a filter | ~300 ms | ~130 ms (no word splitting, no hidden tabs) |
-| Switch theme, sort the leaderboard | ~300 ms | < 20 ms (no aggregation) |
-| Open a profile | ~140 ms | ~60 ms (index, no word splitting) |
-| Open Words, first time | ~220 ms extra | ~170 ms (one word-splitting pass) |
+| Change the selection on Overview | ~300 ms | 116 ms |
+| Change the selection on Messages | ~300 ms | 14 ms |
+| Switch the theme on Overview / Activity | ~300 ms | 0 / 31 ms |
+| Sort the leaderboard | ~280 ms | 2 ms |
+| Open Words, first time | ~220 ms | 160 ms |
+| Open a profile (the busiest conversation) | ~140 ms | ~150 ms |
 
-These are measured once the steps are built, the same way as in Problem, and reported in
-the PRs. They inform, but aren't acceptance criteria.
+The profile didn't get faster: finding its messages no longer scans everything, but
+aggregating the busiest conversation is most of its cost.
 
 ## Acceptance criteria
 
@@ -341,7 +360,9 @@ the PRs. They inform, but aren't acceptance criteria.
   no chart outside Overview, the filter bar and the tab bar is drawn. Opening Activity
   then draws Activity's charts for the new selection.
 - **AC13** Given the dashboard on Overview, when data loads or the filter changes, then
-  no message text is split into words. Opening Words splits each message once.
+  no message text is split into words. Opening Words splits each message with text once
+  (a message with a link once more), and opening Mood & emoji and Media & links after it
+  splits nothing more.
 - **AC14** Given links, a dismissed suggestion, a theme, Instagram previews and AI
   settings saved by the current version, when the restructured app loads, then all of
   them apply.

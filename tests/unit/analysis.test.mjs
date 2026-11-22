@@ -129,13 +129,18 @@ describe('aggregateMessages', () => {
     assert.deepEqual(A.byContact.get('sam').starters, [1, 0], "Sam's message isn't a reply to me");
   });
 
-  it('counts direction, hours and words', () => {
+  it('counts direction and hours', () => {
     const A = aggregateMessages(thread);
     assert.deepEqual(A.dir, [3, 2]);
     assert.equal(A.hour[1][10], 1);
     assert.equal(A.hour[0][19], 1);
-    assert.deepEqual(A.wordFreq.get('dinner'), [1, 0]);
-    assert.equal(A.wordFreq.has('what'), false, 'filler words are left out');
+  });
+
+  it('R10: leaves the most used words to aggregateContent, which leaves out filler words', () => {
+    assert.equal(aggregateMessages(thread).wordFreq, undefined);
+    const C = aggregateContent(thread);
+    assert.deepEqual(C.wordFreq.get('dinner'), [1, 0]);
+    assert.equal(C.wordFreq.has('what'), false);
   });
 });
 

@@ -131,7 +131,8 @@ first (`openTabOf`), so tests written for the long page still reach their cards.
 - **AC6** Clicking a bar on the Mood chart selects the Messages tab, with the list
   filtered to those messages.
 - **AC7** The content pass (e.g. the Mood chart) has not run before a content tab is
-  first shown, and runs when Words, Mood & emoji or Media & links is shown.
+  first shown, and runs when Words, Mood & emoji or Media & links is shown. Since spec
+  014 (R9), each tab draws its own charts when it's shown, from that one pass.
 - **AC8** Right arrow on the selected tab selects and focuses the next shown tab; End
   selects the last.
 - **AC9** Changing the date range on a tab other than Overview keeps that tab selected.

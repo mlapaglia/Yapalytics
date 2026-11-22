@@ -106,7 +106,7 @@ const aiMoodRound = (p) => p.map((x) => Math.round(x * 1000) / 1000);
 /**
  * The controller behind the scorer switch on the Mood card. States: off, asking (the
  * download notice), loading, scoring, error. Uses the app's View, Select, $
- * and setMoodScorer. It only scores the messages the Mood chart shows: the selected
+ * and the setScorer given to init. It only scores the messages the Mood chart shows: the selected
  * dates, conversation and filters.
  */
 const AiMood = {
@@ -126,6 +126,7 @@ const AiMood = {
   done: 0,
   total: 0,
   error: '',
+  setScorer() {},
 
   /** The messages the Mood chart shows. */
   selection() {
@@ -141,7 +142,7 @@ const AiMood = {
 
   /** The user picked "AI model". */
   choose() {
-    if (!this.plan(this.selection()).count) return setMoodScorer('ai');
+    if (!this.plan(this.selection()).count) return this.setScorer('ai');
     if (this.ready) return this.start();
     this.state = 'asking';
     this.render();
@@ -150,7 +151,7 @@ const AiMood = {
   /** Back to VADER: stop any run (scores so far are kept). */
   chooseVader() {
     this.stop();
-    setMoodScorer('vader');
+    this.setScorer('vader');
   },
 
   cancel() {
@@ -201,7 +202,7 @@ const AiMood = {
       }
       this.state = 'off';
       this.render();
-      setMoodScorer('ai');
+      this.setScorer('ai');
     } catch (err) {
       if (run !== this.run) return;
       console.warn('AI mood scoring failed:', err);
@@ -210,7 +211,7 @@ const AiMood = {
         ? 'Scoring stopped because the model ran into a problem.'
         : 'The AI model couldn’t be downloaded. Check your connection (and any content blockers) and try again.';
       // Part of the selection has no AI score, so the chart goes back to VADER.
-      if (View.moodScorer === 'ai') setMoodScorer('vader');
+      if (View.moodScorer === 'ai') this.setScorer('vader');
       else this.render();
     }
   },
@@ -318,7 +319,9 @@ const AiMood = {
     box.hidden = !markup;
   },
 
-  init() {
+  /** `setScorer(scorer)`: switches the dashboard between 'vader' and 'ai'. */
+  init({ setScorer }) {
+    this.setScorer = setScorer;
     $('#moodScorerSeg').onclick = (e) => {
       const s = e.target.dataset.scorer;
       if (!s) return;
@@ -333,7 +336,7 @@ const AiMood = {
       else if (action === 'stop') {
         // With AI on, part of the selection would be unscored: back to VADER.
         this.stop();
-        if (View.moodScorer === 'ai') setMoodScorer('vader');
+        if (View.moodScorer === 'ai') this.setScorer('vader');
       }
     };
     this.render();
