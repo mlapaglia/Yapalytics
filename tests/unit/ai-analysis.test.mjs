@@ -1,13 +1,13 @@
 /* specs/002-ai-conversation-analysis.md: the pure parts of conversation analysis (AC12, with AC2, AC3, AC11). */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadScripts, makeMessage, messageLib } from '../helpers/load.mjs';
+import { loadApp, makeMessage, messageLib } from '../helpers/load.mjs';
 
 const {
   buildTranscript, redactText, aliasMap, parseAnalysis, estimateClaude, ollamaRequest, claudeRequest,
   analysisPrompt, ollamaUnreachable, ANALYSIS_SCHEMA, AiError,
   lmstudioRequest, lmstudioModels, lmstudioBudget, lmstudioHeaders, lmstudioUnreachable, AI_BACKENDS, lmstudioReplyText, lmstudioMeasuredRatio, lmstudioFind, lmstudioScopeNote,
-} = loadScripts(['ai-analysis.js'], [
+} = loadApp([
   'buildTranscript', 'redactText', 'aliasMap', 'parseAnalysis', 'estimateClaude', 'ollamaRequest', 'claudeRequest',
   'analysisPrompt', 'ollamaUnreachable', 'ANALYSIS_SCHEMA', 'AiError',
   'lmstudioRequest', 'lmstudioModels', 'lmstudioBudget', 'lmstudioHeaders', 'lmstudioUnreachable', 'AI_BACKENDS', 'lmstudioReplyText', 'lmstudioMeasuredRatio', 'lmstudioFind', 'lmstudioScopeNote',

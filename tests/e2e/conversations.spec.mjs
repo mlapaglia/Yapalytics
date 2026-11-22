@@ -1,4 +1,5 @@
 import { test, expect, loadDemo, scrollTo, chartOption } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 
 const GAPS = [
   { label: '30m', words: '30 minutes', lastBin: '15–30 min' },
@@ -10,8 +11,8 @@ const GAPS = [
 ];
 
 /** The stats behind the charts, recomputed for the current selection and gap. */
-const stats = (page) => page.evaluate(() => {
-  const A = aggregateMessages(inRange(baseMessages()), S.convoGap);
+const stats = (page) => inApp(page, (app) => {
+  const A = aggregateMessages(app.selection(), app.convoGap);
   const sum = (a) => a.reduce((x, y) => x + y, 0);
   return {
     n: A.n,

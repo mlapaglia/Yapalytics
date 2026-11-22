@@ -1,4 +1,5 @@
 import { test, expect, loadDemo, scrollTo } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 
 /** Center of a drawn bar on the mood chart: series 0 = you positive, 1 = you negative, 2 / 3 = them. */
 const barPoint = (page, series, fromEnd = 3) => page.evaluate(([s, back]) => {
@@ -10,18 +11,18 @@ const barPoint = (page, series, fromEnd = 3) => page.evaluate(([s, back]) => {
   return { x: r.left + box.x + box.width / 2, y: r.top + box.y + box.height / 2, ts: data.getValues(i)[0] };
 }, [series, fromEnd]);
 
-const shownState = (page) => page.evaluate(() => ({
-  filter: S.browserMood,
-  n: S.browserShown.length,
+const shownState = (page) => inApp(page, (app) => ({
+  filter: app.browserMood,
+  n: app.browserShown.length,
   pills: document.querySelectorAll('#messages .mood-pill').length,
   // Every listed message fits the filter, and its explanation agrees with its stored score.
-  fit: S.browserShown.every((m) => {
-    const f = S.browserMood;
+  fit: app.browserShown.every((m) => {
+    const f = app.browserMood;
     if (!f) return true;
     const kind = m.v >= 0.05 ? 'pos' : m.v <= -0.05 ? 'neg' : 'neu';
     return m.mo === f.mo && (f.o == null || m.o === f.o) && (f.kind === 'any' ? kind !== 'neu' : kind === f.kind);
   }),
-  explained: S.browserShown.slice(-40).every((m) => m.v == null || moodLib().explainMood(m.b).score === m.v),
+  explained: app.browserShown.slice(-40).every((m) => m.v == null || app.explainMood(m.b).score === m.v),
 }));
 
 test.describe('mood details', () => {
@@ -44,9 +45,9 @@ test.describe('mood details', () => {
     expect(s.pills).toBe(s.n);
     expect(s.explained).toBe(true);
     // The list holds as many messages as the bar's share says.
-    const share = await page.evaluate(() => {
-      const f = S.browserMood;
-      const month = inRange(baseMessages()).filter((m) => m.mo === f.mo && m.o === 1 && m.v != null);
+    const share = await inApp(page, (app) => {
+      const f = app.browserMood;
+      const month = app.selection().filter((m) => m.mo === f.mo && m.o === 1 && m.v != null);
       return { pos: month.filter((m) => m.v >= 0.05).length, all: month.length };
     });
     await expect(page.locator('#browserCount')).toContainText(`${share.pos.toLocaleString('en-US')} messages matching`);
@@ -85,7 +86,7 @@ test.describe('mood details', () => {
   });
 
   test('clearing the filter brings every message back, and scores can be hidden', async ({ page }) => {
-    const all = await page.evaluate(() => inRange(baseMessages()).length);
+    const all = await inApp(page, (app) => app.selection().length);
     const bar = await barPoint(page, 0);
     await page.mouse.click(bar.x, bar.y);
     await page.click('[data-clear-mood]');

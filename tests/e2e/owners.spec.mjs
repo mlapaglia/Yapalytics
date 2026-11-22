@@ -1,4 +1,5 @@
 import { test, expect, loadDemo, loadFiles } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 import { smsBackup } from '../helpers/sms.mjs';
 
 // The demo's WhatsApp owner is guessed; Telegram, Instagram and Messenger name you in
@@ -9,8 +10,8 @@ const control = (page, app) => row(page, app).locator('.ts-control');
 const SOURCE = { WhatsApp: 2, Instagram: 5 };
 
 /** Messages from an app, and how many count as sent by you. */
-const counts = (page, s) => page.evaluate((s) => {
-  const ms = S.msgs.filter((m) => m.s === s);
+const counts = (page, s) => inApp(page, (app, s) => {
+  const ms = app.msgs.filter((m) => m.s === s);
   return { n: ms.length, sent: ms.filter((m) => m.o === 1).length };
 }, s);
 
@@ -62,7 +63,7 @@ test.describe('spec 013 which one is you', () => {
     await expect.poll(() => counts(page, SOURCE.Instagram)).not.toEqual(ig);
     const after = await counts(page, SOURCE.Instagram);
     expect(after.n).toBe(ig.n);
-    expect(await page.evaluate((s) => S.msgs.filter((m) => m.s === s && m.o === 1).every((m) => m.sn === S.owners[s].name), SOURCE.Instagram)).toBe(true);
+    expect(await inApp(page, (app, s) => app.msgs.filter((m) => m.s === s && m.o === 1).every((m) => m.sn === app.owners[s].name), SOURCE.Instagram)).toBe(true);
     expect(await counts(page, SOURCE.WhatsApp)).toEqual(wa);
     await expect(dialog(page)).toHaveAttribute('open', '');
     await expect(row(page, 'Instagram').locator('select')).toHaveValue(name);
@@ -99,7 +100,7 @@ test.describe('spec 013 which one is you', () => {
     await page.keyboard.press('Escape');
     await expect(row(page, 'Instagram').locator('select')).toHaveValue('Jamie Park');
     await expect(control(page, 'Instagram')).toContainText('Jamie Park');
-    expect(await page.evaluate(() => S.owners[5].name)).toBe('Jamie Park');
+    expect(await inApp(page, (app) => app.owners[5].name)).toBe('Jamie Park');
   });
 
   test('AC7: ✕, the backdrop and Escape close the dialog', async ({ page }) => {

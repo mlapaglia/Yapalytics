@@ -1,12 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadScripts, makeMessage, messageLib } from '../helpers/load.mjs';
+import { loadApp, makeMessage, messageLib } from '../helpers/load.mjs';
 
 const lib = messageLib();
-const { aggregateCrossApp, mainAppShifts, crossAppHighlight, switchTrigger, appSwitchMarks, APPS_GAPS } = loadScripts(
-  ['parser.js', 'analysis.js', 'insights.js', 'crossapp.js'],
-  ['aggregateCrossApp', 'mainAppShifts', 'crossAppHighlight', 'switchTrigger', 'appSwitchMarks', 'APPS_GAPS'],
-);
+const { aggregateCrossApp, mainAppShifts, crossAppHighlight, switchTrigger, appSwitchMarks, APPS_GAPS } = loadApp(['aggregateCrossApp', 'mainAppShifts', 'crossAppHighlight', 'switchTrigger', 'appSwitchMarks', 'APPS_GAPS']);
 
 const GAP = 6 * 3600e3;
 const MIN = 60e3;

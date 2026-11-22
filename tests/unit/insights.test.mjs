@@ -1,12 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadScripts, makeMessage, messageLib } from '../helpers/load.mjs';
+import { loadApp, makeMessage, messageLib } from '../helpers/load.mjs';
 
 const lib = messageLib();
 const {
   aggregateMessages, buildHighlights, highlightText, profileFacts, sameDayHistory, daysWithHistory,
   nearestDayWithHistory, pickMoments, busiestConversation,
-} = loadScripts(['parser.js', 'analysis.js', 'insights.js'], [
+} = loadApp([
   'aggregateMessages', 'buildHighlights', 'highlightText', 'profileFacts', 'sameDayHistory', 'daysWithHistory',
   'nearestDayWithHistory', 'pickMoments', 'busiestConversation',
 ]);

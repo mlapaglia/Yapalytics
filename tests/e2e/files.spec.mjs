@@ -2,6 +2,7 @@
  * specs/006-file-manager.md in the browser: the Files button and dialog.
  */
 import { writeFileSync } from 'node:fs';
+import { inApp } from './state.mjs';
 import { test, expect, loadFiles, scrollTo } from './fixtures.mjs';
 import { splitExport } from '../helpers/instagram.mjs';
 import { smsBackup } from '../helpers/sms.mjs';
@@ -23,7 +24,7 @@ const dialog = (page) => page.locator('#filesDlg');
 const rows = (page) => page.locator('#filesList li[data-file]');
 const row = (page, name) => rows(page).filter({ hasText: name });
 const options = (page) => page.locator('#contactSel option').allTextContents();
-const counts = (page) => page.evaluate(() => ({ msgs: S.msgs.length, telegram: S.msgs.filter((m) => m.s === 4).length }));
+const counts = (page) => inApp(page, (app) => ({ msgs: app.msgs.length, telegram: app.msgs.filter((m) => m.s === 4).length }));
 
 async function openDialog(page) {
   await page.click('#filesBtn');
@@ -171,7 +172,7 @@ test.describe('spec 006 managing loaded files', () => {
     await expect(page.locator('#landing')).toBeVisible();
     await expect(page.locator('#drop')).toBeVisible();
     await expect(page.locator('#dash')).toBeHidden();
-    expect(await page.evaluate(() => ({ msgs: S.msgs.length, files: S.files.length }))).toEqual({ msgs: 0, files: 0 });
+    expect(await inApp(page, (app) => ({ msgs: app.msgs.length, files: app.files.length }))).toEqual({ msgs: 0, files: 0 });
     // And the same file can be chosen again from the landing page.
     await page.setInputFiles('#fileInput', sms());
     await dashboard(page);
@@ -206,14 +207,14 @@ test.describe('spec 006 managing loaded files', () => {
     await row(page, 'result.json').locator('input').check();
     await apply(page);
     await dashboard(page);
-    const tg = await page.evaluate(() => [...S.contacts.values()].find((c) => c.s === 4).key);
+    const tg = await inApp(page, (app) => [...app.contacts.values()].find((c) => c.s === 4).key);
     await page.selectOption('#contactSel', tg);
     await openDialog(page);
     await row(page, 'result.json').getByRole('button', { name: /^Remove/ }).click();
     await apply(page);
     await dashboard(page);
     await expect(page.locator('#contactSel')).toHaveValue('all');
-    expect(await page.evaluate(() => S.filter.contact)).toBe('all');
+    expect(await inApp(page, (app) => app.filter.contact)).toBe('all');
   });
 
   test('AC12: an AI analysis report is cleared when a file is left out', async ({ page }) => {
@@ -250,7 +251,7 @@ test.describe('spec 006 managing loaded files', () => {
       await dashboard(page);
       await expect(page.locator('#filesBtn')).toHaveText('📁 Files (1)');
       expect(await counts(page)).toEqual({ msgs: 5, telegram: 0 });
-      expect(await page.evaluate(() => S.contacts.size)).toBe(2);
+      expect(await inApp(page, (app) => app.contacts.size)).toBe(2);
     });
   });
 
@@ -267,7 +268,7 @@ test.describe('spec 006 managing loaded files', () => {
 
   test('AC18: re-checking the media part of a split Instagram export brings its photos back', async ({ page }) => {
     await loadFiles(page, splitExport());
-    const openable = () => page.evaluate(() => S.msgs.flatMap((m) => m.att || []).filter(attLoadable).length);
+    const openable = () => inApp(page, (app) => app.msgs.flatMap((m) => m.att || []).filter(attLoadable).length);
     const before = await openable();
     expect(before).toBeGreaterThan(0);
     await openDialog(page);

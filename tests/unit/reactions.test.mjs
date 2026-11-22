@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadScripts, messageLib } from '../helpers/load.mjs';
+import { loadApp, messageLib } from '../helpers/load.mjs';
 
 const lib = messageLib();
 const isReaction = (body) => {
@@ -81,7 +81,7 @@ describe('spec 004 reactions on messages', () => {
   });
 
   it('AC16: mergeReactions keeps the larger count per emoji and everyone named, in either order', () => {
-    const { mergeReactions } = loadScripts(['parser.js'], ['mergeReactions']);
+    const { mergeReactions } = loadApp(['mergeReactions']);
     const older = [{ r: '❤️', c: 1, n: ['Alex'] }];
     const newer = [{ r: '❤️', c: 1, n: ['Alex'] }, { r: '😂', c: 1, n: ['Jamie'] }];
     const want = [{ r: '❤️', c: 1, n: ['Alex'] }, { r: '😂', c: 1, n: ['Jamie'] }];

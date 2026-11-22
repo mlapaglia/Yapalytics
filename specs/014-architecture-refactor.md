@@ -108,16 +108,20 @@ Dropped in review: ECharts and Tom Select keep loading from jsDelivr.
 
 ### Step 3 · Test seam
 
-`tests/e2e/state.mjs` exports named readers, `messages(page, fn)`, `filter(page)`,
-`contacts(page)`, `personOf(page)`, `owners(page)`, `browserShown(page)` and so on,
-covering the fields the specs read today: `msgs`, `personOf`, `filter`, `contacts`,
-`moodScorer`, `browserShown`, `browserMood`, `topRows`, `reactions`, `phraseMsgs`,
-`owners`, `convoGap`, `vocab`, `vocabMo`, `phrase`, `files` and `appsGap`. Every spec
-switches to them. Later steps that move state then change only this file. A unit test
-fails if a file in `tests/e2e/` other than `state.mjs` mentions `S.`.
+`tests/e2e/state.mjs` exports `inApp(page, (app, arg) => …, arg)`. It runs the function
+in the page like `page.evaluate`, with `app` built by one `VIEW()` function in
+`state.mjs`: getters for the state the specs read (`msgs`, `calls`, `contacts`,
+`personOf`, `owners`, `reactions`, `files`, `filter`, `moodScorer`, `convoGap`,
+`appsGap`, `phrase`, `topRows`, `browserShown`, `browserMood`, `phraseMsgs`, `vocab`)
+and the app functions they call (`selection()`, `addMessages()`, `setVocabMonth()`,
+`openProfile()`, `plainName()`, `readDay()`, `showMoodMessages()`, `explainMood()`,
+`pickToLink()`). Every spec switches to it. Later steps that move state change only
+`VIEW`. A unit test fails if a file in `tests/e2e/` other than `state.mjs` uses `S.` or
+one of those app functions directly. Library functions that hold no state
+(`aggregateMessages`, `phraseRegex`…) can still be called in the page.
 
-`tests/helpers/load.mjs` gains `loadApp(names, globals)`, which reads the script order
-from `index.html`. Unit tests then stop listing each file's dependencies by hand.
+`tests/helpers/load.mjs` gains `loadApp(names, globals)`, which loads every script in
+`index.html` order except `app.js`. Unit tests then stop listing each file's dependencies.
 
 ### Step 4 · App registry
 

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { runParser } from '../helpers/worker.mjs';
 import { asFile, igMessage, looseThread, splitExport, threadOf, zippedExport, zippedHtmlExport } from '../helpers/instagram.mjs';
-import { loadScripts } from '../helpers/load.mjs';
+import { loadApp } from '../helpers/load.mjs';
 
 const parse = (...specs) => runParser('instagram.js', 'metaParserWorker', { files: specs.map(asFile) });
 const T0 = Date.parse('2024-08-20T10:00:00Z');
@@ -137,7 +137,7 @@ describe('spec 004 Instagram shared posts: parser', () => {
 });
 
 describe('spec 004 Instagram shared posts: embed links', () => {
-  const { instagramEmbedUrl } = loadScripts(['media.js'], ['instagramEmbedUrl']);
+  const { instagramEmbedUrl } = loadApp(['instagramEmbedUrl']);
 
   it('AC3: maps post and reel links to their embed page, and nothing else', () => {
     assert.equal(instagramEmbedUrl('https://www.instagram.com/reel/DesZwLVvHS6/?id=4011694629953762490_744472028'), 'https://www.instagram.com/reel/DesZwLVvHS6/embed/');

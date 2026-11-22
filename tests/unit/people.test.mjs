@@ -1,11 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadScripts } from '../helpers/load.mjs';
+import { loadApp } from '../helpers/load.mjs';
 
-const { normName, normPhone, identityTokens, suggestLinks, defaultPersonName, linkSignature } = loadScripts(
-  ['people.js'],
-  ['normName', 'normPhone', 'identityTokens', 'suggestLinks', 'defaultPersonName', 'linkSignature'],
-);
+const { normName, normPhone, identityTokens, suggestLinks, defaultPersonName, linkSignature } = loadApp(['normName', 'normPhone', 'identityTokens', 'suggestLinks', 'defaultPersonName', 'linkSignature']);
 
 // Conversations as the parsers describe them (only the fields matching reads).
 const sms = (key, name, addr) => ({ key, s: 0, name, addr, group: false });

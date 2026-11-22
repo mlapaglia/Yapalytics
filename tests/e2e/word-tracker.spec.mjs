@@ -1,10 +1,11 @@
 import { test, expect, loadDemo, scrollTo, chartOption } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 
 /** What the tracker should show, computed straight from the selected messages. */
-const expected = (page) => page.evaluate(() => {
-  const re = phraseRegex(S.phrase);
+const expected = (page) => inApp(page, (app) => {
+  const re = phraseRegex(app.phrase);
   let firstYou = null, firstThem = null, uses = [0, 0];
-  for (const m of S.phraseMsgs) {
+  for (const m of app.phraseMsgs) {
     if (!m.b || m.f & 16) continue;
     const hits = m.b.match(re);
     if (!hits) continue;

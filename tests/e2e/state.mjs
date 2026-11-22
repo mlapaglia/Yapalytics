@@ -1,0 +1,76 @@
+/*
+ * The browser tests' one window into the app's internals (spec 014 R12). Specs read
+ * state and call app functions only through inApp(), never through `S` or the app's
+ * own function names, so when the app moves its state around only VIEW changes.
+ *
+ *   const n = await inApp(page, (app) => app.msgs.length);
+ *   const p = await inApp(page, (app, key) => app.personOf.get(key), key);
+ *
+ * Like page.evaluate, the function runs in the page: it can't use variables from the
+ * spec file, only `app`, its argument and the page's globals (library functions like
+ * aggregateMessages, echarts, document).
+ */
+
+/**
+ * Builds `app` in the page. It is serialized into the page, so it may only use the
+ * page's globals.
+ */
+function VIEW() {
+  return {
+    // What's loaded
+    get msgs() { return S.msgs; },
+    get calls() { return S.calls; },
+    get contacts() { return S.contacts; },
+    get personOf() { return S.personOf; },
+    get owners() { return S.owners; },
+    get reactions() { return S.reactions; },
+    get files() { return S.files; },
+
+    // What's picked
+    get filter() { return S.filter; },
+    get moodScorer() { return S.moodScorer; },
+    get convoGap() { return S.convoGap; },
+    get appsGap() { return S.appsGap; },
+    get phrase() { return S.phrase; },
+
+    // What's shown
+    get topRows() { return S.topRows; },
+    get browserShown() { return S.browserShown; },
+    get browserMood() { return S.browserMood; },
+    get phraseMsgs() { return S.phraseMsgs; },
+    get vocab() { return S.vocab; },
+
+    /** Messages matching the filters and the date range. */
+    selection: () => inRange(baseMessages()),
+    /** Adds analyzed message records to what's loaded and redraws. */
+    addMessages(list) {
+      S.msgs.push(...list);
+      S.msgs.sort((a, b) => a.t - b.t);
+      refresh();
+    },
+    /** Picks a month on the Vocabulary card. */
+    setVocabMonth(mo) {
+      S.vocabMo = mo;
+      renderVocab();
+    },
+    openProfile: (key) => openProfile(key),
+    plainName: (key) => plainName(key),
+    readDay: (dayStart) => readDay(dayStart),
+    showMoodMessages: (mo, o, kind) => showMoodMessages(mo, o, kind),
+    explainMood: (body) => moodLib().explainMood(body),
+    /** Picks two conversations under "Link by hand" in the People dialog. */
+    pickToLink(a, b) {
+      setPickerValue(document.querySelector('#peopleA'), a);
+      setPickerValue(document.querySelector('#peopleB'), b);
+      syncPeopleLink();
+    },
+  };
+}
+
+/** Runs `fn(app, arg)` in the page and returns its (awaited) result. */
+export function inApp(page, fn, arg) {
+  return page.evaluate(({ view, fn, arg }) => {
+    const app = new Function(`return (${view})();`)();
+    return new Function('app', 'arg', `return (${fn})(app, arg);`)(app, arg);
+  }, { view: VIEW.toString(), fn: fn.toString(), arg });
+}

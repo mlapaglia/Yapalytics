@@ -3,6 +3,7 @@
  * chats download, and how they sit next to the other apps.
  */
 import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab, ownerPicker } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 import { zippedExport as instagramExport } from '../helpers/instagram.mjs';
 import { resultJson, singleChatExport } from '../helpers/telegram.mjs';
 import {
@@ -11,8 +12,8 @@ import {
 } from '../helpers/messenger.mjs';
 
 /** Messages of an app loaded: total, and how many count as sent by you. */
-const countsOf = (page, s = 6) => page.evaluate((s) => {
-  const msgs = S.msgs.filter((m) => m.s === s);
+const countsOf = (page, s = 6) => inApp(page, (app, s) => {
+  const msgs = app.msgs.filter((m) => m.s === s);
   return { n: msgs.length, sent: msgs.filter((m) => m.o === 1).length };
 }, s);
 const picker = (page) => ownerPicker(page, 'Messenger');
@@ -23,7 +24,7 @@ test.describe('spec 009 Messenger', () => {
     await loadFiles(page, facebookExport());
     // Alex: 4 kept (the like is a reaction), Road Trip: 2, Sam: 1. You sent 2.
     expect(await countsOf(page)).toEqual({ n: 7, sent: 2 });
-    expect(await page.evaluate(() => S.reactions)).toBe(1);
+    expect(await inApp(page, (app) => app.reactions)).toBe(1);
     await expect(await picker(page)).toHaveValue('Jamie Park');
     const opts = await options(page);
     expect(opts.some((o) => o.startsWith('⚡ Alex Rivera'))).toBe(true);
@@ -97,9 +98,9 @@ test.describe('spec 009 Messenger', () => {
     // The zip keeps its chats in a folder, so the thread file on its own (read first) can't
     // find the photo's file; the zip's copy of the message brings it.
     await loadFiles(page, [encryptedThread(), encryptedExport('Messenger export/')]);
-    expect(await page.evaluate(() => S.msgs.filter((m) => m.k === 'fb:e2ee:Alex Rivera_6').length)).toBe(7);
-    const photo = await page.evaluate(() => {
-      const m = S.msgs.find((x) => x.k === 'fb:e2ee:Alex Rivera_6' && x.ph);
+    expect(await inApp(page, (app) => app.msgs.filter((m) => m.k === 'fb:e2ee:Alex Rivera_6').length)).toBe(7);
+    const photo = await inApp(page, (app) => {
+      const m = app.msgs.find((x) => x.k === 'fb:e2ee:Alex Rivera_6' && x.ph);
       return { att: (m.att || []).map((a) => [a.n, a.z]), bytes: m.mb > 0 };
     });
     expect(photo).toEqual({ att: [['482a04c4-6739-4871-aecf-9960208a707d.jpeg', 1]], bytes: true });
@@ -109,9 +110,9 @@ test.describe('spec 009 Messenger', () => {
 
   test('AC7: Instagram and Facebook exports chosen together stay two apps', async ({ page }) => {
     await loadFiles(page, [instagramExport(), facebookExport()]);
-    const apps = await page.evaluate(() => {
+    const apps = await inApp(page, (app) => {
       const out = {};
-      for (const m of S.msgs) (out[m.s] ||= new Set()).add(m.k.replace(/^g:/, '').slice(0, 3));
+      for (const m of app.msgs) (out[m.s] ||= new Set()).add(m.k.replace(/^g:/, '').slice(0, 3));
       return Object.fromEntries(Object.entries(out).map(([s, p]) => [s, [...p]]));
     });
     expect(apps).toEqual({ 5: ['ig:'], 6: ['fb:'] });
@@ -149,8 +150,8 @@ test.describe('spec 009 Messenger', () => {
     await expect(row.locator('.person-chip')).toHaveText([/Messenger · 4/, /Messenger · 7/, /Instagram · 5/]);
     await row.locator('[data-accept]').click();
     await page.locator('#peopleDlg .profile-close').click();
-    const person = await page.evaluate(() => S.personOf.get('ig:alexrivera_1111'));
-    expect(person).toBe(await page.evaluate(() => S.personOf.get('fb:e2ee:Alex Rivera_6')));
+    const person = await inApp(page, (app) => app.personOf.get('ig:alexrivera_1111'));
+    expect(person).toBe(await inApp(page, (app) => app.personOf.get('fb:e2ee:Alex Rivera_6')));
     await page.selectOption('#contactSel', person);
     await page.click('#profileBtn');
     await expect(page.locator('#profileTop')).toContainText('on Instagram and Messenger');
@@ -167,7 +168,7 @@ test.describe('spec 009 Messenger', () => {
     await page.click('#filesApply');
     await expect.poll(() => countsOf(page, 6)).toEqual({ n: 2, sent: 1 });
     expect((await countsOf(page, 5)).n).toBe(0);
-    expect(await page.evaluate(() => [...new Set(S.msgs.map((m) => m.k))])).toEqual(['fb:alexrivera_1111']);
+    expect(await inApp(page, (app) => [...new Set(app.msgs.map((m) => m.k))])).toEqual(['fb:alexrivera_1111']);
 
     await page.click('#filesBtn');
     await expect(app).toHaveValue('messenger');

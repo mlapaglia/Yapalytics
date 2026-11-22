@@ -4,6 +4,7 @@
  * downloading the 126 MB model. The fake reads tone from a few keywords.
  */
 import { test, expect, loadDemo, scrollTo, openTab, addFiles } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 import { fullExport, resultJson } from '../helpers/telegram.mjs';
 
 const LIB_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.min.js';
@@ -32,12 +33,12 @@ const spyOnScoring = (page) => page.evaluate(() => {
   AiMood.score = (texts) => { window.__sent.push(...texts); return score(texts); };
 });
 
-const state = (page) => page.evaluate(() => ({
-  scorer: S.moodScorer,
+const state = (page) => inApp(page, (app) => ({
+  scorer: app.moodScorer,
   aiState: AiMood.state,
-  vader: S.msgs.filter((m) => m.v != null).length,
-  ai: S.msgs.filter((m) => m.ai).length,
-  missing: S.msgs.filter(aiMoodMissing).length,
+  vader: app.msgs.filter((m) => m.v != null).length,
+  ai: app.msgs.filter((m) => m.ai).length,
+  missing: app.msgs.filter(aiMoodMissing).length,
   on: document.querySelector('#moodScorerSeg button.on')?.dataset.scorer,
   note: document.querySelector('#moodNote').textContent,
 }));
@@ -52,7 +53,7 @@ async function openMood(page) {
 async function scoreWithAi(page) {
   await page.click('#moodScorerSeg [data-scorer="ai"]');
   await page.click('[data-ai-mood="start"]');
-  await expect.poll(() => page.evaluate(() => S.moodScorer), { timeout: 30_000 }).toBe('ai');
+  await expect.poll(() => inApp(page, (app) => app.moodScorer), { timeout: 30_000 }).toBe('ai');
 }
 
 test.describe('spec 001: AI mood scoring', () => {
@@ -93,12 +94,12 @@ test.describe('spec 001: AI mood scoring', () => {
     expect(s.on).toBe('ai');
     expect(s.note).toContain('scored with the AI model');
     await expect(page.locator('#aiMoodStatus')).toBeHidden();
-    const sent = await page.evaluate(() => ({ n: window.__sent.length, unique: new Set(window.__sent).size, texts: new Set(S.msgs.filter((m) => m.v != null).map((m) => aiMoodText(m.b))).size }));
+    const sent = await inApp(page, (app) => ({ n: window.__sent.length, unique: new Set(window.__sent).size, texts: new Set(app.msgs.filter((m) => m.v != null).map((m) => aiMoodText(m.b))).size }));
     expect(sent.n).toBe(sent.unique);
     expect(sent.n).toBe(sent.texts);
     // The chart now counts by the model: the share of positive messages matches its labels.
-    const check = await page.evaluate(() => {
-      const C = aggregateContent(inRange(baseMessages()), 'ai');
+    const check = await inApp(page, (app) => {
+      const C = aggregateContent(app.selection(), 'ai');
       const series = echarts.getInstanceByDom(document.getElementById('c-mood')).getOption().series[0].data;
       const mo = [...C.mood.keys()].sort((a, b) => a - b).at(-1);
       const m = C.mood.get(mo);
@@ -127,7 +128,7 @@ test.describe('spec 001: AI mood scoring', () => {
 
     const firstRun = await page.evaluate(() => { const sent = window.__sent; window.__sent = []; return sent; });
     await page.click('#moodScorerSeg [data-scorer="ai"]'); // model already loaded: no notice, straight to scoring
-    await expect.poll(() => page.evaluate(() => S.moodScorer), { timeout: 30_000 }).toBe('ai');
+    await expect.poll(() => inApp(page, (app) => app.moodScorer), { timeout: 30_000 }).toBe('ai');
     const secondRun = await page.evaluate(() => window.__sent);
     expect(secondRun.filter((t) => firstRun.includes(t))).toEqual([]);
     expect((await state(page)).missing).toBe(0);
@@ -155,8 +156,8 @@ test.describe('spec 001: AI mood scoring', () => {
     await page.check('#moodChk');
     const pill = page.locator('#messages .mood-pill').last();
     await pill.scrollIntoViewIfNeeded();
-    const expected = await page.evaluate(() => {
-      const m = S.browserShown[+document.querySelectorAll('#messages .mood-pill')[document.querySelectorAll('#messages .mood-pill').length - 1].dataset.i];
+    const expected = await inApp(page, (app) => {
+      const m = app.browserShown[+document.querySelectorAll('#messages .mood-pill')[document.querySelectorAll('#messages .mood-pill').length - 1].dataset.i];
       return { score: fmtScore(moodScore(m, 'ai')), kind: moodKind(m), vader: fmtScore(m.v) };
     });
     await expect(pill).toHaveText(expected.score);
@@ -185,7 +186,7 @@ test.describe('spec 001: AI mood scoring', () => {
       await page.unroute(LIB_URL);
       await serveFake(page);
       await page.click('[data-ai-mood="start"]');
-      await expect.poll(() => page.evaluate(() => S.moodScorer), { timeout: 30_000 }).toBe('ai');
+      await expect.poll(() => inApp(page, (app) => app.moodScorer), { timeout: 30_000 }).toBe('ai');
     });
   });
 
@@ -195,14 +196,14 @@ test.describe('spec 001: AI mood scoring', () => {
     await page.click('#presets button[data-preset="30"]');
     await spyOnScoring(page);
     await scoreWithAi(page);
-    const s = await page.evaluate(() => {
-      const sel = inRange(baseMessages());
+    const s = await inApp(page, (app) => {
+      const sel = app.selection();
       const inSel = new Set(sel);
       const selTexts = new Set(sel.filter((m) => m.v != null).map((m) => aiMoodText(m.b)));
       return {
         selMissing: sel.filter(aiMoodMissing).length,
-        outside: S.msgs.filter((m) => !inSel.has(m) && m.v != null).length,
-        outsideScored: S.msgs.filter((m) => !inSel.has(m) && m.ai).length,
+        outside: app.msgs.filter((m) => !inSel.has(m) && m.v != null).length,
+        outsideScored: app.msgs.filter((m) => !inSel.has(m) && m.ai).length,
         sent: window.__sent.length,
         unique: new Set(window.__sent).size,
         selTexts: selTexts.size,
@@ -242,9 +243,9 @@ test.describe('spec 001: AI mood scoring', () => {
     await expect.poll(() => page.evaluate(() => window.__sent.length)).toBeGreaterThan(0); // batch 1 is out
     const atNarrow = await page.evaluate(() => window.__sent.length);
     await page.click('#presets button[data-preset="30"]');
-    await expect.poll(() => page.evaluate(() => S.moodScorer), { timeout: 30_000 }).toBe('ai');
-    const s = await page.evaluate((from) => {
-      const sel = inRange(baseMessages());
+    await expect.poll(() => inApp(page, (app) => app.moodScorer), { timeout: 30_000 }).toBe('ai');
+    const s = await inApp(page, (app, from) => {
+      const sel = app.selection();
       const selTexts = new Set(sel.filter((m) => m.v != null).map((m) => aiMoodText(m.b)));
       return {
         selMissing: sel.filter(aiMoodMissing).length,
@@ -260,7 +261,7 @@ test.describe('spec 001: AI mood scoring', () => {
     await page.click('#presets button[data-preset="30"]');
     await page.click('#moodScorerSeg [data-scorer="ai"]');
     await page.click('[data-ai-mood="start"]');
-    await expect.poll(() => page.evaluate(() => S.moodScorer), { timeout: 30_000 }).toBe('ai');
+    await expect.poll(() => inApp(page, (app) => app.moodScorer), { timeout: 30_000 }).toBe('ai');
     await page.click('#presets button[data-preset="all"]');
     await expect(page.locator('#aiMoodStatus')).toContainText(/Scoring [\d,]+ of [\d,]+ messages/);
     await page.click('[data-ai-mood="stop"]');
@@ -276,7 +277,7 @@ test.describe('spec 001: AI mood scoring', () => {
     await scoreWithAi(page);
     const before = (await state(page)).ai;
     await addFiles(page, resultJson(fullExport()));
-    await expect.poll(() => page.evaluate(() => S.msgs.some((m) => m.s === 4))).toBe(true);
+    await expect.poll(() => inApp(page, (app) => app.msgs.some((m) => m.s === 4))).toBe(true);
     await expect.poll(async () => (await state(page)).missing, { timeout: 30_000 }).toBe(0);
     const s = await state(page);
     expect(s.ai).toBeGreaterThan(before);
@@ -295,7 +296,7 @@ test.describe('spec 006: managing loaded files', () => {
     await page.click('#filesApply');
     await expect(page.locator('#landing')).toBeHidden({ timeout: 60_000 });
     await expect(page.locator('#dash')).toBeVisible();
-    await expect.poll(() => page.evaluate(() => S.msgs.some((m) => m.s === 4))).toBe(false);
+    await expect.poll(() => inApp(page, (app) => app.msgs.some((m) => m.s === 4))).toBe(false);
     await scrollTo(page, '#c-mood');
     const s = await state(page);
     expect(s.missing).toBe(0);

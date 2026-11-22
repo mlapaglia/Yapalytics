@@ -1,12 +1,9 @@
 /* specs/001-ai-mood-scoring.md: the pure parts of AI mood scoring (AC10, AC4). */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadScripts, makeMessage } from '../helpers/load.mjs';
+import { loadApp, makeMessage } from '../helpers/load.mjs';
 
-const { vaderLib, messageLib, aggregateContent, moodScore, moodSign, aiMoodText, aiMoodPlan, aiMoodRound } = loadScripts(
-  ['vendor/vader.js', 'parser.js', 'analysis.js', 'ai-mood.js'],
-  ['vaderLib', 'messageLib', 'aggregateContent', 'moodScore', 'moodSign', 'aiMoodText', 'aiMoodPlan', 'aiMoodRound'],
-);
+const { vaderLib, messageLib, aggregateContent, moodScore, moodSign, aiMoodText, aiMoodPlan, aiMoodRound } = loadApp(['vaderLib', 'messageLib', 'aggregateContent', 'moodScore', 'moodSign', 'aiMoodText', 'aiMoodPlan', 'aiMoodRound']);
 const lib = messageLib(vaderLib());
 const msg = (spec) => makeMessage(lib, { at: '2024-03-05T12:00:00Z', ...spec });
 
