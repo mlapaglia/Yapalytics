@@ -547,7 +547,6 @@ const AiRunners = {
 
 // ------------------------------------------------------------------ the card
 
-const AI_SETTINGS_KEY = 'yapa-ai';
 
 const AiAnalysis = {
   backend: 'webllm',
@@ -585,14 +584,14 @@ const AiAnalysis = {
 
   /** The selected conversation and how to name its people, or null for "All conversations". */
   conversation() {
-    const key = S.filter.contact;
+    const key = View.filter.contact;
     if (key === 'all') return null;
     const c = Data.contacts.get(key) || {};
     const group = key.startsWith('g:');
-    const msgs = inRange(baseMessages());
+    const msgs = Select.range();
     // A linked person (spec 005) goes by the names of all its conversations.
     const parts = c.person ? c.threads.map((k) => Data.contacts.get(k)).filter(Boolean) : [c];
-    const own = [...new Set(parts.filter((p) => hasOwner(p.s)).map((p) => S.owners[p.s].name).filter(Boolean))];
+    const own = [...new Set(parts.filter((p) => hasOwner(p.s)).map((p) => Prefs.owners[p.s].name).filter(Boolean))];
     const names = [...new Set([c.name, ...parts.flatMap((p) => [p.name, ...(p.addr ? p.addr.split('~') : []), ...(p.members || []).map(([n]) => n)])])]
       .filter((n) => n && !own.includes(n));
     return {
@@ -921,12 +920,12 @@ const AiAnalysis = {
 
   save() {
     const { claudeKey, lmstudioToken, ...keep } = this.settings;
-    try { localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify({ backend: this.backend, ...keep })); } catch (e) { /* storage unavailable */ }
+    Store.setJSON(STORE_KEYS.ai, { backend: this.backend, ...keep });
   },
 
   load() {
     try {
-      const saved = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY) || 'null');
+      const saved = Store.getJSON(STORE_KEYS.ai);
       if (saved) {
         if (AI_BACKENDS[saved.backend]) this.backend = saved.backend;
         for (const k of ['webllmModel', 'ollamaUrl', 'ollamaModel', 'lmstudioUrl', 'lmstudioModel', 'claudeModel']) if (typeof saved[k] === 'string') this.settings[k] = saved[k];

@@ -110,11 +110,14 @@ describe('spec 014 dataset', () => {
     assert.ok(!text.includes('jamie'));
   });
 
-  it('AC10: the dataset and registry load without a page, and never touch one', () => {
-    for (const file of ['sources.js', 'dataset.js']) {
-      loadScripts([file], []); // throws if it reached for the page while loading
+  it('AC10: the dataset, registry, selection and settings load without a page, and never touch one', () => {
+    // Each loads after what it reads as it loads (index.html's order).
+    loadScripts(['sources.js', 'store.js', 'dataset.js', 'analysis.js', 'crossapp.js', 'select.js'], []);
+    for (const file of ['sources.js', 'dataset.js', 'select.js', 'store.js']) {
       const src = readFileSync(new URL(`../../js/${file}`, import.meta.url), 'utf8');
-      assert.doesNotMatch(src, /\bdocument\b|\bwindow\b|\$\(|localStorage/, file);
+      assert.doesNotMatch(src, /\bdocument\b|\bwindow\b|\$\(/, file);
+      // Settings are the one thing kept in the browser's storage, and only store.js touches it.
+      if (file !== 'store.js') assert.doesNotMatch(src, /localStorage/, file);
     }
   });
 });

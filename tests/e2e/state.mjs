@@ -22,26 +22,26 @@ function VIEW() {
     get calls() { return Data.calls; },
     get contacts() { return Data.contacts; },
     get personOf() { return Data.personOf; },
-    get owners() { return S.owners; },
+    get owners() { return Prefs.owners; },
     get reactions() { return Data.reactions; },
     get files() { return S.files; },
 
     // What's picked
-    get filter() { return S.filter; },
-    get moodScorer() { return S.moodScorer; },
-    get convoGap() { return S.convoGap; },
-    get appsGap() { return S.appsGap; },
-    get phrase() { return S.phrase; },
+    get filter() { return View.filter; },
+    get moodScorer() { return View.moodScorer; },
+    get convoGap() { return View.convoGap; },
+    get appsGap() { return View.appsGap; },
+    get phrase() { return View.phrase; },
 
     // What's shown
     get topRows() { return S.topRows; },
     get browserShown() { return S.browserShown; },
-    get browserMood() { return S.browserMood; },
+    get browserMood() { return View.browser.mood; },
     get phraseMsgs() { return S.phraseMsgs; },
     get vocab() { return S.vocab; },
 
     /** Messages matching the filters and the date range. */
-    selection: () => inRange(baseMessages()),
+    selection: () => Select.range(),
     /** Adds analyzed message records to what's loaded and redraws. */
     addMessages(list) {
       Data.addBatch(list, []);
@@ -51,7 +51,7 @@ function VIEW() {
     },
     /** Picks a month on the Vocabulary card. */
     setVocabMonth(mo) {
-      S.vocabMo = mo;
+      View.vocabMo = mo;
       renderVocab();
     },
     openProfile: (key) => openProfile(key),

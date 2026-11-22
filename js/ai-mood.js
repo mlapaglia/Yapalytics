@@ -30,17 +30,20 @@ const aiMoodMissing = (m) => m.v != null && !m.ai;
 /**
  * What's left to score: each unique model text once (shortest first, so a batch pads
  * little), the messages behind each text, and how many messages that is. Messages whose
- * text is in `known` (text -> scores from an earlier run) get those scores here instead.
+ * text is in `known` (text -> scores from an earlier run) get those scores here instead;
+ * `filled` counts them.
  */
 function aiMoodPlan(msgs, known = null) {
   const byText = new Map();
   let count = 0;
+  let filled = 0;
   for (const m of msgs) {
     if (!aiMoodMissing(m)) continue;
     const t = aiMoodText(m.b);
     const p = known && known.get(t);
     if (p) {
       m.ai = p;
+      filled++;
       continue;
     }
     let list = byText.get(t);
@@ -49,7 +52,7 @@ function aiMoodPlan(msgs, known = null) {
     count++;
   }
   const texts = [...byText.keys()].sort((a, b) => a.length - b.length);
-  return { texts, byText, count };
+  return { texts, byText, count, filled };
 }
 
 /**
@@ -102,7 +105,7 @@ const aiMoodRound = (p) => p.map((x) => Math.round(x * 1000) / 1000);
 
 /**
  * The controller behind the scorer switch on the Mood card. States: off, asking (the
- * download notice), loading, scoring, error. Uses the app's S, $, inRange, baseMessages
+ * download notice), loading, scoring, error. Uses the app's View, Select, $
  * and setMoodScorer. It only scores the messages the Mood chart shows: the selected
  * dates, conversation and filters.
  */
@@ -118,6 +121,7 @@ const AiMood = {
   run: 0, // bumped to stop the current run
   replan: false, // the selection changed during a run: plan again after this batch
   known: new Map(), // model text -> scores, so a text is scored once however the range moves
+  scoresVersion: 0, // bumped whenever messages get AI scores, so cached mood numbers are redone (Select.content)
   pct: 0,
   done: 0,
   total: 0,
@@ -125,12 +129,19 @@ const AiMood = {
 
   /** The messages the Mood chart shows. */
   selection() {
-    return inRange(baseMessages());
+    return Select.range();
+  },
+
+  /** aiMoodPlan over `msgs` with the scores known so far (filling those in). */
+  plan(msgs) {
+    const plan = aiMoodPlan(msgs, this.known);
+    if (plan.filled) this.scoresVersion++;
+    return plan;
   },
 
   /** The user picked "AI model". */
   choose() {
-    if (!aiMoodPlan(this.selection(), this.known).count) return setMoodScorer('ai');
+    if (!this.plan(this.selection()).count) return setMoodScorer('ai');
     if (this.ready) return this.start();
     this.state = 'asking';
     this.render();
@@ -165,7 +176,7 @@ const AiMood = {
       if (run !== this.run) return;
       for (;;) {
         this.replan = false;
-        const plan = aiMoodPlan(this.selection(), this.known);
+        const plan = this.plan(this.selection());
         if (!plan.count) break;
         this.state = 'scoring';
         this.done = 0;
@@ -181,6 +192,7 @@ const AiMood = {
             for (const m of plan.byText.get(t)) m.ai = p;
             this.done += plan.byText.get(t).length;
           });
+          this.scoresVersion++;
           if (run !== this.run) return;
           if (this.replan) break;
           this.render();
@@ -198,7 +210,7 @@ const AiMood = {
         ? 'Scoring stopped because the model ran into a problem.'
         : 'The AI model couldn’t be downloaded. Check your connection (and any content blockers) and try again.';
       // Part of the selection has no AI score, so the chart goes back to VADER.
-      if (S.moodScorer === 'ai') setMoodScorer('vader');
+      if (View.moodScorer === 'ai') setMoodScorer('vader');
       else this.render();
     }
   },
@@ -218,7 +230,7 @@ const AiMood = {
    */
   selectionChanged(msgs) {
     if (this.state === 'scoring') this.replan = true;
-    else if (S.moodScorer === 'ai' && this.state === 'off' && msgs.some(aiMoodMissing) && aiMoodPlan(msgs, this.known).count) this.start();
+    else if (View.moodScorer === 'ai' && this.state === 'off' && msgs.some(aiMoodMissing) && this.plan(msgs).count) this.start();
   },
 
   load() {
@@ -285,7 +297,7 @@ const AiMood = {
   /** The status line under the Mood card's header, and the scorer switch. */
   render() {
     const busy = this.state === 'asking' || this.state === 'loading' || this.state === 'scoring';
-    $$('#moodScorerSeg button').forEach((b) => b.classList.toggle('on', b.dataset.scorer === (busy ? 'ai' : S.moodScorer)));
+    $$('#moodScorerSeg button').forEach((b) => b.classList.toggle('on', b.dataset.scorer === (busy ? 'ai' : View.moodScorer)));
     const box = $('#aiMoodStatus');
     if (!box) return;
     let markup = '';
@@ -311,8 +323,8 @@ const AiMood = {
       const s = e.target.dataset.scorer;
       if (!s) return;
       if (s === 'ai') {
-        if (S.moodScorer !== 'ai' && this.state !== 'loading' && this.state !== 'scoring') this.choose();
-      } else if (S.moodScorer !== 'vader' || this.state !== 'off') this.chooseVader();
+        if (View.moodScorer !== 'ai' && this.state !== 'loading' && this.state !== 'scoring') this.choose();
+      } else if (View.moodScorer !== 'vader' || this.state !== 'off') this.chooseVader();
     };
     $('#aiMoodStatus').onclick = (e) => {
       const action = e.target.dataset.aiMood;
@@ -321,7 +333,7 @@ const AiMood = {
       else if (action === 'stop') {
         // With AI on, part of the selection would be unscored: back to VADER.
         this.stop();
-        if (S.moodScorer === 'ai') setMoodScorer('vader');
+        if (View.moodScorer === 'ai') setMoodScorer('vader');
       }
     };
     this.render();

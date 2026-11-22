@@ -739,6 +739,6 @@ function initGallery() {
     const b = e.target.closest('button[data-kind]');
     if (!b) return;
     Gallery.kind = b.dataset.kind;
-    renderGallery(inRange(baseMessages()));
+    renderGallery(Select.range());
   };
 }
