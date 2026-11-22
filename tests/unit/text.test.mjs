@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadScripts, messageLib } from '../helpers/load.mjs';
+import { loadApp, messageLib } from '../helpers/load.mjs';
 
 const lib = messageLib();
-const { tokensOf, T_REACTION } = loadScripts(['parser.js', 'analysis.js'], ['tokensOf', 'T_REACTION']);
+const { tokensOf, T_REACTION } = loadApp(['tokensOf', 'T_REACTION']);
 const analyze = (body) => {
   const rec = {};
   lib.analyzeText(body, rec);

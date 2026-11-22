@@ -1,4 +1,5 @@
 import { test, expect, loadFiles, openTab } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 import { igMessage, threadOf } from '../helpers/instagram.mjs';
 import { smsBackup } from '../helpers/sms.mjs';
 
@@ -35,13 +36,13 @@ async function load(page, extraSms = []) {
 }
 
 async function linkAlex(page) {
-  const igKey = await page.evaluate(() => [...S.contacts.values()].find((c) => c.s === 5 && !c.group).key);
+  const igKey = await inApp(page, (app) => [...app.contacts.values()].find((c) => c.s === 5 && !c.group).key);
   await page.click('#peopleBtn');
   await page.selectOption('#peopleA', SMS_ALEX);
   await page.selectOption('#peopleB', igKey);
   await page.click('#peopleLink');
   await page.locator('#peopleDlg .profile-close').click();
-  await expect.poll(() => page.evaluate(() => S.personOf.size)).toBe(2);
+  await expect.poll(() => inApp(page, (app) => app.personOf.size)).toBe(2);
 }
 
 test.describe('spec 007 cross-app habits', () => {
@@ -110,7 +111,7 @@ test.describe('spec 007 cross-app habits', () => {
   test('M12: the biggest juggle reads that day with that person', async ({ page }) => {
     await load(page);
     await linkAlex(page);
-    await page.evaluate(() => showMoodMessages(S.msgs[0].mo - 1, 1, 'pos'));
+    await inApp(page, (app) => app.showMoodMessages(app.msgs[0].mo - 1, 1, 'pos'));
     await expect(page.locator('#browserFilter')).toBeVisible();
     await openTab(page, 'sec-apps');
     await expect(page.locator('#appsJuggle')).toContainText('3 switches between SMS and Instagram with Alex Rivera');
@@ -139,7 +140,7 @@ test.describe('spec 007 cross-app habits', () => {
     await expect(tile(page, 'Switches')).toHaveText('3');
     await expect(page.locator('#appsNote')).toContainText('ends after 15 minutes of quiet');
     await expect(page.locator('#gapSeg button.on')).toHaveText('6h');
-    expect(await page.evaluate(() => [S.convoGap, S.appsGap])).toEqual([6 * 3600e3, 15 * 60e3]);
+    expect(await inApp(page, (app) => [app.convoGap, app.appsGap])).toEqual([6 * 3600e3, 15 * 60e3]);
   });
 });
 

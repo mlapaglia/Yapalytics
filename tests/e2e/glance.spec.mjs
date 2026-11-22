@@ -1,4 +1,5 @@
 import { test, expect, loadDemo, loadFiles, scrollTo, chartOption } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 import { zippedFullExport } from '../helpers/telegram.mjs';
 
 const NOW = new Date('2026-10-15T12:00:00Z');
@@ -36,7 +37,7 @@ test.describe('highlights', () => {
   });
 
   test('talk about one conversation when one is selected', async ({ page }) => {
-    const key = await page.evaluate(() => S.topRows[0].key);
+    const key = await inApp(page, (app) => app.topRows[0].key);
     await page.selectOption('#contactSel', key);
     await expect(page.locator('#highlights')).not.toContainText('most-messaged conversation');
     await expect(page.locator('#highlights')).toContainText(/here/);
@@ -61,9 +62,9 @@ test.describe('profiles', () => {
     await expect(page.locator('.first-msg')).toBeVisible();
     await expect.poll(async () => (await chartOption(page, 'c-profile'))?.series?.length ?? 0).toBe(2);
     // The numbers match the conversation's messages.
-    const want = await page.evaluate((n) => {
-      const key = [...S.contacts.values()].find((c) => plainName(c.key) === n).key;
-      const msgs = S.msgs.filter((m) => m.k === key);
+    const want = await inApp(page, (app, n) => {
+      const key = [...app.contacts.values()].find((c) => app.plainName(c.key) === n).key;
+      const msgs = app.msgs.filter((m) => m.k === key);
       return { n: msgs.length, you: msgs.filter((m) => m.o).length };
     }, name);
     await expect(page.locator('.profile-kpis .kpi').first()).toContainText(want.n.toLocaleString('en-US'));
@@ -85,8 +86,8 @@ test.describe('profiles', () => {
   });
 
   test('show the most active members of a group', async ({ page }) => {
-    const key = await page.evaluate(() => [...S.contacts.keys()].find((k) => k.startsWith('g:') && S.msgs.some((m) => m.k === k)));
-    await page.evaluate((k) => openProfile(k), key);
+    const key = await inApp(page, (app) => [...app.contacts.keys()].find((k) => k.startsWith('g:') && app.msgs.some((m) => m.k === k)));
+    await inApp(page, (app, k) => app.openProfile(k), key);
     await expect(page.locator('.profile-head .sub')).toContainText('Group chat');
     await expect(page.locator('.member-list li').first()).toBeVisible();
     await expect(page.locator('.vs thead th').nth(2)).toHaveText('Everyone else');
@@ -129,9 +130,9 @@ test.describe('on this day', () => {
     const year = page.locator('.otd-year').first();
     const counted = Number((await year.locator('.otd-head .muted').textContent()).match(/([\d,]+) message/)[1].replace(/,/g, ''));
     const day = Number(await year.locator('[data-otd-day]').getAttribute('data-otd-day'));
-    await page.evaluate((t) => {
+    await inApp(page, (app, t) => {
       const d = new Date(t);
-      showMoodMessages(d.getFullYear() * 12 + d.getMonth() - 1, 1, 'pos');
+      app.showMoodMessages(d.getFullYear() * 12 + d.getMonth() - 1, 1, 'pos');
     }, day);
     await expect(page.locator('#browserFilter')).toBeVisible();
     await page.click('#tabList [data-panel="sec-glance"]');

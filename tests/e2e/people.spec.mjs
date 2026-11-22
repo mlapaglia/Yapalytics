@@ -1,4 +1,5 @@
 import { test, expect, loadFiles, openTab, scrollTo } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 import { zippedExport } from '../helpers/instagram.mjs';
 import { callLog, smsBackup } from '../helpers/sms.mjs';
 
@@ -32,7 +33,7 @@ async function linkByHand(page, a, b) {
   await page.click('#peopleLink');
 }
 
-const personKey = (page, threadKey) => page.evaluate((k) => S.personOf.get(k) || null, threadKey);
+const personKey = (page, threadKey) => inApp(page, (app, k) => app.personOf.get(k) || null, threadKey);
 
 test.describe('spec 005 linked people', () => {
   test.beforeEach(async ({ page }) => {
@@ -81,14 +82,14 @@ test.describe('spec 005 linked people', () => {
     expect(key).toBeTruthy();
     expect(await options(page)).toContain('🔗 Pat Lee (3)');
     await page.locator('#peopleDlg .profile-close').click();
-    await page.evaluate((k) => openProfile(k), key);
+    await inApp(page, (app, k) => app.openProfile(k), key);
     await expect(page.locator('.profile-head .sub').first()).toContainText('1-on-1 on SMS and Instagram');
     await expect(page.locator('.profile-linked')).toContainText('Sam Patel (Instagram)');
     await expect(page.locator('[data-link-people]')).toHaveText('Manage links…');
   });
 
   test('AC6: a 1-on-1 profile opens the dialog with that conversation picked', async ({ page }) => {
-    await page.evaluate((k) => openProfile(k), IG_SAM);
+    await inApp(page, (app, k) => app.openProfile(k), IG_SAM);
     await page.click('[data-link-people]');
     await expect(dialog(page)).toHaveAttribute('open', '');
     await expect(page.locator('#peopleA')).toHaveValue(IG_SAM);
@@ -105,7 +106,7 @@ test.describe('spec 005 linked people', () => {
     const opts = await options(page);
     expect(opts.some((o) => o.startsWith('Alex Rivera (3)'))).toBe(true);
     expect(opts.some((o) => o.startsWith('📸 Alex Rivera (5)'))).toBe(true);
-    expect(await page.evaluate(() => S.msgs.some((m) => m.tk))).toBe(false);
+    expect(await inApp(page, (app) => app.msgs.some((m) => m.tk))).toBe(false);
   });
 
   test('AC8: links survive a reload, and Forget all links clears them', async ({ page }) => {
@@ -153,8 +154,8 @@ test.describe('spec 005 linked people', () => {
   });
 
   test('AC12: with no links, nothing changes', async ({ page }) => {
-    expect(await page.evaluate(() => S.msgs.some((m) => m.tk || m.k.startsWith('p:')))).toBe(false);
-    expect(await page.evaluate(() => [...S.contacts.values()].some((c) => c.person))).toBe(false);
+    expect(await inApp(page, (app) => app.msgs.some((m) => m.tk || m.k.startsWith('p:')))).toBe(false);
+    expect(await inApp(page, (app) => [...app.contacts.values()].some((c) => c.person))).toBe(false);
     const opts = await options(page);
     expect(opts[0]).toBe('All conversations (13)');
   });

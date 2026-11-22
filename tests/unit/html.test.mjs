@@ -1,11 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadScripts } from '../helpers/load.mjs';
+import { loadApp } from '../helpers/load.mjs';
 
-const { html, raw, escapeHtml, stackTooltip, topContactsOption, groupSendersOption, newPeopleOption, callContactsOption } = loadScripts(
-  ['html.js', 'parser.js', 'analysis.js', 'charts.js'],
-  ['html', 'raw', 'escapeHtml', 'stackTooltip', 'topContactsOption', 'groupSendersOption', 'newPeopleOption', 'callContactsOption'],
-);
+const { html, raw, escapeHtml, stackTooltip, topContactsOption, groupSendersOption, newPeopleOption, callContactsOption } = loadApp(['html', 'raw', 'escapeHtml', 'stackTooltip', 'topContactsOption', 'groupSendersOption', 'newPeopleOption', 'callContactsOption']);
 
 const EVIL = '<img src=x onerror=alert(1)>';
 const ESCAPED = '&lt;img src=x onerror=alert(1)&gt;';

@@ -1,5 +1,6 @@
 /* specs/003-dashboard-tabs.md: one section at a time, picked from a sticky tab bar. */
 import { test, expect, loadDemo, openTab } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 
 const ALL_TABS = ['Overview', 'Messages', 'Activity', 'People', 'Groups', 'Replies', 'Words', 'Mood & emoji', 'Media & links', 'Calls', 'Sources', 'Year in review', 'AI analysis'];
 
@@ -137,7 +138,7 @@ test.describe('spec 003: dashboard tabs', () => {
     await openTab(page, 'sec-people');
     await page.click('#presets button[data-preset="90"]');
     await expect(page.locator('#presets button[data-preset="90"]')).toBeVisible();
-    await expect.poll(() => page.evaluate(() => S.filter.from)).not.toBeNull();
+    await expect.poll(() => inApp(page, (app) => app.filter.from)).not.toBeNull();
     expect((await tabState(page)).selected).toEqual(['sec-people']);
     await page.selectOption('#contactSel', { index: 1 });
     expect((await tabState(page)).selected).toEqual(['sec-people']);
@@ -235,7 +236,7 @@ test.describe('spec 003: the message list', () => {
     await openTab(page, 'sec-messages');
     expect(await page.evaluate(() => document.getElementById('messages').scrollTop)).toBe(300);
     // A link into the list while it's open (here "Read that day") still ends on the latest message.
-    await page.evaluate(() => readDay(S.msgs.at(-1).t - (S.msgs.at(-1).t % 86400000)));
+    await inApp(page, (app) => app.readDay(app.msgs.at(-1).t - (app.msgs.at(-1).t % 86400000)));
     expect(await fromBottom(page)).toBeLessThanOrEqual(1);
   });
 });

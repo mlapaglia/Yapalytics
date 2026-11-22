@@ -1,11 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadScripts } from '../helpers/load.mjs';
+import { loadApp } from '../helpers/load.mjs';
 
-const { autoGran, bucketOfDay, buildTimeline, fmtBucket, phraseOption, tsToDay } = loadScripts(
-  ['parser.js', 'analysis.js', 'charts.js'],
-  ['autoGran', 'bucketOfDay', 'buildTimeline', 'fmtBucket', 'phraseOption', 'tsToDay'],
-);
+const { autoGran, bucketOfDay, buildTimeline, fmtBucket, phraseOption, tsToDay } = loadApp(['autoGran', 'bucketOfDay', 'buildTimeline', 'fmtBucket', 'phraseOption', 'tsToDay']);
 const day = (iso) => tsToDay(Date.parse(iso));
 const iso = (ts) => new Date(ts).toISOString().slice(0, 10);
 // Chart options only read colors and sizes from the theme.

@@ -1,4 +1,5 @@
 import { test, expect, loadFiles } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 
 /*
  * Spec 014 R3: names from an export never become markup. A group chat and a sender are
@@ -108,11 +109,9 @@ test.describe('spec 014 escaping', () => {
 
     // People dialog: link the friend and Bob by hand, then check the linked chips.
     await page.click('#peopleBtn');
-    await page.evaluate(() => {
+    await inApp(page, (app) => {
       const keys = [...document.querySelectorAll('#peopleA option')].map((o) => o.value).filter(Boolean);
-      setPickerValue(document.querySelector('#peopleA'), keys[0]);
-      setPickerValue(document.querySelector('#peopleB'), keys[1]);
-      syncPeopleLink();
+      app.pickToLink(keys[0], keys[1]);
     });
     await page.click('#peopleLink');
     await expect(page.locator('#peopleLinked')).toContainText(FRIEND);

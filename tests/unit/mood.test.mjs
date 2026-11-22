@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadScripts } from '../helpers/load.mjs';
+import { loadApp } from '../helpers/load.mjs';
 
-const { vaderLib, messageLib } = loadScripts(['vendor/vader.js', 'parser.js'], ['vaderLib', 'messageLib']);
+const { vaderLib, messageLib } = loadApp(['vaderLib', 'messageLib']);
 const vader = vaderLib();
 const lib = messageLib(vader);
 const scored = (body) => {

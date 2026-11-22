@@ -1,11 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { FIXTURES } from '../helpers/takeout.mjs';
-import { loadScripts } from '../helpers/load.mjs';
+import { loadApp } from '../helpers/load.mjs';
 import { makeZip } from '../helpers/zip.mjs';
 
-const { sniffHeic, heicLike, attType, onPicture } = loadScripts(['media.js'], ['sniffHeic', 'heicLike', 'attType', 'onPicture']);
-const { zipLib } = loadScripts(['zip.js'], ['zipLib']);
+const { sniffHeic, heicLike, attType, onPicture, zipLib } = loadApp(['sniffHeic', 'heicLike', 'attType', 'onPicture', 'zipLib']);
 
 describe('HEIC detection', () => {
   it('recognizes HEIC by its bytes, whatever the name says', async () => {

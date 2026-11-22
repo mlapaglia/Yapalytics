@@ -1,9 +1,10 @@
 import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab, addFiles, ownerPicker } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 import { igMessage, looseThread, splitExport, threadOf, zippedExport, zippedHtmlExport } from '../helpers/instagram.mjs';
 
 /** Instagram messages loaded: total, and how many count as sent by you. */
-const instagramCounts = (page) => page.evaluate(() => {
-  const ig = S.msgs.filter((m) => m.s === 5);
+const instagramCounts = (page) => inApp(page, (app) => {
+  const ig = app.msgs.filter((m) => m.s === 5);
   return { n: ig.length, sent: ig.filter((m) => m.o === 1).length };
 });
 
@@ -12,7 +13,7 @@ test.describe('Instagram', () => {
     await loadFiles(page, zippedExport());
     // 8 messages kept (2 likes are reactions); Jamie Park sent 2 of them.
     expect(await instagramCounts(page)).toEqual({ n: 8, sent: 2 });
-    expect(await page.evaluate(() => S.reactions)).toBe(2);
+    expect(await inApp(page, (app) => app.reactions)).toBe(2);
     const picker = await ownerPicker(page, 'Instagram');
     await expect(picker).toHaveValue('Jamie Park');
     const options = await page.locator('#contactSel option').allTextContents();
@@ -180,7 +181,7 @@ test.describe('spec 004 Instagram shared posts', () => {
   test('AC8: a share is not counted as a file', async ({ page }) => {
     await loadFiles(page, zippedExport());
     // Alex's two photos and one video (not in the zip): the share isn't an attachment.
-    const media = await page.evaluate(() => S.msgs.reduce((s, m) => s + m.ph + m.gf + m.vd + m.au + m.ot, 0));
+    const media = await inApp(page, (app) => app.msgs.reduce((s, m) => s + m.ph + m.gf + m.vd + m.au + m.ot, 0));
     expect(media).toBe(3);
     await scrollTo(page, '#galleryCard');
     await expect(page.locator('#galleryNote')).toContainText(/^1 more can't be shown/);
@@ -213,7 +214,7 @@ test.describe('spec 004 reactions on messages', () => {
     const msg = (reactions) => igMessage(0, 'Alex', { content: 'see you there', reactions });
     await loadFiles(page, threadOf(msg([{ reaction: '❤️', actor: 'Jamie' }])));
     await addFiles(page, threadOf(msg([{ reaction: '❤️', actor: 'Jamie' }, { reaction: '😂', actor: 'Alex' }])));
-    await expect.poll(() => page.evaluate(() => S.msgs.length)).toBe(1);
+    await expect.poll(() => inApp(page, (app) => app.msgs.length)).toBe(1);
     await openTab(page, 'sec-messages');
     const chips = page.locator('#messages .bubble', { hasText: 'see you there' }).locator('.rx');
     await expect(chips).toHaveText(['❤️', '😂']);

@@ -1,13 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadScripts, makeMessage, messageLib } from '../helpers/load.mjs';
+import { loadApp, makeMessage, messageLib } from '../helpers/load.mjs';
 
 const lib = messageLib();
 const msg = (spec) => makeMessage(lib, spec);
 const {
   phraseRegex, aggregatePhrase, replyBins, fmtGapWords, fmtGapShort, aggregateMessages, aggregateContent,
   CONVO_GAP, CONVO_GAPS,
-} = loadScripts(['parser.js', 'analysis.js'], [
+} = loadApp([
   'phraseRegex', 'aggregatePhrase', 'replyBins', 'fmtGapWords', 'fmtGapShort', 'aggregateMessages', 'aggregateContent',
   'CONVO_GAP', 'CONVO_GAPS',
 ]);

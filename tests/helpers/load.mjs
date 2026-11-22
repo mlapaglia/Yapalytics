@@ -9,6 +9,23 @@ import { readFileSync } from 'node:fs';
 process.env.TZ = 'UTC';
 
 /**
+ * The scripts index.html loads, in its order. app.js is left out: it is the one script
+ * that does something as it loads (it waits for the page to start the app).
+ */
+export const APP_SCRIPTS = [...readFileSync(new URL('../../index.html', import.meta.url), 'utf8').matchAll(/<script src="js\/([^"]+)"/g)]
+  .map((m) => m[1])
+  .filter((f) => f !== 'app.js');
+
+/**
+ * Evaluates every app script in index.html's order and returns the requested top-level
+ * names, so a test needn't know which file needs which. `globals` supplies anything the
+ * scripts read from the page when called (S, $…).
+ */
+export function loadApp(names, globals = {}) {
+  return loadScripts(APP_SCRIPTS, names, globals);
+}
+
+/**
  * Evaluates js/<file> for each of `files` (in order) and returns the requested
  * top-level names. `globals` supplies anything the scripts read from the page (S, $…).
  */

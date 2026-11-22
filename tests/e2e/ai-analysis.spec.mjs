@@ -4,6 +4,7 @@
  * by small fake modules served at their CDN URLs, which record what they were asked.
  */
 import { test, expect, loadDemo, scrollTo, openTab } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 
 const OLLAMA = 'http://localhost:11434';
 const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@1.1.0/+esm';
@@ -62,14 +63,14 @@ export async function CreateMLCEngine(model, config) {
 /** Loads the demo, picks its busiest 1-on-1 conversation and scrolls to the card. Returns its key, name and transcript days. */
 async function openCard(page, backend) {
   await loadDemo(page);
-  const key = await page.evaluate(() => S.topRows.find((r) => !r.key.startsWith('g:')).key);
+  const key = await inApp(page, (app) => app.topRows.find((r) => !r.key.startsWith('g:')).key);
   await page.selectOption('#contactSel', key);
   await scrollTo(page, '#aiCard');
   if (backend) await page.click(`#aiBackendSeg [data-backend="${backend}"]`);
   await expect(page.locator('#aiScope')).toContainText('messages');
-  return page.evaluate((k) => {
+  return inApp(page, (app, k) => {
     const t = AiAnalysis.transcript(AiAnalysis.conversation());
-    return { key: k, name: plainName(k), first: t.first, last: t.last, count: t.count };
+    return { key: k, name: app.plainName(k), first: t.first, last: t.last, count: t.count };
   }, key);
 }
 
@@ -135,13 +136,13 @@ test.describe('spec 002: AI conversation analysis', () => {
 
     // AC5: the first moment (sorted by date) opens its day in the message list.
     await reportText(page).locator('.ai-date').first().click();
-    const range = await page.evaluate(() => ({ from: S.filter.from, to: S.filter.to }));
+    const range = await inApp(page, (app) => ({ from: app.filter.from, to: app.filter.to }));
     const [y, m, d] = c.first.split('-').map(Number);
     expect(range.from).toBe(await page.evaluate(([yy, mm, dd]) => new Date(yy, mm - 1, dd).getTime(), [y, m, d]));
     expect(range.to - range.from).toBeLessThan(86400000);
     // The list shows exactly that day's messages. The demo is dated from today, so the
     // first day may hold a single message: "1 message".
-    const onDay = await page.evaluate(() => inRange(baseMessages()).length);
+    const onDay = await inApp(page, (app) => app.selection().length);
     expect(onDay).toBeGreaterThan(0);
     await expect(page.locator('#sec-messages')).toBeVisible(); // spec 003 R6: the date opens the Messages tab
     await expect(page.locator('#browserCount')).toHaveText(new RegExp(`^${onDay.toLocaleString('en-US')} messages? · showing latest`));

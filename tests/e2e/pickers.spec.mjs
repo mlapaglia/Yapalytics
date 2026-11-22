@@ -1,4 +1,5 @@
 import { test, expect, loadFiles, TOM_SELECT_URL } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 import { zippedExport } from '../helpers/instagram.mjs';
 import { smsBackup } from '../helpers/sms.mjs';
 
@@ -35,7 +36,7 @@ async function pick(page, id, text, value) {
   await row(page, id, value).click();
 }
 
-const groupKey = (page) => page.evaluate(() => [...S.contacts.values()].find((c) => c.group && c.s === 5)?.key);
+const groupKey = (page) => inApp(page, (app) => [...app.contacts.values()].find((c) => c.group && c.s === 5)?.key);
 
 async function linkByHand(page, a, b) {
   await page.click('#peopleBtn');
@@ -65,14 +66,14 @@ test.describe('spec 012 searchable conversation pickers', () => {
   test('AC3: picking a result selects that conversation', async ({ page }) => {
     await pick(page, 'contactSel', 'pat lee', SMS_PAT);
     await expect(page.locator('#contactSel')).toHaveValue(SMS_PAT);
-    expect(await page.evaluate(() => S.filter.contact)).toBe(SMS_PAT);
+    expect(await inApp(page, (app) => app.filter.contact)).toBe(SMS_PAT);
     await expect(page.locator('#scope')).toContainText('Pat Lee');
     await expect(control(page, 'contactSel')).toContainText('Pat Lee');
   });
 
   test('AC4: a linked person is found by any of its names', async ({ page }) => {
     await linkByHand(page, SMS_PAT, IG_SAM);
-    const person = await page.evaluate((k) => S.personOf.get(k), SMS_PAT);
+    const person = await inApp(page, (app, k) => app.personOf.get(k), SMS_PAT);
     await search(page, 'contactSel', 'sam patel');
     await expect.poll(() => rowValues(page, 'contactSel')).toContain(person);
     await expect(row(page, 'contactSel', person)).toContainText('Pat Lee');
@@ -86,7 +87,7 @@ test.describe('spec 012 searchable conversation pickers', () => {
     await pick(page, 'peopleB', 'sam', IG_SAM);
     await expect(page.locator('#peopleLink')).toBeEnabled();
     await page.click('#peopleLink');
-    expect(await page.evaluate(([a, b]) => S.personOf.get(a) === S.personOf.get(b) && S.personOf.has(a), [SMS_PAT, IG_SAM])).toBe(true);
+    expect(await inApp(page, (app, [a, b]) => app.personOf.get(a) === app.personOf.get(b) && app.personOf.has(a), [SMS_PAT, IG_SAM])).toBe(true);
   });
 
   test('AC6: with an app filter, only that app is searched', async ({ page }) => {
@@ -111,7 +112,7 @@ test.describe('spec 012 searchable conversation pickers', () => {
 
   test('AC9: a linked person shows each app\'s logo and no 🔗', async ({ page }) => {
     await linkByHand(page, SMS_PAT, IG_SAM);
-    const person = await page.evaluate((k) => S.personOf.get(k), SMS_PAT);
+    const person = await inApp(page, (app, k) => app.personOf.get(k), SMS_PAT);
     await search(page, 'contactSel', 'pat');
     const r = row(page, 'contactSel', person);
     await expect(r.locator('use')).toHaveCount(2);
@@ -152,7 +153,7 @@ test.describe('spec 012 searchable conversation pickers', () => {
     await page.keyboard.press('Backspace');
     await page.keyboard.press('Escape');
     await expect(page.locator('#contactSel')).toHaveValue(SMS_PAT);
-    expect(await page.evaluate(() => S.filter.contact)).toBe(SMS_PAT);
+    expect(await inApp(page, (app) => app.filter.contact)).toBe(SMS_PAT);
     await expect(control(page, 'contactSel')).toContainText('Pat Lee');
   });
 
@@ -171,7 +172,7 @@ test.describe('spec 012 searchable conversation pickers', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('#contactSel-ts-dropdown')).toBeHidden();
     await expect(page.locator('#contactSel')).toHaveValue(active);
-    expect(await page.evaluate(() => S.filter.contact)).toBe(active);
+    expect(await inApp(page, (app) => app.filter.contact)).toBe(active);
   });
 
   test('AC14: the closed picker follows the dark theme', async ({ page }) => {
@@ -211,7 +212,7 @@ test.describe('spec 012 without the picker library', () => {
     await expect(page.locator('.ts-wrapper')).toHaveCount(0);
     await expect(page.locator('#contactSel')).toBeVisible();
     await page.selectOption('#contactSel', SMS_PAT);
-    expect(await page.evaluate(() => S.filter.contact)).toBe(SMS_PAT);
+    expect(await inApp(page, (app) => app.filter.contact)).toBe(SMS_PAT);
     await expect(page.locator('#scope')).toContainText('Pat Lee');
   });
 });

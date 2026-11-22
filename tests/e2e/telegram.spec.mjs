@@ -1,9 +1,10 @@
 import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, ownerPicker } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 import { fullExport, resultJson, singleGroupExport, zippedFullExport, zippedHtmlExport } from '../helpers/telegram.mjs';
 
 /** Telegram messages loaded: total, and how many count as sent by you. */
-const telegramCounts = (page) => page.evaluate(() => {
-  const tg = S.msgs.filter((m) => m.s === 4);
+const telegramCounts = (page) => inApp(page, (app) => {
+  const tg = app.msgs.filter((m) => m.s === 4);
   return { n: tg.length, sent: tg.filter((m) => m.o === 1).length };
 });
 

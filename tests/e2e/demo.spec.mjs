@@ -1,4 +1,5 @@
 import { test, expect, loadDemo, scrollTo, chartOption } from './fixtures.mjs';
+import { inApp } from './state.mjs';
 
 test.describe('demo data', () => {
   test('clicking an app logo in the source switch picks that app', async ({ page }) => {
@@ -10,9 +11,9 @@ test.describe('demo data', () => {
 
   test('loads every source and renders the dashboard', async ({ page }) => {
     await loadDemo(page);
-    const bySource = await page.evaluate(() => {
+    const bySource = await inApp(page, (app) => {
       const n = {};
-      for (const m of S.msgs) n[m.s || 0] = (n[m.s || 0] || 0) + 1;
+      for (const m of app.msgs) n[m.s || 0] = (n[m.s || 0] || 0) + 1;
       return n;
     });
     // SMS, Google Chat, WhatsApp, iMessage, Telegram, Instagram and Messenger demo exports all parse.

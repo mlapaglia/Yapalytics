@@ -3,8 +3,9 @@
  * - the CDN files (echarts, heic-to, tom-select) are served from node_modules, so runs don't
  *   depend on the network and use exactly the pinned versions;
  * - any page error or console error fails the test (opt out with failOnConsoleError).
- * Tests reach into the page's globals (S, aggregatePhrase…) to check numbers: the app
- * is plain scripts, so those are its public surface.
+ * Tests read the app's state only through inApp() in state.mjs (spec 014 R12), so the
+ * app can move its state without touching every spec. Library functions that don't hold
+ * state (aggregatePhrase, phraseRegex…) can still be called in the page directly.
  */
 import { test as base, expect } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
