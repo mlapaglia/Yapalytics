@@ -4,12 +4,12 @@
 const sameFile = (a, b) => a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
 
 /**
- * Kinds whose files are parsed together, so one can't be read alone next to others already
- * loaded (R16): a split Takeout spreads a conversation across parts, a split Instagram
- * export keeps its media in another part, and WhatsApp date formats are worked out from
- * every export at once.
+ * Whether a kind's files are parsed together, so one can't be read alone next to others
+ * already loaded (R16, Sources: readTogether): a split Takeout spreads a conversation
+ * across parts, a split Instagram export keeps its media in another part, and WhatsApp
+ * date formats are worked out from every export at once.
  */
-const READ_TOGETHER = new Set(['gchat', 'whatsapp', 'instagram', 'messenger']);
+const readTogether = (kind) => !!Sources.byKind(kind)?.readTogether;
 
 /**
  * What applying the Files dialog's `draft` to the loaded `current` list takes. Entries are
@@ -29,7 +29,7 @@ function planFileChanges(current, draft) {
   const kept = usable.filter((e) => e.on && loaded(e));
   const fresh = usable.filter((e) => e.on && !loaded(e));
   const dropped = current.some((e) => e.on && !(now.has(e.id) && now.get(e.id).on));
-  const joins = fresh.some((e) => READ_TOGETHER.has(e.kind) && kept.some((k) => k.kind === e.kind));
+  const joins = fresh.some((e) => readTogether(e.kind) && kept.some((k) => k.kind === e.kind));
   // A loaded file read as another app now (spec 009 R13): its messages have to come out and go back in.
   const recast = kept.some((e) => was.get(e.id).kind !== e.kind);
   const rebuild = dropped || joins || recast;

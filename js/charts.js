@@ -992,14 +992,14 @@ function swearOption(ui, C) {
 
 function platformMixOption(ui, A, names) {
   const months = [...A.sourceMonths.keys()].sort((a, b) => a - b);
-  const present = [0, 1, 2, 3, 4, 5, 6].filter((s) => months.some((mo) => A.sourceMonths.get(mo)[s]));
+  const present = Object.keys(names).map(Number).filter((s) => months.some((mo) => A.sourceMonths.get(mo)[s]));
   return monthlyStackOption(ui, months, present.map((s) => ({ name: names[s], color: ui.series[s], get: (mo) => A.sourceMonths.get(mo)[s] })));
 }
 
-/** Spec 007 M11: each app's share of a linked person's messages per month. `months`: mo -> [7]. */
+/** Spec 007 M11: each app's share of a linked person's messages per month. `months`: mo -> a count per app id. */
 function appShareOption(ui, months, names) {
   const keys = [...months.keys()].sort((a, b) => a - b);
-  const present = [0, 1, 2, 3, 4, 5, 6].filter((s) => keys.some((mo) => months.get(mo)[s]));
+  const present = Object.keys(names).map(Number).filter((s) => keys.some((mo) => months.get(mo)[s]));
   return monthlyStackOption(ui, keys, present.map((s) => ({ name: names[s], color: ui.series[s], get: (mo) => months.get(mo)[s] })), { percent: true });
 }
 
