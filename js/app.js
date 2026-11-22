@@ -3,39 +3,22 @@
 /** What's loaded from files, and what's worked out from it (js/dataset.js). */
 const Data = createDataset();
 
+/*
+ * What the dashboard drew last, and dialog scratch: the rows behind chart clicks, the
+ * messages behind the word tracker and message list, the Files and People dialogs'
+ * working state. What's loaded is in Data (dataset.js), what's picked in View
+ * (select.js), settings in Prefs (store.js).
+ */
 const S = {
-  people: new Map(), // person key -> { key, name, threads }: saved links (spec 005), loaded or not; name '' = the default
-  dismissed: new Set(), // signatures (linkSignature) of dismissed link suggestions
   suggestions: [], // suggestLinks result behind the People dialog
   filesBusy: 0, // file loads and Files dialog changes queued or running (spec 006 R15)
   filesPending: 0, // files added in the open Files dialog that are still being checked
   files: [], // loaded export files (spec 006): { id, file, name, size, lastModified, kind, on }, in the order added
   filesDraft: [], // the Files dialog's edited copy of `files` (rows it adds also have `added`, unreadable ones `error`)
-  filter: { contact: 'all', source: 'all', groups: true, from: null, to: null },
-  // Your sender name per app whose records carry sender names (Sources: senderNames);
-  // `auto` is false once picked by hand.
-  owners: Object.fromEntries(Sources.list.filter((s) => s.senderNames).map((s) => [s.id, { name: '', auto: true }])),
-  docFreq: null, // { sig, value } cache for "What you talk about"
-  leader: { sort: 'n', asc: false, all: false }, // leaderboard sorting
-  wrapYear: null,
-  gran: 'auto',
-  activeGran: 'month',
-  convoGap: CONVO_GAP, // silence that ends a conversation (picked on the Conversation length card)
-  appsGap: APPS_GAP, // the same, for the Across apps tab only (spec 007 R7)
-  calYear: null,
+  activeGran: 'month', // the timeline's granularity once Auto is worked out
   topRows: [],
   callRows: [],
-  browserLimit: 200,
-  browserQuery: '',
-  browserMood: null, // { mo, o (null = both), kind: 'pos' | 'neg' | 'any' } picked on the mood chart
-  showMood: false, // mood scores on the messages
-  igPreviews: false, // load Instagram's embeds of shared posts (spec 004, opt-in, saved in localStorage)
-  moodScorer: 'vader', // 'vader' | 'ai' (spec 001): which scores the mood chart and pills use
-  phrase: '', // word tracker query
-  phraseGran: 'auto', // word tracker bars: auto / day / week / month
   vocab: null, // aggregateContent result behind the Vocabulary card
-  vocabMo: null, // month picked on the Vocabulary chart (null = the latest)
-  otd: null, // { month, day } shown in On this day (null = today)
   phraseMsgs: [], // the selection the word tracker searches
   ui: null,
 };
@@ -153,10 +136,10 @@ async function readFiles(entries) {
 function finishLoad() {
   Data.finish();
   $('#igPreviewsLabel').hidden = !Data.msgs.some((m) => m.sh && instagramEmbedUrl(m.sh.u));
-  Data.guessOwners(S.owners);
+  Data.guessOwners(Prefs.owners);
   rederive();
   // Files were left out or removed (spec 006 R10): an app or conversation that's gone goes back to All.
-  const f = S.filter;
+  const f = View.filter;
   if (f.source !== 'all' && !Data.loadedSources().has(f.source)) f.source = 'all';
   if (f.contact !== 'all' && (!Data.contacts.has(f.contact) || (f.source !== 'all' && !Data.keySources(f.contact).includes(f.source)))) f.contact = 'all';
   $('#landing').hidden = true;
@@ -175,19 +158,18 @@ function resetLoaded() {
   AiAnalysis.clearReport();
   $('#dash').hidden = true; // its data is gone until the files are read again
   Data.reset();
-  S.docFreq = null;
   S.vocab = null;
-  S.vocabMo = null;
-  S.browserMood = null;
-  S.browserLimit = 200;
+  View.vocabMo = null;
+  View.browser.mood = null;
+  View.browser.limit = 200;
   // Data.archives stays: it's append-only, so an attachment index (att.z) from before never
   // points at a different file. Attachment previews are cached by that index.
 }
 
 /** Back to the landing page with nothing loaded (every file removed, spec 006 R9). */
 function showLanding() {
-  S.filter.contact = 'all';
-  S.filter.source = 'all';
+  View.filter.contact = 'all';
+  View.filter.source = 'all';
   $('#dash').hidden = true;
   $('#landing').hidden = false;
   $('#progress').hidden = true;
@@ -213,12 +195,11 @@ function showLoadError(msg) {
  * bring the filter and the "Which one is you?" button and dialog in line.
  */
 function rederive() {
-  Data.rederive({ owners: S.owners, people: S.people });
-  S.docFreq = null;
-  const sel = S.filter.contact;
-  if (Data.personOf.has(sel)) S.filter.contact = Data.personOf.get(sel);
-  else if (sel.startsWith('p:') && !Data.contacts.has(sel)) S.filter.contact = 'all';
-  const sources = Object.keys(S.owners).map(Number).filter((s) => Data.ownerChoices(s).length);
+  Data.rederive({ owners: Prefs.owners, people: Prefs.people });
+  const sel = View.filter.contact;
+  if (Data.personOf.has(sel)) View.filter.contact = Data.personOf.get(sel);
+  else if (sel.startsWith('p:') && !Data.contacts.has(sel)) View.filter.contact = 'all';
+  const sources = Object.keys(Prefs.owners).map(Number).filter((s) => Data.ownerChoices(s).length);
   renderOwnerDialog(sources);
   updateOwnerButton(sources);
 }
@@ -252,7 +233,7 @@ function renderOwnerDialog(sources) {
         Object.assign(opt.dataset, { search: n.toLowerCase(), name: n, count: fmtNum(k), aria: `${n}, ${countWords(k)}` });
         sel.add(opt);
       }
-      sel.value = S.owners[s].name;
+      sel.value = Prefs.owners[s].name;
       list.appendChild(li); // before makePicker, so it finds the <label for>
       // An app always has an owner, so Backspace can't empty the picker (as for #contactSel).
       if (makePicker(sel, { onDelete: () => false })) sel.tomselect.control_input.placeholder = 'Search names';
@@ -261,8 +242,8 @@ function renderOwnerDialog(sources) {
   }
   for (const li of list.children) {
     const s = +li.dataset.source;
-    setPickerValue(li.querySelector('select'), S.owners[s].name);
-    const origin = Data.ownerOrigin(s, S.owners[s]);
+    setPickerValue(li.querySelector('select'), Prefs.owners[s].name);
+    const origin = Data.ownerOrigin(s, Prefs.owners[s]);
     const note = li.querySelector('.owner-origin');
     note.className = `owner-origin ${origin}`;
     note.textContent = OWNER_ORIGIN_TEXT[origin];
@@ -272,7 +253,7 @@ function renderOwnerDialog(sources) {
 /** Shown when an app has senders to pick; counts the apps whose owner is only a guess (R2, R9). */
 function updateOwnerButton(sources) {
   const btn = $('#ownerBtn');
-  const guessed = sources.filter((s) => Data.ownerOrigin(s, S.owners[s]) === 'guess');
+  const guessed = sources.filter((s) => Data.ownerOrigin(s, Prefs.owners[s]) === 'guess');
   btn.hidden = !sources.length;
   btn.textContent = guessed.length ? `👤 Which one is you? (${guessed.length})` : '👤 Which one is you?';
   btn.title = guessed.length
@@ -288,7 +269,7 @@ function initOwners() {
 }
 
 function setOwner(source, name) {
-  S.owners[source] = { name, auto: false };
+  Prefs.owners[source] = { name, auto: false };
   rederive();
   populateContacts();
   refresh();
@@ -301,41 +282,8 @@ function labelFor(key) {
 
 // ------------------------------------------------------------------ linked people (spec 005)
 
-const PEOPLE_STORE = 'ms-people';
 const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const REASON_TEXT = { name: 'name', phone: 'phone number', email: 'email' };
-
-function readPeopleStore() {
-  S.people = new Map();
-  S.dismissed = new Set();
-  let data = null;
-  try { data = JSON.parse(localStorage.getItem(PEOPLE_STORE) || 'null'); } catch (e) { /* storage unavailable, or not ours */ }
-  if (!data || data.v !== 1) return;
-  for (const p of Array.isArray(data.people) ? data.people : []) {
-    const threads = Array.isArray(p && p.threads) ? [...new Set(p.threads.filter((k) => typeof k === 'string'))] : [];
-    if (threads.length > 1) putPerson(threads, typeof p.name === 'string' ? p.name : '');
-  }
-  for (const d of Array.isArray(data.dismissed) ? data.dismissed : []) if (typeof d === 'string') S.dismissed.add(d);
-}
-
-function writePeopleStore() {
-  const people = [...S.people.values()].map(({ name, threads }) => ({ name, threads }));
-  try {
-    if (people.length || S.dismissed.size) localStorage.setItem(PEOPLE_STORE, JSON.stringify({ v: 1, people, dismissed: [...S.dismissed] }));
-    else localStorage.removeItem(PEOPLE_STORE);
-  } catch (e) { /* storage unavailable: links last until the page closes */ }
-}
-
-function putPerson(threads, name) {
-  const key = personKeyOf(threads);
-  S.people.set(key, { key, name, threads: [...threads].sort() });
-}
-
-/** The saved person a conversation belongs to, loaded or not. */
-function savedPersonOf(threadKey) {
-  for (const p of S.people.values()) if (p.threads.includes(threadKey)) return p;
-  return null;
-}
 
 /** Loaded 1-on-1 conversations, their message counts, and the links worth suggesting. */
 function computeSuggestions() {
@@ -343,8 +291,8 @@ function computeSuggestions() {
   S.linkable = [...S.threadN.keys()].map((k) => Data.contacts.get(k)).filter(isLinkable);
   S.suggestions = suggestLinks(S.linkable, {
     personOf: Data.personOf,
-    dismissed: S.dismissed,
-    ownNames: (s) => (hasOwner(s) ? [S.owners[s].name] : []),
+    dismissed: Prefs.dismissed,
+    ownNames: (s) => (hasOwner(s) ? [Prefs.owners[s].name] : []),
   });
 }
 
@@ -361,32 +309,10 @@ function updatePeopleButton() {
 /** Change the saved links, then show the dashboard with them. */
 function changeLinks(fn) {
   fn();
-  writePeopleStore();
+  Prefs.savePeople();
   rederive();
   populateContacts(); // also re-renders the People dialog
   refresh();
-}
-
-/** One person out of these conversations and any people they already belong to. */
-function linkThreads(keys) {
-  const all = new Set(keys);
-  let name = '';
-  for (const k of keys) {
-    const p = savedPersonOf(k);
-    if (!p) continue;
-    for (const t of p.threads) all.add(t);
-    name = name || p.name;
-    S.people.delete(p.key);
-  }
-  if (all.size > 1) putPerson([...all], name);
-}
-
-function unlinkThread(key) {
-  const p = savedPersonOf(key);
-  if (!p) return;
-  S.people.delete(p.key);
-  const rest = p.threads.filter((k) => k !== key);
-  if (rest.length > 1) putPerson(rest, p.name);
 }
 
 function threadChip(key, extra = '') {
@@ -405,7 +331,7 @@ function renderPeopleDialog() {
     : html`<p class="sub">Nothing to suggest. Conversations that share a name, phone number or email show up here.</p>`}`;
 
   const linked = [...Data.contacts.values()].filter((c) => c.person).sort((a, b) => a.name.localeCompare(b.name));
-  const unloaded = S.people.size - linked.length;
+  const unloaded = Prefs.people.size - linked.length;
   $('#peopleLinked').innerHTML = html`<h3 class="profile-h">Linked people</h3>${linked.length
     ? html`<ul class="people-list">${linked.map((p) => {
       const names = [...new Set(p.threads.map((k) => threadName(Data.contacts.get(k))))];
@@ -451,7 +377,6 @@ function openPeopleDialog(preselect) {
 }
 
 function initPeople() {
-  readPeopleStore();
   const dlg = $('#peopleDlg');
   // Their options come later, so the empty option can't give the placeholder yet.
   for (const sel of [$('#peopleA'), $('#peopleB')]) makePicker(sel, { placeholder: 'Choose a conversation…' });
@@ -464,16 +389,16 @@ function initPeople() {
     const d = t.dataset;
     if (d.accept != null) {
       const x = S.suggestions[+d.accept];
-      if (x) changeLinks(() => linkThreads(x.keys));
+      if (x) changeLinks(() => Prefs.linkThreads(x.keys));
     } else if (d.dismiss != null) {
       const x = S.suggestions[+d.dismiss];
-      if (x) changeLinks(() => S.dismissed.add(linkSignature(x.keys)));
-    } else if (d.unlink) changeLinks(() => unlinkThread(d.unlink));
-    else if (d.unlinkAll) changeLinks(() => S.people.delete(d.unlinkAll));
+      if (x) changeLinks(() => Prefs.dismissed.add(linkSignature(x.keys)));
+    } else if (d.unlink) changeLinks(() => Prefs.unlinkThread(d.unlink));
+    else if (d.unlinkAll) changeLinks(() => Prefs.people.delete(d.unlinkAll));
   });
   dlg.addEventListener('change', (e) => {
     if (e.target.matches('select.person-name')) {
-      const p = S.people.get(e.target.closest('[data-person]').dataset.person);
+      const p = Prefs.people.get(e.target.closest('[data-person]').dataset.person);
       if (p) changeLinks(() => { p.name = e.target.value; });
     } else if (e.target.id === 'peopleA' || e.target.id === 'peopleB') syncPeopleLink();
   });
@@ -481,14 +406,14 @@ function initPeople() {
     const keys = [$('#peopleA').value, $('#peopleB').value];
     setPickerValue($('#peopleA'), '');
     setPickerValue($('#peopleB'), '');
-    changeLinks(() => linkThreads(keys));
+    changeLinks(() => Prefs.linkThreads(keys));
   };
-  $('#peopleForget').onclick = () => changeLinks(() => { S.people.clear(); S.dismissed.clear(); });
+  $('#peopleForget').onclick = () => changeLinks(() => { Prefs.people.clear(); Prefs.dismissed.clear(); });
   // Another tab changed the links (R10): take its version, so this tab's next change
   // can't write back links that were forgotten there.
   window.addEventListener('storage', (e) => {
-    if (e.key !== PEOPLE_STORE && e.key !== null) return; // null: all of the site's storage was cleared
-    readPeopleStore();
+    if (e.key !== STORE_KEYS.people && e.key !== null) return; // null: all of the site's storage was cleared
+    Prefs.loadPeople();
     if ($('#dash').hidden) return;
     rederive();
     populateContacts();
@@ -767,7 +692,7 @@ function setPickerValue(sel, value) {
 // ------------------------------------------------------------------ filters
 
 function populateContacts() {
-  const { source } = S.filter;
+  const { source } = View.filter;
   // A linked person spans apps, so with an app picked only that app's messages count (spec 005 R6).
   const totals = new Map();
   for (const m of Data.msgs) if (source === 'all' || (m.s || 0) === source) totals.set(m.k, (totals.get(m.k) || 0) + 1);
@@ -792,7 +717,7 @@ function populateContacts() {
     const c = Data.contacts.get(k);
     sel.add(c ? pickerOption(c, `${labelFor(k)} (${parts.join(', ')})`, parts.join(', '), countWords(n, cn)) : new Option(`${labelFor(k)} (${parts.join(', ')})`, k));
   }
-  sel.value = S.filter.contact;
+  sel.value = View.filter.contact;
   refreshPicker(sel);
   const present = Data.loadedSources();
   addSourceButtons();
@@ -815,52 +740,19 @@ function addSourceButtons() {
 }
 
 function setContact(key) {
-  S.filter.contact = key;
+  View.filter.contact = key;
   setPickerValue($('#contactSel'), key);
-  S.browserLimit = 200;
+  View.browser.limit = 200;
   refresh();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-/** Messages matching the filters (not the date range); `contact` overrides the selected conversation. */
-function baseMessages(contact = S.filter.contact) {
-  const { groups, source } = S.filter;
-  // A linked person (spec 005) spans apps, so the app filter still applies to it.
-  if (contact !== 'all') {
-    const own = Data.messagesOf(contact); // R11: the index, not a scan of every message
-    return source === 'all' ? own : own.filter((m) => (m.s || 0) === source);
-  }
-  if (source === 'all' && groups) return Data.msgs;
-  return Data.msgs.filter((m) => (source === 'all' || (m.s || 0) === source) && (groups || !m.k.startsWith('g:')));
-}
-
-function baseCalls() {
-  const { contact, source } = S.filter;
-  if (source !== 'all' && source !== 0) return []; // calls only come from SMS Backup & Restore
-  if (contact !== 'all') return Data.calls.filter((c) => c.k === contact);
-  return Data.calls;
-}
-
 function setSource(source) {
-  S.filter.source = source;
-  S.filter.contact = 'all';
-  S.browserLimit = 200;
+  View.filter.source = source;
+  View.filter.contact = 'all';
+  View.browser.limit = 200;
   populateContacts();
   refresh();
-}
-
-function inRange(arr) {
-  const { from, to } = S.filter;
-  if (from == null && to == null) return arr;
-  const lo = from ?? -Infinity;
-  const hi = to ?? Infinity;
-  // arrays are time-sorted: binary search the window
-  const lower = (x) => {
-    let a = 0, b = arr.length;
-    while (a < b) { const mid = (a + b) >> 1; if (arr[mid].t < x) a = mid + 1; else b = mid; }
-    return a;
-  };
-  return arr.slice(lower(lo), hi === Infinity ? arr.length : lower(hi + 1));
 }
 
 function dataBounds() {
@@ -871,9 +763,9 @@ function dataBounds() {
 }
 
 function setRange(from, to) {
-  S.filter.from = from;
-  S.filter.to = to;
-  S.browserLimit = 200;
+  View.filter.from = from;
+  View.filter.to = to;
+  View.browser.limit = 200;
   refresh();
 }
 
@@ -891,11 +783,11 @@ function fromDateInput(v, endOfDay) {
 
 function syncRangeUi() {
   const { first, last } = dataBounds();
-  $('#fromDate').value = toDateInput(S.filter.from ?? first);
-  $('#toDate').value = toDateInput(S.filter.to ?? last);
+  $('#fromDate').value = toDateInput(View.filter.from ?? first);
+  $('#toDate').value = toDateInput(View.filter.to ?? last);
   $('#fromDate').min = $('#toDate').min = toDateInput(first);
   $('#fromDate').max = $('#toDate').max = toDateInput(last);
-  $$('#presets button').forEach((b) => b.classList.toggle('on', b.dataset.preset === 'all' && S.filter.from == null && S.filter.to == null));
+  $$('#presets button').forEach((b) => b.classList.toggle('on', b.dataset.preset === 'all' && View.filter.from == null && View.filter.to == null));
 }
 
 // ------------------------------------------------------------------ rendering
@@ -908,18 +800,18 @@ function emptyOption(ui, text) {
 
 function refresh({ timeline = true } = {}) {
   const ui = (S.ui = readTheme());
-  const base = baseMessages();
+  const base = Select.base();
   if (timeline) renderTimeline(ui, base);
 
-  const msgs = inRange(base);
+  const msgs = Select.range();
   // AI mood (spec 001) scores only this selection: pick up whatever it doesn't cover yet.
   AiMood.selectionChanged(msgs);
-  const A = aggregateMessages(msgs, S.convoGap);
-  const X = aggregateCrossApp(msgs, S.appsGap); // spec 007: cheap, no message text
+  const A = Select.agg();
+  const X = Select.cross(); // spec 007: cheap, no message text
   renderKpis(A);
   renderHighlights(msgs, A, X);
   renderOnThisDay(base);
-  show('#profileBtn', S.filter.contact !== 'all');
+  show('#profileBtn', View.filter.contact !== 'all');
   syncRangeUi();
   renderScope(msgs.length);
 
@@ -941,7 +833,7 @@ function refresh({ timeline = true } = {}) {
     .sort((a, b) => b.t - a.t)
     .slice(0, 40);
   put('c-contacts', () => topContactsOption(ui, S.topRows));
-  $('#contactsNote').textContent = S.filter.contact === 'all'
+  $('#contactsNote').textContent = View.filter.contact === 'all'
     ? 'Click a bar to focus on that conversation.'
     : 'Showing one conversation. Pick “All conversations” to compare.';
 
@@ -959,7 +851,7 @@ function refresh({ timeline = true } = {}) {
   put('c-behavior', () => behaviorOption(ui, A));
 
   // Activity
-  const all = S.filter.contact === 'all';
+  const all = View.filter.contact === 'all';
   put('c-yoy', () => yearOverYearOption(ui, A));
   put('c-night', () => nightOwlOption(ui, A));
   const ln = A.latestNight;
@@ -995,14 +887,14 @@ function refresh({ timeline = true } = {}) {
   // Replies & sessions
   Charts.set('c-replyhour', anyReply ? replyByHourOption(ui, A) : emptyOption(ui, 'No back-and-forth replies in this selection'));
   put('c-sessions', () => sessionsOption(ui, A));
-  $$('#gapSeg button').forEach((b) => b.classList.toggle('on', +b.dataset.gap === S.convoGap));
-  const gapWords = fmtGapWords(S.convoGap);
+  $$('#gapSeg button').forEach((b) => b.classList.toggle('on', +b.dataset.gap === View.convoGap));
+  const gapWords = fmtGapWords(View.convoGap);
   const ls = A.longestSession;
   $('#sessionNote').textContent = `A conversation ends after ${gapWords} of quiet` + (ls
     ? ` · Longest: ${fmtNum(ls.n)} messages over ${fmtDuration(ls.end - ls.start)} with ${labelFor(ls.k)} on ${new Date(ls.start).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`
     : '');
   $('#replyNote').textContent = `How quickly each side answers (within ${gapWords})`;
-  $('#habitsNote').textContent = `Conversation starters (after ${fmtGapShort(S.convoGap)} of quiet), double texts and message traits`;
+  $('#habitsNote').textContent = `Conversation starters (after ${fmtGapShort(View.convoGap)} of quiet), double texts and message traits`;
 
   // Content: the text-heavy pass only runs once the section is on (or near) the screen.
   show('#distinctCard', !all);
@@ -1010,11 +902,11 @@ function refresh({ timeline = true } = {}) {
   lazyRender('#sec-content', () => {
     renderPhrase(ui);
     if (!all) {
-      const rows = none ? [] : distinctiveWords(msgs, docFreqFor());
-      $('#distinctNote').textContent = `Words that set ${labelFor(S.filter.contact)} apart from your other conversations`;
+      const rows = none ? [] : distinctiveWords(msgs, Select.docFreq());
+      $('#distinctNote').textContent = `Words that set ${labelFor(View.filter.contact)} apart from your other conversations`;
       Charts.set('c-distinct', rows.length ? distinctiveOption(ui, rows) : emptyOption(ui, 'Not enough words to compare yet'));
     }
-    const C = aggregateContent(msgs, S.moodScorer);
+    const C = Select.content();
     Charts.set('c-emojitrend', C.emojiTotals.size ? emojiTrendOption(ui, C) : emptyOption(ui, 'No emoji in this selection'));
     const dm = domainsOption(ui, C);
     Charts.set('c-domains', dm.empty ? emptyOption(ui, 'No links in this selection') : dm.opt);
@@ -1023,7 +915,7 @@ function refresh({ timeline = true } = {}) {
     const mt = C.moodTotal;
     const share = (n, d) => (d ? Math.round((n / d) * 100) + '%' : '–');
     $('#moodNote').textContent = mt.n[0] + mt.n[1]
-      ? `Share of messages that read positive (up) or negative (down), scored with ${S.moodScorer === 'ai' ? 'the AI model' : 'VADER'}. You: ${share(mt.pos[1], mt.n[1])} positive, ${share(mt.neg[1], mt.n[1])} negative · Them: ${share(mt.pos[0], mt.n[0])} positive, ${share(mt.neg[0], mt.n[0])} negative`
+      ? `Share of messages that read positive (up) or negative (down), scored with ${View.moodScorer === 'ai' ? 'the AI model' : 'VADER'}. You: ${share(mt.pos[1], mt.n[1])} positive, ${share(mt.neg[1], mt.n[1])} negative · Them: ${share(mt.pos[0], mt.n[0])} positive, ${share(mt.neg[0], mt.n[0])} negative`
       : 'Share of messages that read positive (up) or negative (down) each month';
     if (mt.n[0] + mt.n[1]) $('#moodNote').textContent += '. Click a bar to read those messages.';
     wireMoodChart(Charts.set('c-mood', mt.n[0] + mt.n[1] ? moodOption(ui, C) : emptyOption(ui, 'No messages with words in this selection')));
@@ -1040,12 +932,12 @@ function refresh({ timeline = true } = {}) {
   lazyRender('#sec-ai', () => AiAnalysis.render());
 
   // Sources
-  const multi = all && S.filter.source === 'all' && [...A.sourceMonths.values()].reduce((set, v) => (v.forEach((n, i) => n && set.add(i)), set), new Set()).size > 1;
+  const multi = all && View.filter.source === 'all' && [...A.sourceMonths.values()].reduce((set, v) => (v.forEach((n, i) => n && set.add(i)), set), new Set()).size > 1;
   show('#sec-sources', multi);
   if (multi) Charts.set('c-platforms', platformMixOption(ui, A, sourceNames()));
 
   // Across apps (spec 007): only for linked people with messages on 2+ apps here
-  const crossApp = S.filter.source === 'all' && (all ? X.total.n > 0 : X.people.has(S.filter.contact));
+  const crossApp = View.filter.source === 'all' && (all ? X.total.n > 0 : X.people.has(View.filter.contact));
   show('#sec-apps', crossApp);
   if (crossApp) renderCrossApp(ui, X);
 
@@ -1080,13 +972,6 @@ function senderLabel(x) {
   return formatAddr(x);
 }
 
-/** Document frequencies for "What you talk about", cached per filter combination. */
-function docFreqFor() {
-  const sig = `${S.filter.source}|${S.filter.groups}|${Data.msgs.length}`;
-  if (!S.docFreq || S.docFreq.sig !== sig) S.docFreq = { sig, value: buildDocFreq(baseMessages('all')) };
-  return S.docFreq.value;
-}
-
 const LEADER_COLS = [
   { key: 'label', title: 'Conversation', sort: (r) => r.label.toLowerCase(), fmt: (r) => r.label },
   { key: 'n', title: 'Messages', sort: (r) => r.n, fmt: (r) => fmtNum(r.n) },
@@ -1113,22 +998,22 @@ function renderLeaderboard(A) {
       lenYou: avg(bc, 1), lenThem: avg(bc, 0), streak: bc.longestRun, first: bc.first, last: bc.last,
     };
   });
-  const col = LEADER_COLS.find((c) => c.key === S.leader.sort) || LEADER_COLS[1];
-  const dir = S.leader.asc ? 1 : -1;
+  const col = LEADER_COLS.find((c) => c.key === View.leader.sort) || LEADER_COLS[1];
+  const dir = View.leader.asc ? 1 : -1;
   rows.sort((a, b) => {
     const x = col.sort(a), y = col.sort(b);
     return (x < y ? -1 : x > y ? 1 : 0) * dir || b.n - a.n;
   });
-  const shown = S.leader.all ? rows : rows.slice(0, 50);
+  const shown = View.leader.all ? rows : rows.slice(0, 50);
   const total = emojiTotal(A.emojiFreq);
   for (const r of shown) r.sig = signatureEmoji(r.bc, A.emojiFreq, total);
 
   const table = $('#leaderTable');
-  table.innerHTML = html`<thead><tr>${LEADER_COLS.map((c) => html`<th data-key="${c.key}" class="${c.key === col.key ? 'sorted' + (S.leader.asc ? ' asc' : '') : ''}">${c.title}</th>`)}</tr></thead>` +
+  table.innerHTML = html`<thead><tr>${LEADER_COLS.map((c) => html`<th data-key="${c.key}" class="${c.key === col.key ? 'sorted' + (View.leader.asc ? ' asc' : '') : ''}">${c.title}</th>`)}</tr></thead>` +
     html`<tbody>${shown.map((r) => html`<tr data-key="${r.k}">${LEADER_COLS.map((c) => html`<td class="${c.cls || ''}">${c.fmt(r)}</td>`)}</tr>`)}</tbody>`;
   const more = $('#leaderMore');
   more.hidden = rows.length <= 50;
-  more.textContent = S.leader.all ? 'Show top 50' : `Show all ${fmtNum(rows.length)}`;
+  more.textContent = View.leader.all ? 'Show top 50' : `Show all ${fmtNum(rows.length)}`;
 }
 
 function renderDrifted(A) {
@@ -1179,7 +1064,7 @@ function renderMilestones(A) {
 
 /** 'pos' | 'neg' | 'neu' for a message by the chosen scorer, or null when it has no score. */
 function moodKind(m) {
-  const s = moodSign(m, S.moodScorer);
+  const s = moodSign(m, View.moodScorer);
   return s == null ? null : s > 0 ? 'pos' : s < 0 ? 'neg' : 'neu';
 }
 const MOOD_WORD = { pos: 'positive', neg: 'negative', neu: 'neutral' };
@@ -1189,7 +1074,7 @@ const moodLib = () => (moodLib.lib = moodLib.lib || messageLib(vaderLib()));
 
 /** Switch the mood chart and pills between VADER and the AI model's scores (spec 001). */
 function setMoodScorer(scorer) {
-  S.moodScorer = scorer;
+  View.moodScorer = scorer;
   AiMood.render();
   if (!$('#dash').hidden) refresh({ timeline: false });
 }
@@ -1210,11 +1095,11 @@ function moodFilterLabel(f) {
 
 /** From the mood chart: list that month's positive or negative messages, and go there. */
 function showMoodMessages(mo, o, kind) {
-  S.browserMood = { mo, o, kind };
-  S.browserLimit = 200;
-  S.showMood = true;
+  View.browser.mood = { mo, o, kind };
+  View.browser.limit = 200;
+  View.browser.showMood = true;
   $('#moodChk').checked = true;
-  renderBrowser(inRange(baseMessages()));
+  renderBrowser(Select.range());
   Tabs.select('sec-messages');
 }
 
@@ -1249,7 +1134,7 @@ function moodWhyHtml(m) {
   const effect = kind === 'neu'
     ? `Neutral, so it's in neither bar: one of the ${fmtNum(n)} messages ${whose} in ${month} with a mood score, it makes both bars a little shorter.`
     : `One of the ${fmtNum(n)} messages ${whose} in ${month} with a mood score: worth about ${(100 / n).toFixed(1)} points of the ${word} bar.`;
-  if (S.moodScorer === 'ai') {
+  if (View.moodScorer === 'ai') {
     // The model's three probabilities (spec 001, R9), with VADER's score to compare.
     const pct = (x) => Math.round(x * 100) + '%';
     const [neg, neu, pos] = m.ai;
@@ -1273,24 +1158,18 @@ function moodWhyHtml(m) {
 
 function initMoodDetails() {
   $('#moodChk').onchange = (e) => {
-    S.showMood = e.target.checked;
-    renderBrowser(inRange(baseMessages()));
+    View.browser.showMood = e.target.checked;
+    renderBrowser(Select.range());
   };
-  try { S.igPreviews = localStorage.getItem('ms-ig-previews') === '1'; } catch (e) { /* storage unavailable */ }
-  $('#igPreviewsChk').checked = S.igPreviews;
+  $('#igPreviewsChk').checked = Prefs.igPreviews;
   $('#igPreviewsChk').onchange = (e) => {
-    S.igPreviews = e.target.checked;
-    // Turning previews off deletes the setting, so a failed write can't leave an old "on" behind.
-    try {
-      if (S.igPreviews) localStorage.setItem('ms-ig-previews', '1');
-      else localStorage.removeItem('ms-ig-previews');
-    } catch (err) { /* storage unavailable: reading it fails too, so previews start off */ }
-    renderBrowser(inRange(baseMessages()));
+    Prefs.saveIgPreviews(e.target.checked);
+    renderBrowser(Select.range());
   };
   $('#browserFilter').onclick = (e) => {
     if (!e.target.closest('[data-clear-mood]')) return;
-    S.browserMood = null;
-    renderBrowser(inRange(baseMessages()));
+    View.browser.mood = null;
+    renderBrowser(Select.range());
   };
   $('#messages').addEventListener('click', (e) => {
     const pill = e.target.closest('.mood-pill');
@@ -1325,7 +1204,7 @@ function partsHtml(parts) {
 
 function renderHighlights(msgs, A, X) {
   const crossApp = X ? crossAppHighlight(X, { labelFor: plainName, names: sourceNames() }) : null;
-  const items = buildHighlights(msgs, A, { labelFor: plainName, senderLabel, single: S.filter.contact !== 'all', crossApp, limit: Infinity });
+  const items = buildHighlights(msgs, A, { labelFor: plainName, senderLabel, single: View.filter.contact !== 'all', crossApp, limit: Infinity });
   $('#highlights').innerHTML = items.length
     ? html`${items.map((h, i) => html`<li${i >= HIGHLIGHT_LIMIT ? raw(' class="hl-more" hidden') : ''}><span class="hl-icon" aria-hidden="true">${h.icon}</span><span>${partsHtml(h.parts)}</span></li>`)}`
     : html`<li class="empty">Not enough messages here for highlights yet.</li>`;
@@ -1344,7 +1223,7 @@ function showMoreHighlights(open) {
 
 /** Who sent a message, for On this day: "You → Alex", "Alex", "Sam in Book Club". */
 function momentSender(m) {
-  const all = S.filter.contact === 'all';
+  const all = View.filter.contact === 'all';
   if (m.o) return all ? `You → ${plainName(m.k)}` : 'You';
   const group = m.k.startsWith('g:');
   const who = group && (m.sn || m.sk) ? senderLabel(m.sn || m.sk) : group ? 'Someone' : plainName(m.k);
@@ -1355,7 +1234,7 @@ function momentSender(m) {
 function renderOnThisDay(base) {
   const now = new Date();
   const today = { month: now.getMonth(), day: now.getDate() };
-  const sel = S.otd || today;
+  const sel = View.otd || today;
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const dayName = (d) => new Date(2000, d.month, d.day).toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
   $('#otdDate').textContent = dayName(sel);
@@ -1367,7 +1246,7 @@ function renderOnThisDay(base) {
     box.innerHTML = html`<p class="empty">Nothing on this date in earlier years.</p>${near ? html`<button class="btn small" type="button" data-otd-goto="${near.month}-${near.day}">Go to ${dayName(near)}, the nearest day with messages →</button>` : ''}`;
     return;
   }
-  const single = S.filter.contact !== 'all';
+  const single = View.filter.contact !== 'all';
   box.innerHTML = html`${years.slice(0, 4).map(({ year, msgs }) => {
     const back = now.getFullYear() - year;
     const day = new Date(year, sel.month, sel.day).getTime();
@@ -1392,15 +1271,15 @@ function readDay(dayStart) {
 
 function moveOtd(days) {
   const now = new Date();
-  const cur = S.otd || { month: now.getMonth(), day: now.getDate() };
+  const cur = View.otd || { month: now.getMonth(), day: now.getDate() };
   const d = new Date(2000, cur.month, cur.day + days); // a leap year, so Feb 29 is a stop
-  S.otd = { month: d.getMonth(), day: d.getDate() };
-  renderOnThisDay(baseMessages());
+  View.otd = { month: d.getMonth(), day: d.getDate() };
+  renderOnThisDay(Select.base());
 }
 
 /** Spec 007 R4: how a linked person's conversations move between apps, for the profile. */
 function profileCrossApp(key, msgs, name) {
-  const P = aggregateCrossApp(msgs, S.appsGap).people.get(key);
+  const P = aggregateCrossApp(msgs, View.appsGap).people.get(key);
   if (!P) return '';
   const K = crossKpis(P, name);
   return html`<h3 class="profile-h">Across apps</h3><div class="app-splits">${appSplitHtml(P, name)}</div>
@@ -1411,7 +1290,7 @@ function profileCrossApp(key, msgs, name) {
 function openProfile(key) {
   const msgs = Data.messagesOf(key);
   if (!msgs.length) return;
-  const A = aggregateMessages(msgs, S.convoGap);
+  const A = aggregateMessages(msgs, View.convoGap);
   const F = profileFacts(msgs, A);
   const c = Data.contacts.get(key) || {};
   const group = key.startsWith('g:');
@@ -1466,7 +1345,7 @@ function openProfile(key) {
     <h3 class="profile-h">You and ${them === 'Everyone else' ? 'everyone else' : them}</h3>
     ${vs}${c.person ? profileCrossApp(key, msgs, name) : ''}`;
 
-  const words = distinctiveWords(msgs, docFreqFor(), 15);
+  const words = distinctiveWords(msgs, Select.docFreq(), 15);
   const started = F.firstText;
   const bottom = [];
   if (group) {
@@ -1500,9 +1379,9 @@ function openProfile(key) {
 function initGlance() {
   $('#otdPrev').onclick = () => moveOtd(-1);
   $('#otdNext').onclick = () => moveOtd(1);
-  $('#otdToday').onclick = () => { S.otd = null; renderOnThisDay(baseMessages()); };
+  $('#otdToday').onclick = () => { View.otd = null; renderOnThisDay(Select.base()); };
   $('#highlightsMore').onclick = (e) => showMoreHighlights(e.currentTarget.getAttribute('aria-expanded') !== 'true');
-  $('#profileBtn').onclick = () => openProfile(S.filter.contact);
+  $('#profileBtn').onclick = () => openProfile(View.filter.contact);
   const dlg = $('#profile');
   dlg.querySelector('.profile-close').onclick = () => dlg.close();
   dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // the backdrop
@@ -1512,16 +1391,16 @@ function initGlance() {
     if (t.dataset.profile) openProfile(t.dataset.profile);
     else if (t.dataset.otdDay) {
       if (t.dataset.contact && Data.contacts.has(t.dataset.contact)) { // the biggest juggle (spec 007) names its person
-        S.filter.contact = t.dataset.contact;
+        View.filter.contact = t.dataset.contact;
         setPickerValue($('#contactSel'), t.dataset.contact);
       }
-      S.browserMood = null;
+      View.browser.mood = null;
       readDay(+t.dataset.otdDay);
     }
     else if (t.dataset.otdGoto) {
       const [month, day] = t.dataset.otdGoto.split('-').map(Number);
-      S.otd = { month, day };
-      renderOnThisDay(baseMessages());
+      View.otd = { month, day };
+      renderOnThisDay(Select.base());
     } else if (t.dataset.focus) {
       dlg.close();
       setContact(t.dataset.focus);
@@ -1587,11 +1466,11 @@ function crossKpis(P, them) {
 const peakHour = (hours) => hours.reduce((best, n, h) => (n > hours[best] ? h : best), 0);
 
 function renderCrossApp(ui, X) {
-  const all = S.filter.contact === 'all';
-  const P = all ? X.total : X.people.get(S.filter.contact);
-  const them = all ? 'They' : plainName(S.filter.contact);
-  const gapWords = fmtGapWords(S.appsGap);
-  $$('#appsGapSeg button').forEach((b) => b.classList.toggle('on', +b.dataset.gap === S.appsGap));
+  const all = View.filter.contact === 'all';
+  const P = all ? X.total : X.people.get(View.filter.contact);
+  const them = all ? 'They' : plainName(View.filter.contact);
+  const gapWords = fmtGapWords(View.appsGap);
+  $$('#appsGapSeg button').forEach((b) => b.classList.toggle('on', +b.dataset.gap === View.appsGap));
   $('#appsNote').textContent = all
     ? `${fmtNum(X.people.size)} linked ${X.people.size === 1 ? 'person' : 'people'} on more than one app in this selection · a conversation ends after ${gapWords} of quiet`
     : `You and ${them} on ${appNames(P.apps.keys())} · a conversation ends after ${gapWords} of quiet`;
@@ -1705,11 +1584,11 @@ function wrappedStats(base, year) {
   const from = new Date(year, 0, 1).getTime();
   const to = new Date(year + 1, 0, 1).getTime();
   const msgs = base.filter((m) => m.t >= from && m.t < to);
-  const A = aggregateMessages(msgs, S.convoGap);
+  const A = aggregateMessages(msgs, View.convoGap);
   const C = aggregateContent(msgs);
-  const single = S.filter.contact !== 'all';
+  const single = View.filter.contact !== 'all';
   const people = single
-    ? senderBreakdown(msgs, S.filter.contact)
+    ? senderBreakdown(msgs, View.filter.contact)
     : [...A.byContact.entries()]
       .map(([k, bc]) => ({ label: labelFor(k), n: bc.n[0] + bc.n[1] }))
       .sort((a, b) => b.n - a.n)
@@ -1833,17 +1712,17 @@ function drawWrapped(canvas, W, ui) {
 function renderWrapped(ui, base) {
   const firstY = new Date(base[0].t).getFullYear();
   const lastY = new Date(base[base.length - 1].t).getFullYear();
-  if (S.wrapYear == null || S.wrapYear < firstY || S.wrapYear > lastY) S.wrapYear = lastY;
+  if (View.wrapYear == null || View.wrapYear < firstY || View.wrapYear > lastY) View.wrapYear = lastY;
   const wrap = $('#wrapYears');
   wrap.innerHTML = '';
   for (let y = firstY; y <= lastY; y++) {
     const b = document.createElement('button');
     b.textContent = y;
-    b.className = y === S.wrapYear ? 'on' : '';
-    b.onclick = () => { S.wrapYear = y; renderWrapped(S.ui, baseMessages()); };
+    b.className = y === View.wrapYear ? 'on' : '';
+    b.onclick = () => { View.wrapYear = y; renderWrapped(S.ui, Select.base()); };
     wrap.appendChild(b);
   }
-  drawWrapped($('#wrapCanvas'), wrappedStats(base, S.wrapYear), ui);
+  drawWrapped($('#wrapCanvas'), wrappedStats(base, View.wrapYear), ui);
 }
 
 function saveWrapped() {
@@ -1851,19 +1730,19 @@ function saveWrapped() {
     if (!blob) return;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `Yapalytics-${S.wrapYear}.png`;
+    a.download = `Yapalytics-${View.wrapYear}.png`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }, 'image/png');
 }
 
 function renderScope(n) {
-  const src = S.filter.source === 'all' ? '' : ` (${sourceName(S.filter.source)})`;
-  const all = S.filter.groups ? 'All conversations' : 'All 1-on-1 conversations';
-  const who = S.filter.contact === 'all' ? all + src : labelFor(S.filter.contact);
+  const src = View.filter.source === 'all' ? '' : ` (${sourceName(View.filter.source)})`;
+  const all = View.filter.groups ? 'All conversations' : 'All 1-on-1 conversations';
+  const who = View.filter.contact === 'all' ? all + src : labelFor(View.filter.contact);
   const { first, last } = dataBounds();
-  const from = new Date(S.filter.from ?? first).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-  const to = new Date(S.filter.to ?? last).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  const from = new Date(View.filter.from ?? first).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  const to = new Date(View.filter.to ?? last).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   $('#scope').textContent = `${who} · ${from} – ${to} · ${fmtNum(n)} messages`;
 }
 
@@ -1874,19 +1753,19 @@ function renderTimeline(ui, base) {
     if (!v) days.set(m.d, (v = [0, 0]));
     v[m.o]++;
   }
-  let gran = S.gran;
+  let gran = View.gran;
   if (gran === 'auto') {
     const keys = [...days.keys()];
     gran = autoGran(keys.length ? Math.max(...keys) - Math.min(...keys) : 0);
   }
   S.activeGran = gran;
-  $$('#granSeg button').forEach((b) => b.classList.toggle('on', b.dataset.gran === S.gran));
+  $$('#granSeg button').forEach((b) => b.classList.toggle('on', b.dataset.gran === View.gran));
   if (!base.length) {
     Charts.set('c-timeline', emptyOption(ui, 'No messages in this selection'));
     return;
   }
   const tl = buildTimeline(days, gran);
-  Charts.set('c-timeline', timelineOption(ui, tl, gran, { from: S.filter.from, to: S.filter.to }));
+  Charts.set('c-timeline', timelineOption(ui, tl, gran, { from: View.filter.from, to: View.filter.to }));
 }
 
 function onTimelineZoom() {
@@ -1898,12 +1777,12 @@ function onTimelineZoom() {
     const full = dz.start <= 0.01 && dz.end >= 99.99;
     const gran = S.activeGran;
     if (full) {
-      S.filter.from = S.filter.to = null;
+      View.filter.from = View.filter.to = null;
     } else {
-      S.filter.from = bucketOfDay(tsToDay(dz.startValue), gran);
-      S.filter.to = bucketEnd(bucketOfDay(tsToDay(dz.endValue), gran), gran);
+      View.filter.from = bucketOfDay(tsToDay(dz.startValue), gran);
+      View.filter.to = bucketEnd(bucketOfDay(tsToDay(dz.endValue), gran), gran);
     }
-    S.browserLimit = 200;
+    View.browser.limit = 200;
     refresh({ timeline: false });
   }, 180);
 }
@@ -1916,19 +1795,19 @@ function renderCalendar(ui, A, none) {
     Charts.set('c-calendar', emptyOption(ui, 'No messages in this selection'));
     return;
   }
-  if (!years.includes(S.calYear)) S.calYear = years[years.length - 1];
+  if (!years.includes(View.calYear)) View.calYear = years[years.length - 1];
   for (const y of years) {
     const b = document.createElement('button');
     b.textContent = y;
-    b.className = y === S.calYear ? 'on' : '';
+    b.className = y === View.calYear ? 'on' : '';
     b.onclick = () => {
-      S.calYear = y;
+      View.calYear = y;
       $$('#calYears button').forEach((x) => x.classList.toggle('on', x === b));
       Charts.set('c-calendar', calendarOption(S.ui, A, y));
     };
     wrap.appendChild(b);
   }
-  Charts.set('c-calendar', calendarOption(ui, A, S.calYear));
+  Charts.set('c-calendar', calendarOption(ui, A, View.calYear));
 }
 
 /** A KPI tile. Text is escaped; pass html`…` for a value or sub with markup (<small>). */
@@ -1957,26 +1836,26 @@ function renderKpis(A) {
     kpi('Longest streak', A.longestStreak.len ? `${fmtNum(A.longestStreak.len)} days` : '–', A.longestStreak.len ? `${shortDate(A.longestStreak.start)} – ${shortDate(A.longestStreak.end)}` : '', 'Consecutive days with at least one message'),
     kpi('Longest silence', A.longestSilence.len ? `${fmtNum(A.longestSilence.len)} days` : '–', A.longestSilence.len ? `${shortDate(A.longestSilence.start)} – ${shortDate(A.longestSilence.end)}` : '', 'Longest run of days with no messages'),
     kpi('Conversations', fmtNum(convos), `${fmtNum(groups)} group chats`),
-    kpi('Your reply time', fmtDuration(A.replyMedian[1]), `median · theirs ${fmtDuration(A.replyMedian[0])}`, `Median time to answer, within ${fmtGapWords(S.convoGap)}`),
+    kpi('Your reply time', fmtDuration(A.replyMedian[1]), `median · theirs ${fmtDuration(A.replyMedian[0])}`, `Median time to answer, within ${fmtGapWords(View.convoGap)}`),
     kpi('Avg length', html`${avgLen(1)} <small>/ ${avgLen(0)}</small>`, 'characters · sent / received'),
     kpi('Words', fmtNum(A.words[0] + A.words[1]), `${fmtNum(A.words[1])} sent · ${fmtNum(A.words[0])} received`),
     kpi('Emoji', fmtNum(A.emoji[0] + A.emoji[1]), `in ${pct(A.emojiMsgs[0] + A.emojiMsgs[1], total)} of messages`),
     kpi('Attachments', fmtNum(media(0) + media(1)), `${fmtNum(A.media.ph[0] + A.media.ph[1])} photos · ${fmtNum(A.media.vd[0] + A.media.vd[1])} videos · ${fmtBytes(A.mediaBytes)}`),
     kpi('Night owl', pct(nightCount, total), A.latestNight ? `latest ${new Date(A.latestNight.t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : 'no messages after midnight', 'Messages between midnight and 5am'),
-    kpi('Longest conversation', A.longestSession ? html`${fmtNum(A.longestSession.n)} <small>msgs</small>` : '–', A.longestSession ? `${labelFor(A.longestSession.k)} · ${new Date(A.longestSession.start).toLocaleDateString()}` : '', `Most messages with no ${fmtGapWords(S.convoGap)} of quiet in between`),
+    kpi('Longest conversation', A.longestSession ? html`${fmtNum(A.longestSession.n)} <small>msgs</small>` : '–', A.longestSession ? `${labelFor(A.longestSession.k)} · ${new Date(A.longestSession.start).toLocaleDateString()}` : '', `Most messages with no ${fmtGapWords(View.convoGap)} of quiet in between`),
   ];
   $('#kpis').innerHTML = html`${tiles}`;
 }
 
 function renderCalls(ui) {
   const section = $('#callsSection');
-  const base = baseCalls();
+  const base = Select.calls();
   if (!base.length) {
     section.hidden = true;
     return;
   }
   section.hidden = false;
-  const calls = inRange(base);
+  const calls = inDates(base, View.filter.from, View.filter.to);
   const C = aggregateCalls(calls);
   const talk = C.talk[0] + C.talk[1];
   const connected = C.byType[0] + C.byType[1];
@@ -2020,7 +1899,7 @@ function renderVocab(ui = S.ui) {
   }
   // Default: the latest month that brought any new words.
   const latest = months.findLast((m) => C.vocabNew.get(m).some((x) => x.top.length)) ?? months[months.length - 1];
-  const mo = months.includes(S.vocabMo) ? S.vocabMo : latest;
+  const mo = months.includes(View.vocabMo) ? View.vocabMo : latest;
   const chart = Charts.set('c-vocab', vocabOption(ui, C, mo));
   if (!chart.__wired) {
     // Click anywhere on the plot: pick the nearest month.
@@ -2031,7 +1910,7 @@ function renderVocab(ui = S.ui) {
       const d = new Date(chart.convertFromPixel({ gridIndex: 0 }, pt)[0] + 15 * 86400000);
       const keys = [...S.vocab.vocab.keys()];
       const want = d.getFullYear() * 12 + d.getMonth();
-      S.vocabMo = keys.reduce((best, k) => (Math.abs(k - want) < Math.abs(best - want) ? k : best), keys[0]);
+      View.vocabMo = keys.reduce((best, k) => (Math.abs(k - want) < Math.abs(best - want) ? k : best), keys[0]);
       renderVocab();
     });
   }
@@ -2105,11 +1984,11 @@ function phraseFirstsHtml(P, re) {
   return html`<p class="phrase-headline">${head}</p><div class="phrase-first-grid">${[you, them].filter(Boolean).map(card)}</div>`;
 }
 
-/** Word tracker: uses of S.phrase per month in the current selection, and who said it first. */
+/** Word tracker: uses of View.phrase per month in the current selection, and who said it first. */
 function renderPhrase(ui = S.ui) {
-  const q = S.phrase.trim();
+  const q = View.phrase.trim();
   $$('#phraseIdeas button').forEach((b) => b.classList.toggle('on', b.textContent === q));
-  $$('#phraseGranSeg button').forEach((b) => b.classList.toggle('on', b.dataset.gran === S.phraseGran));
+  $$('#phraseGranSeg button').forEach((b) => b.classList.toggle('on', b.dataset.gran === View.phraseGran));
   const msgs = S.phraseMsgs;
   const re = q && phraseRegex(q);
   const note = $('#phraseNote');
@@ -2127,7 +2006,7 @@ function renderPhrase(ui = S.ui) {
   note.textContent = `“${q}”: you said it ${times(P.uses[1])}, them ${times(P.uses[0])}`;
   const firstDay = msgs[0].d;
   const lastDay = msgs[msgs.length - 1].d;
-  const gran = S.phraseGran === 'auto' ? autoGran(lastDay - firstDay) : S.phraseGran;
+  const gran = View.phraseGran === 'auto' ? autoGran(lastDay - firstDay) : View.phraseGran;
   Charts.set('c-phrase', phraseOption(ui, P, firstDay, lastDay, gran));
   firsts.innerHTML = phraseFirstsHtml(P, re);
 }
@@ -2136,7 +2015,7 @@ function renderPhrase(ui = S.ui) {
 function reactionsRow(m) {
   const row = document.createElement('div');
   row.className = 'reactions';
-  const me = hasOwner(m.s) && S.owners[m.s].name;
+  const me = hasOwner(m.s) && Prefs.owners[m.s].name;
   for (const x of m.rx) {
     const names = x.n.map((n) => (n === me ? 'You' : n));
     const more = x.c - names.length;
@@ -2157,12 +2036,12 @@ function reactionsRow(m) {
 }
 
 function renderBrowser(msgs) {
-  const q = S.browserQuery.trim().toLowerCase();
-  const mood = S.browserMood;
+  const q = View.browser.query.trim().toLowerCase();
+  const mood = View.browser.mood;
   const has = (s) => s && s.toLowerCase().includes(q);
   let list = q ? msgs.filter((m) => has(m.b) || (m.sh && (has(m.sh.x) || has(m.sh.w)))) : msgs;
   if (mood) list = list.filter((m) => moodMatches(m, mood));
-  const start = Math.max(0, list.length - S.browserLimit);
+  const start = Math.max(0, list.length - View.browser.limit);
   const shown = list.slice(start);
   const box = $('#messages');
   resetMessageMedia(box);
@@ -2173,17 +2052,17 @@ function renderBrowser(msgs) {
   chip.hidden = !mood;
   if (mood) chip.innerHTML = html`<span>${moodFilterLabel(mood)}</span><button class="btn small ghost" type="button" data-clear-mood aria-label="Show all messages">✕</button>`;
   // Messages with a mood score per month and side: what one message is worth in the chart.
-  if (S.showMood) {
+  if (View.browser.showMood) {
     S.moodScored = new Map();
-    for (const m of msgs) if (moodSign(m, S.moodScorer) != null) S.moodScored.set(`${m.mo}|${m.o}`, (S.moodScored.get(`${m.mo}|${m.o}`) || 0) + 1);
+    for (const m of msgs) if (moodSign(m, View.moodScorer) != null) S.moodScored.set(`${m.mo}|${m.o}`, (S.moodScored.get(`${m.mo}|${m.o}`) || 0) + 1);
   }
   S.browserShown = shown;
 
   const frag = document.createDocumentFragment();
-  const showWho = S.filter.contact === 'all' || S.filter.contact.startsWith('g:') || S.filter.contact.startsWith('p:');
+  const showWho = View.filter.contact === 'all' || View.filter.contact.startsWith('g:') || View.filter.contact.startsWith('p:');
   // Spec 010: a linked person's app edges, and switch markers when the list is the whole conversation.
-  const appEdges = S.filter.contact.startsWith('p:') && S.filter.source === 'all';
-  const marks = appEdges && !q && !mood ? appSwitchMarks(list, S.appsGap) : null;
+  const appEdges = View.filter.contact.startsWith('p:') && View.filter.source === 'all';
+  const marks = appEdges && !q && !mood ? appSwitchMarks(list, View.appsGap) : null;
   let lastDay = null;
   shown.forEach((m, j) => {
     if (m.d !== lastDay) {
@@ -2202,10 +2081,10 @@ function renderBrowser(msgs) {
     bubble.className = 'bubble';
     const sender = !m.o && m.k.startsWith('g:') && (m.sn || m.sk) ? senderLabel(m.sn || m.sk) : '';
     const via = m.tk ? sourceName(m.s) : ''; // a linked person's messages say which app (spec 005 R7)
-    if (showWho && (S.filter.contact === 'all' || sender || via)) {
+    if (showWho && (View.filter.contact === 'all' || sender || via)) {
       const who = document.createElement('div');
       who.className = 'who';
-      if (S.filter.contact !== 'all') who.textContent = sender || via;
+      if (View.filter.contact !== 'all') who.textContent = sender || via;
       else if (sender) who.textContent = `${sender} · ${labelFor(m.k)}`;
       else who.textContent = (m.o ? 'To ' : 'From ') + labelFor(m.k) + (via ? ` · ${via}` : '');
       bubble.appendChild(who);
@@ -2217,7 +2096,7 @@ function renderBrowser(msgs) {
       bubble.appendChild(body);
     }
     if (m.att) bubble.appendChild(messageAttachments(m));
-    if (m.sh) bubble.appendChild(shareCard(m.sh, S.igPreviews));
+    if (m.sh) bubble.appendChild(shareCard(m.sh, Prefs.igPreviews));
     if (m.rx) bubble.appendChild(reactionsRow(m));
     // Sources without attachment references only know how many there were.
     const att = [];
@@ -2236,9 +2115,9 @@ function renderBrowser(msgs) {
     }
     const time = document.createElement('div');
     time.className = 'time';
-    const kind = S.showMood && moodKind(m);
+    const kind = View.browser.showMood && moodKind(m);
     if (kind) {
-      const score = fmtScore(moodScore(m, S.moodScorer));
+      const score = fmtScore(moodScore(m, View.moodScorer));
       const pill = document.createElement('button');
       pill.type = 'button';
       pill.className = `mood-pill ${kind}`;
@@ -2304,7 +2183,7 @@ function applyTheme(mode) {
   const root = document.documentElement;
   if (mode === 'auto') root.removeAttribute('data-theme');
   else root.setAttribute('data-theme', mode);
-  try { localStorage.setItem('ms-theme', mode); } catch (e) { /* storage unavailable */ }
+  Prefs.saveTheme(mode);
   $('#themeBtn').textContent = { auto: '◐ Auto', light: '☀︎ Light', dark: '☾ Dark' }[mode];
   $('#themeBtn').dataset.mode = mode;
   if (!$('#dash').hidden) refresh();
@@ -2313,9 +2192,8 @@ function applyTheme(mode) {
 // ------------------------------------------------------------------ events
 
 function init() {
-  let mode = 'auto';
-  try { mode = localStorage.getItem('ms-theme') || 'auto'; } catch (e) { /* ignore */ }
-  applyTheme(mode);
+  Prefs.load();
+  applyTheme(Prefs.theme);
   $('#themeBtn').onclick = () => {
     const order = ['auto', 'light', 'dark'];
     applyTheme(order[(order.indexOf($('#themeBtn').dataset.mode) + 1) % 3]);
@@ -2356,11 +2234,11 @@ function init() {
     if (v) setSource(v === 'all' ? 'all' : +v);
   };
   $('#groupsChk').onchange = (e) => {
-    S.filter.groups = e.target.checked;
+    View.filter.groups = e.target.checked;
     refresh();
   };
-  $('#fromDate').onchange = (e) => setRange(fromDateInput(e.target.value, false), S.filter.to);
-  $('#toDate').onchange = (e) => setRange(S.filter.from, fromDateInput(e.target.value, true));
+  $('#fromDate').onchange = (e) => setRange(fromDateInput(e.target.value, false), View.filter.to);
+  $('#toDate').onchange = (e) => setRange(View.filter.from, fromDateInput(e.target.value, true));
   $('#presets').onclick = (e) => {
     const p = e.target.dataset.preset;
     if (!p) return;
@@ -2375,21 +2253,21 @@ function init() {
   $('#gapSeg').onclick = (e) => {
     const g = +e.target.dataset.gap;
     if (!g) return;
-    S.convoGap = g;
+    View.convoGap = g;
     refresh({ timeline: false });
   };
   $('#appsGapSeg').innerHTML = html`${APPS_GAPS.map((g) => html`<button data-gap="${g}" title="A conversation ends after ${fmtGapWords(g)} of quiet">${fmtGapShort(g)}</button>`)}`;
   $('#appsGapSeg').onclick = (e) => {
     const g = +e.target.dataset.gap;
     if (!g) return;
-    S.appsGap = g;
+    View.appsGap = g;
     refresh({ timeline: false });
   };
   $('#granSeg').onclick = (e) => {
     const g = e.target.dataset.gran;
     if (!g) return;
-    S.gran = g;
-    renderTimeline(S.ui, baseMessages());
+    View.gran = g;
+    renderTimeline(S.ui, Select.base());
   };
 
   $('#leaderTable').onclick = (e) => {
@@ -2397,8 +2275,8 @@ function init() {
     if (th) {
       const key = th.dataset.key;
       const col = LEADER_COLS.find((c) => c.key === key);
-      if (S.leader.sort === key) S.leader.asc = !S.leader.asc;
-      else S.leader = { ...S.leader, sort: key, asc: !!col.asc };
+      if (View.leader.sort === key) View.leader.asc = !View.leader.asc;
+      else View.leader = { ...View.leader, sort: key, asc: !!col.asc };
       refresh({ timeline: false });
       return;
     }
@@ -2406,7 +2284,7 @@ function init() {
     if (tr) openProfile(tr.dataset.key);
   };
   $('#leaderMore').onclick = () => {
-    S.leader.all = !S.leader.all;
+    View.leader.all = !View.leader.all;
     refresh({ timeline: false });
   };
   $('#driftList').onclick = (e) => {
@@ -2429,43 +2307,43 @@ function init() {
   $('#search').oninput = (e) => {
     clearTimeout(S.searchTimer);
     S.searchTimer = setTimeout(() => {
-      S.browserQuery = e.target.value;
-      S.browserLimit = 200;
-      renderBrowser(inRange(baseMessages()));
+      View.browser.query = e.target.value;
+      View.browser.limit = 200;
+      renderBrowser(Select.range());
     }, 200);
   };
   $('#phraseIdeas').innerHTML = html`${PHRASE_IDEAS.map((p) => html`<button type="button" class="btn small">${p}</button>`)}`;
   $('#phraseIdeas').onclick = (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    $('#phraseInput').value = S.phrase = b.textContent;
+    $('#phraseInput').value = View.phrase = b.textContent;
     renderPhrase();
   };
   $('#vocabWords').onclick = (e) => {
     const b = e.target.closest('[data-word]');
     if (!b) return;
-    $('#phraseInput').value = S.phrase = b.dataset.word;
+    $('#phraseInput').value = View.phrase = b.dataset.word;
     renderPhrase();
     $('#phraseCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
   $('#phraseGranSeg').onclick = (e) => {
     const g = e.target.dataset.gran;
     if (!g) return;
-    S.phraseGran = g;
+    View.phraseGran = g;
     renderPhrase();
   };
   $('#phraseInput').oninput = (e) => {
     clearTimeout(S.phraseTimer);
     S.phraseTimer = setTimeout(() => {
-      S.phrase = e.target.value;
+      View.phrase = e.target.value;
       renderPhrase();
     }, 250);
   };
   $('#moreBtn').onclick = () => {
     const box = $('#messages');
     const fromBottom = box.scrollHeight - box.scrollTop;
-    S.browserLimit += 500;
-    renderBrowser(inRange(baseMessages()));
+    View.browser.limit += 500;
+    renderBrowser(Select.range());
     box.scrollTop = box.scrollHeight - fromBottom;
   };
 
@@ -2485,7 +2363,7 @@ function wireCharts() {
     chart.__wired = true;
     chart.on('click', (p) => {
       const row = rows()[p.dataIndex];
-      if (row && S.filter.contact === 'all') setContact(row.key);
+      if (row && View.filter.contact === 'all') setContact(row.key);
     });
   };
   clickToFocus('c-contacts', () => S.topRows);

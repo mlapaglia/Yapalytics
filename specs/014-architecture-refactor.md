@@ -62,7 +62,8 @@ four ways:
   when something they depend on changes.
 - **R8** Changing the theme, sorting or expanding the leaderboard, moving On this day,
   switching the calendar or Year in review year, or typing in the message search
-  doesn't rerun `aggregateMessages`.
+  doesn't recompute the selection's aggregates. (Year in review works out the picked
+  year's own numbers.)
 - **R9** Only the open tab is drawn. Other tabs are marked out of date and drawn when opened.
 - **R10** Word counts for the Words chart and Year in review are worked out in the same
   pass as the other text statistics, only when one of those is shown. `aggregateMessages`
@@ -202,34 +203,40 @@ of scanning every message.
 
 ### Step 6 · State and caches
 
-`S` splits three ways:
+`S` splits up:
 
 - `Data`: the dataset (step 5).
-- `Prefs` (`js/store.js`): theme, Instagram previews, owners, people, dismissed
-  suggestions and AI settings. All `localStorage` access goes here, wrapped in
-  try/catch once, under the same keys (R13).
-- `View`: filter, `convoGap`, `appsGap`, granularity, phrase, calendar year, Year in
-  review year, On this day, leaderboard, message list (limit, query, mood filter, show
-  mood), mood scorer and vocabulary month. `View.set(patch)` works out which *topics*
-  changed and passes them to `Panels.invalidate(topics)`.
+- `js/store.js`: `Store` (`get`, `set`, `getJSON`, `setJSON`) is the only code that
+  touches `localStorage`. Every access is guarded there once, under the same keys
+  (R13, `STORE_KEYS`). `Prefs` holds the theme, Instagram previews, owners, saved links
+  and dismissed suggestions, with the link editing (`linkThreads`, `unlinkThread`,
+  `loadPeople`, `savePeople`). AI settings stay in `AiAnalysis`, saved through `Store`.
+- `js/select.js`: `View` holds what's picked: filter, `convoGap`, `appsGap`,
+  granularity, mood scorer, phrase and its granularity, vocabulary month, calendar year,
+  Year in review year, On this day, leaderboard, and the message list (`browser`: limit,
+  query, mood filter, show mood).
+- What's left on `S` is what the last draw produced and the dialogs' scratch (chart
+  click rows, the word tracker's messages, the Files and People dialogs' working state).
+  Step 7 moves it into the panels and dialogs.
 
-Topics: `data` (load, owners, links), `selection` (contact, app, groups, dates), `gap`,
-`appsGap`, `theme`, `scorer`, `aiScores`, plus one per panel's own controls (`leader`,
-`calendar`, `otd`, `phrase`, `browser`, `wrapped`, `vocab`).
-
-`js/select.js` caches:
+`Select` in `js/select.js` caches the selection and its numbers. Every key includes
+`Data.version`:
 
 | Value | Cached on |
 |---|---|
 | `base()` (filters, not dates) | `Data.version`, contact, app, groups. Uses `byKey` for one conversation. |
-| `range()` | `base()`, from, to |
-| `agg()`: `aggregateMessages` | `range()`, `convoGap` |
-| `content()`: `aggregateContent` plus word counts | `range()`, scorer, AI-score version |
-| `cross()`: `aggregateCrossApp` | `range()`, `appsGap` |
+| `range()` | the above, from, to |
+| `calls()` | the same as `base()` |
+| `agg()`: `aggregateMessages` | `range()`'s key, `convoGap` |
+| `content()`: `aggregateContent` | `range()`'s key, scorer, `AiMood.scoresVersion` |
+| `cross()`: `aggregateCrossApp` | `range()`'s key, `appsGap` |
 | `docFreq()` | `Data.version`, app, groups |
 
-AI mood scoring writes `m.ai` into records, so `AiMood` bumps an AI-score version, and
-`content()` recomputes with the new scores.
+AI mood scoring writes `m.ai` into records, so `AiMood` bumps `scoresVersion` whenever
+it does, and `content()` recomputes with the new scores. `refresh()` reads everything
+through `Select`, so drawing again for a new theme or a sorted table reuses the numbers
+(R8). `selectMessages`, `selectCalls` and `inDates` are the plain functions behind it,
+replacing `baseMessages`, `baseCalls` and `inRange`.
 
 ### Step 7 · Panels
 

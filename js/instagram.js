@@ -22,7 +22,7 @@
  *
  * DYI writes text as UTF-8 bytes escaped one per character ("Ã©" for "é"), so every
  * string is decoded again. Records carry the sender's display name in `sn`, and the page
- * sets `o` from S.owners as for WhatsApp. When the export includes your profile
+ * sets `o` from Prefs.owners as for WhatsApp. When the export includes your profile
  * (Instagram's personal_information.json, Facebook's profile_information.json), each
  * contact gets `owner`, your name, as the page's first guess.
  *

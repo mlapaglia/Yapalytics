@@ -11,7 +11,7 @@
  * Saved Messages and Replies are skipped, as are service messages (joins, pins, calls…).
  * Reactions are a field on messages in this format, so they never count as messages.
  *
- * Records carry the sender's display name in `sn`, and the page sets `o` from S.owners as
+ * Records carry the sender's display name in `sn`, and the page sets `o` from Prefs.owners as
  * for WhatsApp. Each contact also gets `owner`, your display name when the export shows
  * it: from personal_information in a full export, or as the sender of a 1-on-1 chat who
  * isn't the other person (a personal chat's id is the other person's user id). The page

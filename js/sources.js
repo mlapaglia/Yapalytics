@@ -226,7 +226,7 @@ const Sources = {
   },
 };
 
-/** Records from these apps carry their sender in `sn` and get `o` from S.owners. */
+/** Records from these apps carry their sender in `sn` and get `o` from Prefs.owners. */
 const hasOwner = (s) => !!Sources.byId(s)?.senderNames;
 /** The name an app's export calls you by when it wasn't customized. */
 const isDefaultOwner = (s, name) => name != null && Sources.byId(s)?.defaultOwner === name;
