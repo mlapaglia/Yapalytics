@@ -723,11 +723,11 @@ const AiAnalysis = {
     const t = this.transcript(conv);
     if (!t.count) return;
     if (this.backend !== 'claude') return this.send(conv, t);
-    if (!this.settings.claudeKey.trim()) return this.showStatus('<p class="ai-error">Enter your Anthropic API key first.</p>');
+    if (!this.settings.claudeKey.trim()) return this.showStatus(html`<p class="ai-error">Enter your Anthropic API key first.</p>`);
     const model = CLAUDE_MODELS.find((m) => m.id === this.settings.claudeModel) || CLAUDE_MODELS[0];
     const est = estimateClaude(analysisPrompt(t.text, $('#aiQuestion').value).length + ANALYSIS_SYSTEM.length, model.id);
     const cost = est.cost < 0.01 ? 'under $0.01' : `about $${est.cost.toFixed(2)}`;
-    this.showStatus(`<div class="ai-confirm">
+    this.showStatus(html`<div class="ai-confirm">
       <p><b>Send ${fmtNum(t.count)} messages (${fmtDayRange(t.first, t.last)}) to Anthropic?</b> About ${fmtNum(Math.round(est.tokens / 1000) * 1000)} tokens: ${cost} with ${model.label}, plus the reply. ${$('#aiRedact').checked ? 'Names, numbers, emails and links are hidden (best effort).' : 'Names, numbers, emails and links are included as they are.'}</p>
       <details id="aiPreview"><summary>See exactly what will be sent</summary><pre></pre></details>
       <div class="ai-actions"><button class="btn small primary" type="button" data-ai="send">Send to Claude</button><button class="btn small ghost" type="button" data-ai="cancel">Cancel</button></div>
@@ -748,7 +748,7 @@ const AiAnalysis = {
     const question = $('#aiQuestion').value;
     $('#aiRun').disabled = true;
     const onStatus = (text) => {
-      if (run === this.run) this.showStatus(`<p><span class="spinner" aria-hidden="true"></span>${escapeHtml(text)}</p><div class="ai-actions"><button class="btn small ghost" type="button" data-ai="stop">Stop</button></div>`);
+      if (run === this.run) this.showStatus(html`<p><span class="spinner" aria-hidden="true"></span>${text}</p><div class="ai-actions"><button class="btn small ghost" type="button" data-ai="stop">Stop</button></div>`);
     };
     onStatus('Starting…');
     try {
@@ -771,7 +771,7 @@ const AiAnalysis = {
       if (run !== this.run) return;
       if (!(err instanceof AiError)) console.warn('AI analysis failed:', err);
       const msg = err instanceof AiError ? err.message : `Something went wrong: ${(err && err.message) || err}`;
-      this.showStatus(`<p class="ai-error">${escapeHtml(msg)}</p>`);
+      this.showStatus(html`<p class="ai-error">${msg}</p>`);
     } finally {
       if (run === this.run) {
         this.busy = false;
@@ -795,15 +795,15 @@ const AiAnalysis = {
         : (CLAUDE_MODELS.find((m) => m.id === this.settings.claudeModel) || CLAUDE_MODELS[0]).label;
     const moodWord = { positive: 'Positive', negative: 'Negative', mixed: 'Mixed', neutral: 'Neutral' };
     const day = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-    const html = `
-      ${question.trim() && r.answer ? `<section class="ai-answer"><h3>${escapeHtml(question.trim())}</h3><p>${escapeHtml(r.answer)}</p></section>` : ''}
-      ${r.summary ? `<h3>Summary</h3><p>${escapeHtml(r.summary)}</p>` : ''}
-      ${r.tone.length ? `<h3>Tone</h3><ul class="ai-tone">${r.tone.map((x) => `<li><b>${escapeHtml(x.speaker)}</b> ${escapeHtml(x.description)}</li>`).join('')}</ul>` : ''}
-      ${r.moments.length ? `<h3>Moments</h3><ol class="ai-moments">${r.moments.map((m) => `<li><button type="button" class="ai-date" data-day="${m.date}" title="Read that day">${day(m.date)}</button><span class="ai-dot ${m.mood}" title="${moodWord[m.mood]}"></span><span><b>${escapeHtml(m.title)}</b>${m.detail ? `: ${escapeHtml(m.detail)}` : ''}</span></li>`).join('')}</ol>` : ''}
-      ${r.topics.length ? `<h3>Topics</h3><div class="ai-topics">${r.topics.map((x) => `<span class="mw">${escapeHtml(x)}</span>`).join('')}</div>` : ''}
-      <p class="mood-note">By ${escapeHtml(who)}, from the ${t.count === t.total ? '' : 'latest '}${fmtNum(t.count)} messages (${fmtDayRange(t.first, t.last)}).${r.dropped ? ` ${r.dropped} moment${r.dropped === 1 ? '' : 's'} with dates outside them left out.` : ''} AI can get things wrong: check the messages.</p>`;
+    const report = html`
+      ${question.trim() && r.answer ? html`<section class="ai-answer"><h3>${question.trim()}</h3><p>${r.answer}</p></section>` : ''}
+      ${r.summary ? html`<h3>Summary</h3><p>${r.summary}</p>` : ''}
+      ${r.tone.length ? html`<h3>Tone</h3><ul class="ai-tone">${r.tone.map((x) => html`<li><b>${x.speaker}</b> ${x.description}</li>`)}</ul>` : ''}
+      ${r.moments.length ? html`<h3>Moments</h3><ol class="ai-moments">${r.moments.map((m) => html`<li><button type="button" class="ai-date" data-day="${m.date}" title="Read that day">${day(m.date)}</button><span class="ai-dot ${m.mood}" title="${moodWord[m.mood]}"></span><span><b>${m.title}</b>${m.detail ? `: ${m.detail}` : ''}</span></li>`)}</ol>` : ''}
+      ${r.topics.length ? html`<h3>Topics</h3><div class="ai-topics">${r.topics.map((x) => html`<span class="mw">${x}</span>`)}</div>` : ''}
+      <p class="mood-note">By ${who}, from the ${t.count === t.total ? '' : 'latest '}${fmtNum(t.count)} messages (${fmtDayRange(t.first, t.last)}).${r.dropped ? ` ${r.dropped} moment${r.dropped === 1 ? '' : 's'} with dates outside them left out.` : ''} AI can get things wrong: check the messages.</p>`;
     this.report = { id };
-    $('#aiReport').innerHTML = html;
+    $('#aiReport').innerHTML = report;
     $('#aiReport').hidden = false;
   },
 
@@ -834,7 +834,7 @@ const AiAnalysis = {
       const res = await fetch(`${base}/api/tags`);
       if (!res.ok) throw new Error(String(res.status));
       const names = ((await res.json()).models || []).map((m) => m.name).filter(Boolean);
-      $('#aiOllamaModels').innerHTML = names.map((n) => `<option value="${escapeHtml(n)}">`).join('');
+      $('#aiOllamaModels').innerHTML = html`${names.map((n) => html`<option value="${n}">`)}`;
       if (names.length && !$('#aiOllamaModel').value.trim()) $('#aiOllamaModel').value = names[0];
       this.readSettings();
       this.save();
@@ -881,7 +881,7 @@ const AiAnalysis = {
     }
     try {
       const models = await this.fetchLmModels();
-      $('#aiLmstudioModels').innerHTML = models.map((m) => `<option value="${escapeHtml(m.key)}">`).join('');
+      $('#aiLmstudioModels').innerHTML = html`${models.map((m) => html`<option value="${m.key}">`)}`;
       // Fill in a model if there's none, and replace one the server doesn't list, which
       // LM Studio would reject (spec 002, R12). A listed, unloaded model is kept.
       const field = $('#aiLmstudioModel');
@@ -941,8 +941,8 @@ const AiAnalysis = {
 
   init() {
     this.load();
-    $('#aiWebllmModel').innerHTML = WEBLLM_MODELS.map((m) => `<option value="${m.id}">${escapeHtml(m.label)}</option>`).join('');
-    $('#aiClaudeModel').innerHTML = CLAUDE_MODELS.map((m) => `<option value="${m.id}">${escapeHtml(m.label)}</option>`).join('');
+    $('#aiWebllmModel').innerHTML = html`${WEBLLM_MODELS.map((m) => html`<option value="${m.id}">${m.label}</option>`)}`;
+    $('#aiClaudeModel').innerHTML = html`${CLAUDE_MODELS.map((m) => html`<option value="${m.id}">${m.label}</option>`)}`;
     $('#aiWebllmModel').value = this.settings.webllmModel;
     $('#aiClaudeModel').value = this.settings.claudeModel;
     $('#aiOllamaUrl').value = this.settings.ollamaUrl;

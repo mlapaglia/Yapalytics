@@ -469,7 +469,7 @@ function renderOwnerDialog(sources) {
       li.className = 'owner-row';
       li.dataset.source = s;
       li.dataset.app = SOURCES[s];
-      li.innerHTML = `<label class="owner-app" for="owner-${s}">${logoSvg(s)}${escapeHtml(SOURCES[s])}</label>
+      li.innerHTML = html`<label class="owner-app" for="owner-${s}">${logoSvg(s)}${SOURCES[s]}</label>
         <div class="owner-pick"><select id="owner-${s}"></select><span class="owner-origin"></span></div>`;
       const sel = li.querySelector('select');
       for (const [n, k] of ownerChoices(s)) {
@@ -686,32 +686,31 @@ function unlinkThread(key) {
 
 function threadChip(key, extra = '') {
   const c = S.contacts.get(key);
-  return `<span class="chip person-chip">${escapeHtml(threadName(c))} <small>${escapeHtml(SOURCES[c.s || 0])} · ${fmtNum(S.threadN.get(key) || 0)}</small>${extra}</span>`;
+  return html`<span class="chip person-chip">${threadName(c)} <small>${SOURCES[c.s || 0]} · ${fmtNum(S.threadN.get(key) || 0)}</small>${extra}</span>`;
 }
 
 function renderPeopleDialog() {
   const sug = S.suggestions;
-  $('#peopleSuggest').innerHTML = '<h3 class="profile-h">Suggestions</h3>' + (sug.length
-    ? `<ul class="people-list">${sug.map((x, i) => `<li>
-        <div class="chips">${x.keys.map((k) => threadChip(k)).join('')}</div>
-        <span class="meta">Same ${escapeHtml(x.reasons.map((r) => REASON_TEXT[r]).join(' and '))}</span>
+  $('#peopleSuggest').innerHTML = html`<h3 class="profile-h">Suggestions</h3>${sug.length
+    ? html`<ul class="people-list">${sug.map((x, i) => html`<li>
+        <div class="chips">${x.keys.map((k) => threadChip(k))}</div>
+        <span class="meta">Same ${x.reasons.map((r) => REASON_TEXT[r]).join(' and ')}</span>
         <span class="people-actions"><button class="btn small primary" type="button" data-accept="${i}">Link</button><button class="btn small ghost" type="button" data-dismiss="${i}">Dismiss</button></span>
-      </li>`).join('')}</ul>`
-    : '<p class="sub">Nothing to suggest. Conversations that share a name, phone number or email show up here.</p>');
+      </li>`)}</ul>`
+    : html`<p class="sub">Nothing to suggest. Conversations that share a name, phone number or email show up here.</p>`}`;
 
   const linked = [...S.contacts.values()].filter((c) => c.person).sort((a, b) => a.name.localeCompare(b.name));
   const unloaded = S.people.size - linked.length;
-  $('#peopleLinked').innerHTML = '<h3 class="profile-h">Linked people</h3>' + (linked.length
-    ? `<ul class="people-list">${linked.map((p) => {
+  $('#peopleLinked').innerHTML = html`<h3 class="profile-h">Linked people</h3>${linked.length
+    ? html`<ul class="people-list">${linked.map((p) => {
       const names = [...new Set(p.threads.map((k) => threadName(S.contacts.get(k))))];
-      return `<li data-person="${escapeHtml(p.key)}">
-        <select class="person-name" aria-label="Name for this person">${names.map((n) => `<option${n === p.name ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('')}</select>
-        <div class="chips">${p.threads.map((k) => threadChip(k, `<button type="button" class="chip-x" data-unlink="${escapeHtml(k)}" aria-label="Unlink ${escapeHtml(threadName(S.contacts.get(k)))}" title="Unlink">✕</button>`)).join('')}</div>
-        <button class="btn small ghost" type="button" data-unlink-all="${escapeHtml(p.key)}">Unlink all</button>
+      return html`<li data-person="${p.key}">
+        <select class="person-name" aria-label="Name for this person">${names.map((n) => html`<option${n === p.name ? raw(' selected') : ''}>${n}</option>`)}</select>
+        <div class="chips">${p.threads.map((k) => threadChip(k, html`<button type="button" class="chip-x" data-unlink="${k}" aria-label="Unlink ${threadName(S.contacts.get(k))}" title="Unlink">✕</button>`))}</div>
+        <button class="btn small ghost" type="button" data-unlink-all="${p.key}">Unlink all</button>
       </li>`;
-    }).join('')}</ul>`
-    : '<p class="sub">None yet.</p>') +
-    (unloaded > 0 ? `<p class="sub">${fmtNum(unloaded)} more saved link${unloaded === 1 ? ' is' : 's are'} for conversations that aren't loaded.</p>` : '');
+    })}</ul>`
+    : html`<p class="sub">None yet.</p>`}${unloaded > 0 ? html`<p class="sub">${fmtNum(unloaded)} more saved link${unloaded === 1 ? ' is' : 's are'} for conversations that aren't loaded.</p>` : ''}`;
 
   const linkable = [...S.linkable].sort((a, b) => threadName(a).localeCompare(threadName(b)));
   for (const sel of [$('#peopleA'), $('#peopleB')]) {
@@ -821,23 +820,23 @@ function openFilesDialog() {
 function renderFilesDialog() {
   const draft = S.filesDraft;
   $('#filesList').innerHTML = draft.length
-    ? draft.map((e) => {
-      const name = escapeHtml(e.name);
+    ? html`${draft.map((e) => {
+      const name = e.name;
       const mark = e.error
-        ? '<span class="files-warn" aria-hidden="true">⚠</span>'
-        : `<svg class="logo" aria-hidden="true"><use href="#logo-${FILE_LOGO[e.kind]}"/></svg>`;
+        ? html`<span class="files-warn" aria-hidden="true">⚠</span>`
+        : html`<svg class="logo" aria-hidden="true"><use href="#logo-${FILE_LOGO[e.kind]}"/></svg>`;
       // A thread file on its own could be either app: say which it's read as, and let the user change it (spec 009 R13).
       const app = isGuessedThread(e)
-        ? `<select class="files-app" aria-label="App for ${name}">${['instagram', 'messenger'].map((k) => `<option value="${k}"${e.kind === k ? ' selected' : ''}>${k === 'instagram' ? 'Instagram' : 'Messenger'}</option>`).join('')}</select>`
+        ? html`<select class="files-app" aria-label="App for ${name}">${['instagram', 'messenger'].map((k) => html`<option value="${k}"${e.kind === k ? raw(' selected') : ''}>${k === 'instagram' ? 'Instagram' : 'Messenger'}</option>`)}</select>`
         : '';
-      return `<li data-file="${e.id}"${e.on ? '' : ' class="off"'}>
-        <label class="files-pick"><input type="checkbox"${e.on ? ' checked' : ''}${e.error ? ' disabled' : ''}>${mark}<span class="files-name">${name}</span>${e.added ? '<small class="files-new">new</small>' : ''}</label>
+      return html`<li data-file="${e.id}"${e.on ? '' : raw(' class="off"')}>
+        <label class="files-pick"><input type="checkbox"${e.on ? raw(' checked') : ''}${e.error ? raw(' disabled') : ''}>${mark}<span class="files-name">${name}</span>${e.added ? html`<small class="files-new">new</small>` : ''}</label>
         ${app}<span class="files-size">${fmtBytes(e.size)}</span>
         <button class="chip-x files-x" type="button" data-remove="${e.id}" aria-label="Remove ${name}" title="Remove">✕</button>
-        ${e.error ? `<p class="files-error">${escapeHtml(e.error)}</p>` : ''}
+        ${e.error ? html`<p class="files-error">${e.error}</p>` : ''}
       </li>`;
-    }).join('')
-    : '<li class="files-empty">No files. Add some, or apply to start over.</li>';
+    })}`
+    : html`<li class="files-empty">No files. Add some, or apply to start over.</li>`;
   syncFilesActions();
 }
 
@@ -956,7 +955,7 @@ function initFiles() {
 
 // ------------------------------------------------------------------ conversation pickers (spec 012)
 
-const logoSvg = (s) => `<svg class="logo" aria-hidden="true"><use href="#logo-${SOURCE_LOGO[s]}"/></svg>`;
+const logoSvg = (s) => html`<svg class="logo" aria-hidden="true"><use href="#logo-${SOURCE_LOGO[s]}"/></svg>`;
 const countWords = (n, calls = 0) => [n && `${fmtNum(n)} message${n === 1 ? '' : 's'}`, calls && `${fmtNum(calls)} call${calls === 1 ? '' : 's'}`].filter(Boolean).join(', ');
 
 /**
@@ -983,11 +982,11 @@ function pickerOption(c, text, count, words) {
  * One picker row, and the picked item in the closed picker: logos, name, count (R7, R8).
  * A linked person's several logos already say it's joined, so it has no 🔗.
  */
-function pickerRowHtml(d, escape) {
-  if (!d.name) return `<div>${escape(d.text)}</div>`; // "Choose a conversation…"
-  const logos = d.sources ? d.sources.split(',').map((s) => logoSvg(+s)).join('') : '';
-  const mark = (m) => `<span class="pick-mark" aria-hidden="true">${m}</span>`;
-  return `<div class="pick-row" aria-label="${escape(d.aria || d.name)}">${logos ? `<span class="pick-logos">${logos}</span>` : ''}${d.kind === 'group' ? mark('👥') : ''}<span class="pick-name">${escape(d.name)}</span>${d.count ? `<span class="pick-count">${escape(d.count)}</span>` : ''}</div>`;
+function pickerRowHtml(d) {
+  if (!d.name) return String(html`<div>${d.text}</div>`); // "Choose a conversation…"
+  const logos = d.sources ? d.sources.split(',').map((s) => logoSvg(+s)) : [];
+  const mark = (m) => html`<span class="pick-mark" aria-hidden="true">${m}</span>`;
+  return String(html`<div class="pick-row" aria-label="${d.aria || d.name}">${logos.length ? html`<span class="pick-logos">${logos}</span>` : ''}${d.kind === 'group' ? mark('👥') : ''}<span class="pick-name">${d.name}</span>${d.count ? html`<span class="pick-count">${d.count}</span>` : ''}</div>`);
 }
 
 /** Makes a <select> searchable with Tom Select; null (a plain dropdown) when the library didn't load (R6). */
@@ -1377,22 +1376,18 @@ function docFreqFor() {
 }
 
 const LEADER_COLS = [
-  { key: 'label', title: 'Conversation', sort: (r) => r.label.toLowerCase(), fmt: (r) => escapeHtml(r.label) },
+  { key: 'label', title: 'Conversation', sort: (r) => r.label.toLowerCase(), fmt: (r) => r.label },
   { key: 'n', title: 'Messages', sort: (r) => r.n, fmt: (r) => fmtNum(r.n) },
   { key: 'sent', title: 'You sent', sort: (r) => r.sent, fmt: (r) => Math.round(r.sent * 100) + '%' },
   { key: 'yourReply', title: 'Your reply', sort: (r) => r.yourReply ?? Infinity, fmt: (r) => fmtDuration(r.yourReply), asc: true },
   { key: 'theirReply', title: 'Their reply', sort: (r) => r.theirReply ?? Infinity, fmt: (r) => fmtDuration(r.theirReply), asc: true },
   { key: 'started', title: 'You start', sort: (r) => r.started ?? -1, fmt: (r) => (r.started == null ? '–' : Math.round(r.started * 100) + '%') },
-  { key: 'len', title: 'Avg length', sort: (r) => r.lenYou, fmt: (r) => `${r.lenYou} <span class="muted">/ ${r.lenThem}</span>` },
+  { key: 'len', title: 'Avg length', sort: (r) => r.lenYou, fmt: (r) => html`${r.lenYou} <span class="muted">/ ${r.lenThem}</span>` },
   { key: 'streak', title: 'Streak', sort: (r) => r.streak, fmt: (r) => `${fmtNum(r.streak)}d` },
   { key: 'sig', title: 'Signature', sort: (r) => r.sig || '', fmt: (r) => r.sig || '' , cls: 'emoji' },
   { key: 'first', title: 'First', sort: (r) => r.first, fmt: (r) => new Date(r.first).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }) },
   { key: 'last', title: 'Last', sort: (r) => r.last, fmt: (r) => new Date(r.last).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) },
 ];
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-}
 
 function renderLeaderboard(A) {
   const avg = (bc, o) => (bc.lenN[o] ? Math.round(bc.lenSum[o] / bc.lenN[o]) : 0);
@@ -1417,8 +1412,8 @@ function renderLeaderboard(A) {
   for (const r of shown) r.sig = signatureEmoji(r.bc, A.emojiFreq, total);
 
   const table = $('#leaderTable');
-  table.innerHTML = `<thead><tr>${LEADER_COLS.map((c) => `<th data-key="${c.key}" class="${c.key === col.key ? 'sorted' + (S.leader.asc ? ' asc' : '') : ''}">${c.title}</th>`).join('')}</tr></thead>` +
-    `<tbody>${shown.map((r) => `<tr data-key="${escapeHtml(r.k)}">${LEADER_COLS.map((c) => `<td class="${c.cls || ''}">${c.fmt(r)}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  table.innerHTML = html`<thead><tr>${LEADER_COLS.map((c) => html`<th data-key="${c.key}" class="${c.key === col.key ? 'sorted' + (S.leader.asc ? ' asc' : '') : ''}">${c.title}</th>`)}</tr></thead>` +
+    html`<tbody>${shown.map((r) => html`<tr data-key="${r.k}">${LEADER_COLS.map((c) => html`<td class="${c.cls || ''}">${c.fmt(r)}</td>`)}</tr>`)}</tbody>`;
   const more = $('#leaderMore');
   more.hidden = rows.length <= 50;
   more.textContent = S.leader.all ? 'Show top 50' : `Show all ${fmtNum(rows.length)}`;
@@ -1431,11 +1426,11 @@ function renderDrifted(A) {
   const quiet = rows.filter((r) => r.n >= cut && A.last - r.last > DAYS * DAY_MS).slice(0, 15);
   const list = $('#driftList');
   list.innerHTML = quiet.length
-    ? quiet.map((r) => {
+    ? html`${quiet.map((r) => {
       const months = Math.round((A.last - r.last) / (30.4 * DAY_MS));
-      return `<li data-key="${escapeHtml(r.k)}"><span>${escapeHtml(labelFor(r.k))}</span><span class="meta">${fmtNum(r.n)} messages · last ${new Date(r.last).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })} (${months < 1 ? '<1' : months} mo before the end of this range)</span></li>`;
-    }).join('')
-    : '<li class="empty">Nobody you talked to a lot has gone quiet in this range.</li>';
+      return html`<li data-key="${r.k}"><span>${labelFor(r.k)}</span><span class="meta">${fmtNum(r.n)} messages · last ${new Date(r.last).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })} (${months < 1 ? '<1' : months} mo before the end of this range)</span></li>`;
+    })}`
+    : html`<li class="empty">Nobody you talked to a lot has gone quiet in this range.</li>`;
 }
 
 function newPeopleRows(A) {
@@ -1461,11 +1456,11 @@ function renderMilestones(A) {
     .slice(0, 40);
   const date = (t) => new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
   $('#milestoneList').innerHTML = items.length
-    ? items.map((m) => {
+    ? html`${items.map((m) => {
       const title = m.k === null ? `${ordinal(m.n)} message` : m.n === 1 ? `First message with ${labelFor(m.k)}` : `${ordinal(m.n)} message with ${labelFor(m.k)}`;
-      return `<li><b>${escapeHtml(title)}</b><span class="meta">${date(m.t)}</span></li>`;
-    }).join('')
-    : '<li class="empty">No milestones in this selection.</li>';
+      return html`<li><b>${title}</b><span class="meta">${date(m.t)}</span></li>`;
+    })}`
+    : html`<li class="empty">No milestones in this selection.</li>`;
 }
 
 // ------------------------------------------------------------------ mood details
@@ -1546,8 +1541,8 @@ function moodWhyHtml(m) {
     // The model's three probabilities (spec 001, R9), with VADER's score to compare.
     const pct = (x) => Math.round(x * 100) + '%';
     const [neg, neu, pos] = m.ai;
-    return `<div class="mood-why">
-    <div><b>${fmtScore(moodScore(m, 'ai'))} ${word}.</b> ${escapeHtml(effect)}</div>
+    return html`<div class="mood-why">
+    <div><b>${fmtScore(moodScore(m, 'ai'))} ${word}.</b> ${effect}</div>
     <div class="mood-words"><span class="mw pos">positive <b>${pct(pos)}</b></span><span class="mw">neutral <b>${pct(neu)}</b></span><span class="mw neg">negative <b>${pct(neg)}</b></span><span class="mw">VADER <b>${fmtScore(m.v)}</b></span></div>
     <div class="mood-note">How sure the AI model is of each reading. It takes the likeliest one; the score is positive minus negative.</div>
   </div>`;
@@ -1555,11 +1550,11 @@ function moodWhyHtml(m) {
   const e = moodLib().explainMood(m.b);
   const fmtV = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1);
   const words = e ? [...e.words].sort((a, b) => Math.abs(b.valence) - Math.abs(a.valence)) : [];
-  const chips = words.map((w) => `<span class="mw ${w.valence > 0 ? 'pos' : 'neg'}">${escapeHtml(w.word)} <b>${fmtV(w.valence)}</b>${w.lexicon !== w.valence ? ` <span class="was">was ${fmtV(w.lexicon)}</span>` : ''}</span>`);
-  if (e && e.emphasis) chips.push(`<span class="mw ${e.emphasis > 0 ? 'pos' : 'neg'}">! ? emphasis <b>${fmtV(e.emphasis)}</b></span>`);
-  return `<div class="mood-why">
-    <div><b>${fmtScore(m.v)} ${word}.</b> ${escapeHtml(effect)}</div>
-    ${chips.length ? `<div class="mood-words">${chips.join('')}</div>` : '<div class="mood-note">No words from VADER’s dictionary, so it scored 0.</div>'}
+  const chips = words.map((w) => html`<span class="mw ${w.valence > 0 ? 'pos' : 'neg'}">${w.word} <b>${fmtV(w.valence)}</b>${w.lexicon !== w.valence ? html` <span class="was">was ${fmtV(w.lexicon)}</span>` : ''}</span>`);
+  if (e && e.emphasis) chips.push(html`<span class="mw ${e.emphasis > 0 ? 'pos' : 'neg'}">! ? emphasis <b>${fmtV(e.emphasis)}</b></span>`);
+  return html`<div class="mood-why">
+    <div><b>${fmtScore(m.v)} ${word}.</b> ${effect}</div>
+    ${chips.length ? html`<div class="mood-words">${chips}</div>` : html`<div class="mood-note">No words from VADER’s dictionary, so it scored 0.</div>`}
     <div class="mood-note">Each word's value (after “not”, “very”, ALL CAPS and “but”) adds up and is squeezed into −1…+1. +0.05 or more counts as positive, −0.05 or less as negative.</div>
   </div>`;
 }
@@ -1591,7 +1586,7 @@ function initMoodDetails() {
     const bubble = pill.closest('.bubble');
     const open = bubble.querySelector('.mood-why');
     if (open) { open.remove(); return; }
-    bubble.insertAdjacentHTML('beforeend', moodWhyHtml(S.browserShown[+pill.dataset.i]));
+    bubble.insertAdjacentHTML('beforeend', String(moodWhyHtml(S.browserShown[+pill.dataset.i])));
   });
 }
 
@@ -1606,22 +1601,22 @@ function plainName(key) {
   return formatAddr(c.name) || formatAddr(c.addr) || key;
 }
 
-const personLink = (k, text = plainName(k)) => `<button type="button" class="person-link" data-profile="${escapeHtml(k)}">${escapeHtml(text)}</button>`;
+const personLink = (k, text = plainName(k)) => html`<button type="button" class="person-link" data-profile="${k}">${text}</button>`;
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s);
 const longDate = (t) => new Date(t).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
 const agoText = (t) => (Date.now() - t < DAY_MS ? 'today' : `${fmtGap(Date.now() - t)} ago`);
 
 /** Highlight parts (strings, { b }, { k, text }) as HTML. */
 function partsHtml(parts) {
-  return parts.map((p) => (typeof p === 'string' ? escapeHtml(p) : p.k != null ? personLink(p.k, p.text) : `<b>${escapeHtml(p.b)}</b>`)).join('');
+  return html`${parts.map((p) => (typeof p === 'string' ? p : p.k != null ? personLink(p.k, p.text) : html`<b>${p.b}</b>`))}`;
 }
 
 function renderHighlights(msgs, A, X) {
   const crossApp = X ? crossAppHighlight(X, { labelFor: plainName, names: SOURCES }) : null;
   const items = buildHighlights(msgs, A, { labelFor: plainName, senderLabel, single: S.filter.contact !== 'all', crossApp, limit: Infinity });
   $('#highlights').innerHTML = items.length
-    ? items.map((h, i) => `<li${i >= HIGHLIGHT_LIMIT ? ' class="hl-more" hidden' : ''}><span class="hl-icon" aria-hidden="true">${escapeHtml(h.icon)}</span><span>${partsHtml(h.parts)}</span></li>`).join('')
-    : '<li class="empty">Not enough messages here for highlights yet.</li>';
+    ? html`${items.map((h, i) => html`<li${i >= HIGHLIGHT_LIMIT ? raw(' class="hl-more" hidden') : ''}><span class="hl-icon" aria-hidden="true">${h.icon}</span><span>${partsHtml(h.parts)}</span></li>`)}`
+    : html`<li class="empty">Not enough messages here for highlights yet.</li>`;
   showMoreHighlights(false);
 }
 
@@ -1657,24 +1652,23 @@ function renderOnThisDay(base) {
   const years = sameDayHistory(base, sel.month, sel.day, todayStart);
   if (!years.length) {
     const near = nearestDayWithHistory(daysWithHistory(base, todayStart), sel.month, sel.day);
-    box.innerHTML = '<p class="empty">Nothing on this date in earlier years.</p>' +
-      (near ? `<button class="btn small" type="button" data-otd-goto="${near.month}-${near.day}">Go to ${escapeHtml(dayName(near))}, the nearest day with messages →</button>` : '');
+    box.innerHTML = html`<p class="empty">Nothing on this date in earlier years.</p>${near ? html`<button class="btn small" type="button" data-otd-goto="${near.month}-${near.day}">Go to ${dayName(near)}, the nearest day with messages →</button>` : ''}`;
     return;
   }
   const single = S.filter.contact !== 'all';
-  box.innerHTML = years.slice(0, 4).map(({ year, msgs }) => {
+  box.innerHTML = html`${years.slice(0, 4).map(({ year, msgs }) => {
     const back = now.getFullYear() - year;
     const day = new Date(year, sel.month, sel.day).getTime();
     const top = single ? null : busiestConversation(msgs);
-    const withWhom = top ? (top.of > 1 ? `, mostly with ${personLink(top.k)}` : ` with ${personLink(top.k)}`) : '';
+    const withWhom = top ? (top.of > 1 ? html`, mostly with ${personLink(top.k)}` : html` with ${personLink(top.k)}`) : '';
     const moments = pickMoments(msgs, 3).map((m) =>
-      `<div class="otd-msg ${m.o ? 'sent' : 'recv'}"><span class="otd-who">${escapeHtml(momentSender(m))}</span>${escapeHtml(clip(m.b, 140))}</div>`).join('');
-    return `<section class="otd-year">
-      <div class="otd-head"><b>${back ? `${back} year${back === 1 ? '' : 's'} ago` : 'Earlier this year'}</b> <span class="muted">${escapeHtml(longDate(day))} · ${fmtNum(msgs.length)} message${msgs.length === 1 ? '' : 's'}</span>${withWhom}</div>
-      ${moments ? `<div class="otd-msgs">${moments}</div>` : ''}
+      html`<div class="otd-msg ${m.o ? 'sent' : 'recv'}"><span class="otd-who">${momentSender(m)}</span>${clip(m.b, 140)}</div>`);
+    return html`<section class="otd-year">
+      <div class="otd-head"><b>${back ? `${back} year${back === 1 ? '' : 's'} ago` : 'Earlier this year'}</b> <span class="muted">${longDate(day)} · ${fmtNum(msgs.length)} message${msgs.length === 1 ? '' : 's'}</span>${withWhom}</div>
+      ${moments.length ? html`<div class="otd-msgs">${moments}</div>` : ''}
       <button class="btn small ghost" type="button" data-otd-day="${day}">Read that day →</button>
     </section>`;
-  }).join('');
+  })}`;
 }
 
 /** Show one calendar day in the message list. */
@@ -1697,7 +1691,7 @@ function profileCrossApp(key, msgs, name) {
   const P = aggregateCrossApp(msgs, S.appsGap).people.get(key);
   if (!P) return '';
   const K = crossKpis(P, name);
-  return `<h3 class="profile-h">Across apps</h3><div class="app-splits">${appSplitHtml(P, name)}</div>
+  return html`<h3 class="profile-h">Across apps</h3><div class="app-splits">${appSplitHtml(P, name)}</div>
     <div class="kpis profile-kpis apps-kpis">${K.switches}${K.who}${K.replies}</div>`;
 }
 
@@ -1718,8 +1712,8 @@ function openProfile(key) {
 
   const tiles = [
     kpi('Messages', fmtNum(F.n), `${pct(F.you.messages, F.n)} from you`),
-    kpi('Since', escapeHtml(new Date(F.first.t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })), agoText(F.first.t)),
-    kpi('Last message', escapeHtml(new Date(F.last.t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })), agoText(F.last.t)),
+    kpi('Since', new Date(F.first.t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }), agoText(F.first.t)),
+    kpi('Last message', new Date(F.last.t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }), agoText(F.last.t)),
     kpi('Longest streak', F.longestStreak.len ? `${fmtNum(F.longestStreak.len)} days` : '–', F.longestStreak.len ? `${shortDate(F.longestStreak.start)} – ${shortDate(F.longestStreak.end)}` : '', 'Consecutive days with at least one message'),
     kpi('Busiest month', F.busiestMonth ? new Date(monthToTs(F.busiestMonth.mo)).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }) : '–', F.busiestMonth ? `${fmtNum(F.busiestMonth.n)} messages` : ''),
     kpi('Favorite time', hourText(F.peakHour), WEEKDAY_PLURAL[F.peakDow]),
@@ -1742,22 +1736,22 @@ function openProfile(key) {
     const aWins = way === 'low' ? a < b : a > b;
     return aWins ? ['lead', ''] : ['', 'lead'];
   };
-  const vs = `<table class="vs"><thead><tr><th></th><th>You</th><th>${escapeHtml(them)}</th></tr></thead><tbody>${vsRows.map(([label, a, b, fmt, way]) => {
+  const vs = html`<table class="vs"><thead><tr><th></th><th>You</th><th>${them}</th></tr></thead><tbody>${vsRows.map(([label, a, b, fmt, way]) => {
     const [la, lb] = lead(a, b, way, fmt);
-    return `<tr><th scope="row">${label}</th><td class="${la}">${escapeHtml(fmt(a))}</td><td class="${lb}">${escapeHtml(fmt(b))}</td></tr>`;
-  }).join('')}</tbody></table>`;
+    return html`<tr><th scope="row">${label}</th><td class="${la}">${fmt(a)}</td><td class="${lb}">${fmt(b)}</td></tr>`;
+  })}</tbody></table>`;
 
-  $('#profileTop').innerHTML = `
+  $('#profileTop').innerHTML = html`
     <header class="profile-head">
-      <div class="avatar" style="background: var(--series-${hue + 1})" aria-hidden="true">${escapeHtml(initials)}</div>
+      <div class="avatar" style="background: var(--series-${hue + 1})" aria-hidden="true">${initials}</div>
       <div>
-        <h2 id="profileName">${escapeHtml(name)}</h2>
-        <p class="sub">${group ? `Group chat · ${fmtNum(members)} people` : '1-on-1'} on ${escapeHtml(c.person ? andList(c.sources.map((s) => SOURCES[s])) : SOURCES[c.s || 0])} · all time</p>
-        ${c.person ? `<p class="sub profile-linked">Linked: ${escapeHtml(c.threads.map((k) => `${threadName(S.contacts.get(k))} (${SOURCES[S.contacts.get(k).s || 0]})`).join(', '))}</p>` : ''}
+        <h2 id="profileName">${name}</h2>
+        <p class="sub">${group ? `Group chat · ${fmtNum(members)} people` : '1-on-1'} on ${c.person ? andList(c.sources.map((s) => SOURCES[s])) : SOURCES[c.s || 0]} · all time</p>
+        ${c.person ? html`<p class="sub profile-linked">Linked: ${c.threads.map((k) => `${threadName(S.contacts.get(k))} (${SOURCES[S.contacts.get(k).s || 0]})`).join(', ')}</p>` : ''}
       </div>
     </header>
-    <div class="kpis profile-kpis">${tiles.join('')}</div>
-    <h3 class="profile-h">You and ${escapeHtml(them === 'Everyone else' ? 'everyone else' : them)}</h3>
+    <div class="kpis profile-kpis">${tiles}</div>
+    <h3 class="profile-h">You and ${them === 'Everyone else' ? 'everyone else' : them}</h3>
     ${vs}${c.person ? profileCrossApp(key, msgs, name) : ''}`;
 
   const words = distinctiveWords(msgs, docFreqFor(), 15);
@@ -1765,19 +1759,19 @@ function openProfile(key) {
   const bottom = [];
   if (group) {
     const rows = senderBreakdown(msgs, key);
-    bottom.push(`<h3 class="profile-h">Most active</h3><ol class="plain-list member-list">${rows.map((r) =>
-      `<li><span>${escapeHtml(r.label)}</span><span class="meta">${fmtNum(r.n)} · ${pct(r.n, F.n)}</span></li>`).join('')}</ol>`);
+    bottom.push(html`<h3 class="profile-h">Most active</h3><ol class="plain-list member-list">${rows.map((r) =>
+      html`<li><span>${r.label}</span><span class="meta">${fmtNum(r.n)} · ${pct(r.n, F.n)}</span></li>`)}</ol>`);
   }
   if (words.length) {
-    bottom.push(`<h3 class="profile-h">What you talk about</h3><p class="sub profile-sub">Words that set this conversation apart</p><div class="chips">${words.map((w) => `<span class="chip">${escapeHtml(w.w)}</span>`).join('')}</div>`);
+    bottom.push(html`<h3 class="profile-h">What you talk about</h3><p class="sub profile-sub">Words that set this conversation apart</p><div class="chips">${words.map((w) => html`<span class="chip">${w.w}</span>`)}</div>`);
   }
   if (started) {
-    bottom.push(`<h3 class="profile-h">How it started</h3><blockquote class="first-msg"><p>${escapeHtml(clip(started.b, 280))}</p><footer>${escapeHtml(started.o ? 'You' : momentSender(started))}, ${escapeHtml(longDate(started.t))}</footer></blockquote>`);
+    bottom.push(html`<h3 class="profile-h">How it started</h3><blockquote class="first-msg"><p>${clip(started.b, 280)}</p><footer>${started.o ? 'You' : momentSender(started)}, ${longDate(started.t)}</footer></blockquote>`);
   }
   const linkLabel = c.person ? 'Manage links…' : isLinkable(c) ? 'Same person on another app? Link…' : '';
-  const linkBtn = linkLabel ? `<button class="btn" type="button" data-link-people="${escapeHtml(key)}">${linkLabel}</button>` : '';
-  bottom.push(`<div class="profile-actions">${linkBtn}<button class="btn primary" type="button" data-focus="${escapeHtml(key)}">Focus the dashboard on ${escapeHtml(name)}</button></div>`);
-  $('#profileBottom').innerHTML = bottom.join('');
+  const linkBtn = linkLabel ? html`<button class="btn" type="button" data-link-people="${key}">${linkLabel}</button>` : '';
+  bottom.push(html`<div class="profile-actions">${linkBtn}<button class="btn primary" type="button" data-focus="${key}">Focus the dashboard on ${name}</button></div>`);
+  $('#profileBottom').innerHTML = html`${bottom}`;
 
   const dlg = $('#profile');
   if (!dlg.open) dlg.showModal();
@@ -1838,8 +1832,8 @@ const TRIGGER_TEXT = { share: 'A shared post', link: 'A link', media: 'A photo, 
 function appSplitBar(counts, cls = '') {
   const total = counts.reduce((s, [, n]) => s + n, 0);
   const parts = counts.filter(([, n]) => n).map(([s, n]) => ({ s, n, text: `${SOURCES[s]} ${shareText(n, total)}` }));
-  const bar = `<div class="app-split ${cls}" role="img" aria-label="${escapeHtml(parts.map((p) => p.text).join(', '))}">${parts.map((p) =>
-    `<span style="flex: ${p.n} 1 0; background: var(--series-${p.s + 1})" title="${escapeHtml(p.text)}"></span>`).join('')}</div>`;
+  const bar = html`<div class="app-split ${cls}" role="img" aria-label="${parts.map((p) => p.text).join(', ')}">${parts.map((p) =>
+    html`<span style="flex: ${p.n} 1 0; background: var(--series-${p.s + 1})" title="${p.text}"></span>`)}</div>`;
   return { bar, parts };
 }
 
@@ -1848,10 +1842,10 @@ function appSplitHtml(P, them) {
   const apps = sortedApps(P);
   const row = (label, n) => {
     const { bar, parts } = appSplitBar(apps.map((s) => [s, n(P.apps.get(s))]));
-    return `<div class="app-split-row"><span class="app-split-label">${escapeHtml(label)}</span>${bar}<span class="app-split-legend">${parts.map((p) =>
-      `<span><i style="background: var(--series-${p.s + 1})"></i>${escapeHtml(p.text)}</span>`).join('')}</span></div>`;
+    return html`<div class="app-split-row"><span class="app-split-label">${label}</span>${bar}<span class="app-split-legend">${parts.map((p) =>
+      html`<span><i style="background: var(--series-${p.s + 1})"></i>${p.text}</span>`)}</span></div>`;
   };
-  return row('Both of you', (a) => a.n[0] + a.n[1]) + row('You', (a) => a.n[1]) + row(them, (a) => a.n[0]);
+  return html`${row('Both of you', (a) => a.n[0] + a.n[1])}${row('You', (a) => a.n[1])}${row(them, (a) => a.n[0])}`;
 }
 
 /** M6: who makes most of the moves, as [who, "68%"], or null without switches. */
@@ -1873,7 +1867,7 @@ function crossKpis(P, them) {
     multi: kpi('Multi-app conversations', shareText(P.multiSessions, P.sessions), `${fmtNum(P.multiSessions)} of ${fmtNum(P.sessions)} conversations`, 'Conversations that used more than one app'),
     bounce: kpi('Back and forth', shareText(P.bounceSessions, P.sessions), 'left an app and came back', 'Conversations that moved to another app and then back again'),
     days: kpi('Multi-app days', shareText(P.multiDays, P.days), `${fmtNum(P.multiDays)} of ${fmtNum(P.days)} active days`, 'Days with messages on more than one app'),
-    who: kpi('Who switches', who ? escapeHtml(who[0]) : '–', who ? `${who[0] === 'You' || who[0] === 'They' ? 'make' : 'makes'} ${who[1]} of the moves` : 'no switches yet', 'Who sent the first message on the new app'),
+    who: kpi('Who switches', who ? who[0] : '–', who ? `${who[0] === 'You' || who[0] === 'They' ? 'make' : 'makes'} ${who[1]} of the moves` : 'no switches yet', 'Who sent the first message on the new app'),
     replies: kpi('Cross-app replies', shareText(cross, replies), `answered on another app · ${fmtDuration(crossMs)} vs ${fmtDuration(sameMs)} same-app`, 'Replies sent on a different app than the message they answer, and the median reply time for each'),
   };
 }
@@ -1890,44 +1884,44 @@ function renderCrossApp(ui, X) {
     ? `${fmtNum(X.people.size)} linked ${X.people.size === 1 ? 'person' : 'people'} on more than one app in this selection · a conversation ends after ${gapWords} of quiet`
     : `You and ${them} on ${appNames(P.apps.keys())} · a conversation ends after ${gapWords} of quiet`;
   $('#appsSplit').innerHTML = appSplitHtml(P, all ? 'Them' : them);
-  $('#appsKpis').innerHTML = Object.values(crossKpis(P, them)).join('');
+  $('#appsKpis').innerHTML = html`${Object.values(crossKpis(P, them))}`;
 
   // M12: the conversation with the most switches
   const b = P.busiest;
   if (b) {
     const d = new Date(b.start);
     const day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    $('#appsJuggle').innerHTML = `Biggest juggle: <b>${fmtNum(b.switches)} switch${b.switches === 1 ? '' : 'es'}</b> between ${escapeHtml(appNames(b.apps))}${all ? ` with ${personLink(b.k)}` : ''} on ${escapeHtml(longDate(b.start))}. ` +
-      `<button class="btn small ghost" type="button" data-otd-day="${day}" data-contact="${escapeHtml(b.k)}">Read that day →</button>`;
+    $('#appsJuggle').innerHTML = html`Biggest juggle: <b>${fmtNum(b.switches)} switch${b.switches === 1 ? '' : 'es'}</b> between ${appNames(b.apps)}${all ? html` with ${personLink(b.k)}` : ''} on ${longDate(b.start)}. ` +
+      html`<button class="btn small ghost" type="button" data-otd-day="${day}" data-contact="${b.k}">Read that day →</button>`;
   } else $('#appsJuggle').textContent = 'No conversation here has moved between apps yet.';
 
   // Linked people (All conversations only)
   show('#appsPeopleCard', all);
   if (all) {
     const rows = [...X.people].sort((a, b) => b[1].switches - a[1].switches || b[1].n - a[1].n);
-    $('#appsPeople').innerHTML = '<thead><tr><th>Person</th><th>Messages</th><th>Apps</th><th>Switches</th><th>Per conversation</th><th>Multi-app</th><th>Who switches</th><th>Main app</th></tr></thead>' +
-      `<tbody>${rows.map(([k, Q]) => {
+    $('#appsPeople').innerHTML = html`<thead><tr><th>Person</th><th>Messages</th><th>Apps</th><th>Switches</th><th>Per conversation</th><th>Multi-app</th><th>Who switches</th><th>Main app</th></tr></thead>` +
+      html`<tbody>${rows.map(([k, Q]) => {
         const who = whoSwitches(Q, plainName(k));
         const { bar } = appSplitBar(sortedApps(Q).map((s) => [s, Q.apps.get(s).n[0] + Q.apps.get(s).n[1]]), 'mini');
-        return `<tr data-person="${escapeHtml(k)}"><td>${personLink(k)}</td><td>${fmtNum(Q.n)}</td><td class="apps-cell">${bar}</td><td>${fmtNum(Q.switches)}</td>` +
-          `<td>${Q.sessions ? (Q.switches / Q.sessions).toFixed(1) : '–'}</td><td>${shareText(Q.multiSessions, Q.sessions)}</td>` +
-          `<td>${who ? `${escapeHtml(who[0])} ${who[1]}` : '–'}</td><td>${escapeHtml(SOURCES[Q.mainApp])}</td></tr>`;
-      }).join('')}</tbody>`;
+        return html`<tr data-person="${k}"><td>${personLink(k)}</td><td>${fmtNum(Q.n)}</td><td class="apps-cell">${bar}</td><td>${fmtNum(Q.switches)}</td>
+          <td>${Q.sessions ? (Q.switches / Q.sessions).toFixed(1) : '–'}</td><td>${shareText(Q.multiSessions, Q.sessions)}</td>
+          <td>${who ? `${who[0]} ${who[1]}` : '–'}</td><td>${SOURCES[Q.mainApp]}</td></tr>`;
+      })}</tbody>`;
   }
 
   // M11: main app over time
   Charts.set('c-appshare', appShareOption(ui, P.months, SOURCES));
   const shifts = all ? [...X.people].flatMap(([k, Q]) => Q.shifts.map((s) => ({ ...s, k }))) : P.shifts;
-  $('#appsShareNote').innerHTML = 'Each app’s share of messages per month' + (shifts.length
-    ? '. ' + shifts.sort((a, b) => a.mo - b.mo).map((s) => `${all ? personLink(s.k) + ': m' : 'M'}oved from ${escapeHtml(SOURCES[s.from])} to ${escapeHtml(SOURCES[s.to])} around ${escapeHtml(monthText(s.mo))}`).join('; ') + '.'
-    : '');
+  const moves = shifts.sort((a, b) => a.mo - b.mo).map((s, i) =>
+    html`${i ? '; ' : ''}${all ? html`${personLink(s.k)}: m` : 'M'}oved from ${SOURCES[s.from]} to ${SOURCES[s.to]} around ${monthText(s.mo)}`);
+  $('#appsShareNote').innerHTML = html`Each app’s share of messages per month${moves.length ? html`. ${moves}.` : ''}`;
 
   // M7, M8: routes and what sets off a switch
   Charts.set('c-routes', P.switches ? switchRoutesOption(ui, P.routes, SOURCES) : emptyOption(ui, 'No switches in this selection'));
   const kinds = CROSS_TRIGGERS.filter((t) => t !== 'share' || P.apps.has(5) || P.apps.has(6) || P.triggers.share);
   $('#appsTriggers').innerHTML = P.switches
-    ? kinds.map((t) => `<li><span>${TRIGGER_TEXT[t]}</span><span class="meter" aria-hidden="true"><i style="width: ${(P.triggers[t] / P.switches) * 100}%"></i></span><span class="meta">${shareText(P.triggers[t], P.switches)} · ${fmtNum(P.triggers[t])}</span></li>`).join('')
-    : '<li class="empty">No switches in this selection.</li>';
+    ? html`${kinds.map((t) => html`<li><span>${TRIGGER_TEXT[t]}</span><span class="meter" aria-hidden="true"><i style="width: ${(P.triggers[t] / P.switches) * 100}%"></i></span><span class="meta">${shareText(P.triggers[t], P.switches)} · ${fmtNum(P.triggers[t])}</span></li>`)}`
+    : html`<li class="empty">No switches in this selection.</li>`;
 
   // M10: what each app is for
   const apps = sortedApps(P);
@@ -1946,8 +1940,8 @@ function renderCrossApp(ui, X) {
     [`${all ? 'They usually reply' : `${them} usually replies`} in`, (a) => fmtDuration(a.replyMedian[0])],
   ];
   $('#appsForNote').textContent = 'A conversation counts on the app it started on; a reply on the app it was sent on';
-  $('#appsFor').innerHTML = `<thead><tr><th></th>${apps.map((s) => `<th scope="col">${escapeHtml(SOURCES[s])}</th>`).join('')}</tr></thead>` +
-    `<tbody>${rows.map(([label, fmt]) => `<tr><th scope="row">${escapeHtml(label)}</th>${apps.map((s) => `<td>${escapeHtml(fmt(P.apps.get(s)))}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  $('#appsFor').innerHTML = html`<thead><tr><th></th>${apps.map((s) => html`<th scope="col">${SOURCES[s]}</th>`)}</tr></thead>
+    <tbody>${rows.map(([label, fmt]) => html`<tr><th scope="row">${label}</th>${apps.map((s) => html`<td>${fmt(P.apps.get(s))}</td>`)}</tr>`)}</tbody>`;
 }
 
 // ---- lazy sections: render expensive sections only when they're on (or near) the screen
@@ -2225,8 +2219,9 @@ function renderCalendar(ui, A, none) {
   Charts.set('c-calendar', calendarOption(ui, A, S.calYear));
 }
 
+/** A KPI tile. Text is escaped; pass html`…` for a value or sub with markup (<small>). */
 function kpi(label, value, sub = '', title = '') {
-  return `<div class="kpi" title="${title}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-sub">${sub}</div></div>`;
+  return html`<div class="kpi" title="${title}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-sub">${sub}</div></div>`;
 }
 
 function shortDate(d) {
@@ -2251,14 +2246,14 @@ function renderKpis(A) {
     kpi('Longest silence', A.longestSilence.len ? `${fmtNum(A.longestSilence.len)} days` : '–', A.longestSilence.len ? `${shortDate(A.longestSilence.start)} – ${shortDate(A.longestSilence.end)}` : '', 'Longest run of days with no messages'),
     kpi('Conversations', fmtNum(convos), `${fmtNum(groups)} group chats`),
     kpi('Your reply time', fmtDuration(A.replyMedian[1]), `median · theirs ${fmtDuration(A.replyMedian[0])}`, `Median time to answer, within ${fmtGapWords(S.convoGap)}`),
-    kpi('Avg length', `${avgLen(1)} <small>/ ${avgLen(0)}</small>`, 'characters · sent / received'),
+    kpi('Avg length', html`${avgLen(1)} <small>/ ${avgLen(0)}</small>`, 'characters · sent / received'),
     kpi('Words', fmtNum(A.words[0] + A.words[1]), `${fmtNum(A.words[1])} sent · ${fmtNum(A.words[0])} received`),
     kpi('Emoji', fmtNum(A.emoji[0] + A.emoji[1]), `in ${pct(A.emojiMsgs[0] + A.emojiMsgs[1], total)} of messages`),
     kpi('Attachments', fmtNum(media(0) + media(1)), `${fmtNum(A.media.ph[0] + A.media.ph[1])} photos · ${fmtNum(A.media.vd[0] + A.media.vd[1])} videos · ${fmtBytes(A.mediaBytes)}`),
     kpi('Night owl', pct(nightCount, total), A.latestNight ? `latest ${new Date(A.latestNight.t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : 'no messages after midnight', 'Messages between midnight and 5am'),
-    kpi('Longest conversation', A.longestSession ? `${fmtNum(A.longestSession.n)} <small>msgs</small>` : '–', A.longestSession ? `${escapeHtml(labelFor(A.longestSession.k))} · ${new Date(A.longestSession.start).toLocaleDateString()}` : '', `Most messages with no ${fmtGapWords(S.convoGap)} of quiet in between`),
+    kpi('Longest conversation', A.longestSession ? html`${fmtNum(A.longestSession.n)} <small>msgs</small>` : '–', A.longestSession ? `${labelFor(A.longestSession.k)} · ${new Date(A.longestSession.start).toLocaleDateString()}` : '', `Most messages with no ${fmtGapWords(S.convoGap)} of quiet in between`),
   ];
-  $('#kpis').innerHTML = tiles.join('');
+  $('#kpis').innerHTML = html`${tiles}`;
 }
 
 function renderCalls(ui) {
@@ -2274,13 +2269,13 @@ function renderCalls(ui) {
   const talk = C.talk[0] + C.talk[1];
   const connected = C.byType[0] + C.byType[1];
   const answeredDur = calls.filter((c) => (c.ty === 1 || c.ty === 2) && c.du > 0).length;
-  $('#callKpis').innerHTML = [
+  $('#callKpis').innerHTML = html`${[
     kpi('Calls', fmtNum(C.n), `${fmtNum(C.byType[0])} out · ${fmtNum(C.byType[1])} in`),
     kpi('Talk time', fmtDuration(talk * 1000), `${fmtDuration(C.talk[1] * 1000)} out · ${fmtDuration(C.talk[0] * 1000)} in`),
     kpi('Average call', answeredDur ? fmtDuration((talk / answeredDur) * 1000) : '–', `across ${fmtNum(connected)} connected calls`),
-    kpi('Longest call', C.longest ? fmtDuration(C.longest.du * 1000) : '–', C.longest ? `${escapeHtml(labelFor(C.longest.k))} · ${new Date(C.longest.t).toLocaleDateString()}` : ''),
+    kpi('Longest call', C.longest ? fmtDuration(C.longest.du * 1000) : '–', C.longest ? `${labelFor(C.longest.k)} · ${new Date(C.longest.t).toLocaleDateString()}` : ''),
     kpi('Missed', fmtNum(C.byType[2]), `${fmtNum(C.byType[3])} voicemail · ${fmtNum(C.byType[4])} declined`),
-  ].join('');
+  ]}`;
 
   if (!calls.length) {
     for (const id of ['c-call-trend', 'c-call-hour', 'c-call-dur', 'c-call-contacts']) Charts.set(id, emptyOption(ui, 'No calls in this selection'));
@@ -2333,15 +2328,15 @@ function renderVocab(ui = S.ui) {
   const col = (o, who) => {
     const { n, top } = fresh[o];
     const words = top.length
-      ? top.map(([w, uses]) => `<button type="button" class="vocab-chip" data-word="${escapeHtml(w)}" title="Track “${escapeHtml(w)}” in the Word tracker">${escapeHtml(w)}${uses > 1 ? ` <span class="muted">${fmtNum(uses)}</span>` : ''}</button>`).join('')
-      : '<span class="muted">Nothing new</span>';
-    return `<div class="vocab-col ${o ? 'sent' : 'recv'}">
+      ? top.map(([w, uses]) => html`<button type="button" class="vocab-chip" data-word="${w}" title="Track “${w}” in the Word tracker">${w}${uses > 1 ? html` <span class="muted">${fmtNum(uses)}</span>` : ''}</button>`)
+      : html`<span class="muted">Nothing new</span>`;
+    return html`<div class="vocab-col ${o ? 'sent' : 'recv'}">
       <div class="vocab-col-head"><b>${who}</b> · ${fmtNum(n)} new of ${fmtNum(C.vocab.get(mo)[o])} words</div>
       <div class="vocab-chips">${words}</div>
     </div>`;
   };
   const firstNote = mo === months[0] ? ' (the first month here, so every word counts as new)' : '';
-  box.innerHTML = `<div class="vocab-head"><b>New in ${escapeHtml(new Date(monthToTs(mo)).toLocaleDateString(undefined, { year: 'numeric', month: 'long' }))}</b>
+  box.innerHTML = html`<div class="vocab-head"><b>New in ${new Date(monthToTs(mo)).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}</b>
     <span class="muted">Words each side used for the first time in this selection${firstNote}. Click the chart to pick a month, or a word to track it.</span></div>
     <div class="vocab-cols">${col(1, 'You')}${col(0, 'Them')}</div>`;
 }
@@ -2364,7 +2359,7 @@ function fmtGap(ms) {
 function phraseSnippet(body, re) {
   re.lastIndex = 0;
   const m = re.exec(body);
-  if (!m) return escapeHtml(body);
+  if (!m) return html`${body}`;
   const at = m.index;
   const after = at + m[0].length;
   let start = Math.max(0, at - 60);
@@ -2372,7 +2367,7 @@ function phraseSnippet(body, re) {
   // Don't cut an emoji (a surrogate pair) in half.
   if (start > 0 && /[\uDC00-\uDFFF]/.test(body[start])) start--;
   if (end < body.length && /[\uDC00-\uDFFF]/.test(body[end])) end++;
-  return `${start ? '…' : ''}${escapeHtml(body.slice(start, at))}<mark>${escapeHtml(m[0])}</mark>${escapeHtml(body.slice(after, end))}${end < body.length ? '…' : ''}`;
+  return html`${start ? '…' : ''}${body.slice(start, at)}<mark>${m[0]}</mark>${body.slice(after, end)}${end < body.length ? '…' : ''}`;
 }
 
 /** Who said it first, and each side's first use quoted. */
@@ -2382,20 +2377,20 @@ function phraseFirstsHtml(P, re) {
   let head;
   if (you && them) {
     const [a, b] = you.t <= them.t ? [you, them] : [them, you];
-    head = `<b>${escapeHtml(name(a))}</b> said it first, ${fmtGap(b.t - a.t)} before ${a.o ? escapeHtml(name(b)) : 'you'}.`;
+    head = html`<b>${name(a)}</b> said it first, ${fmtGap(b.t - a.t)} before ${a.o ? name(b) : 'you'}.`;
   } else {
-    head = you ? 'Only you have said it.' : `You've never said it. <b>${escapeHtml(name(them))}</b> said it first.`;
+    head = you ? 'Only you have said it.' : html`You've never said it. <b>${name(them)}</b> said it first.`;
   }
   const card = (m) => {
     const when = new Date(m.t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
     const conv = labelFor(m.k);
     const where = m.k.startsWith('g:') ? `in ${conv}` : m.o ? `to ${conv}` : '';
-    return `<div class="phrase-first ${m.o ? 'sent' : 'recv'}">
-      <div class="phrase-first-head"><b>${escapeHtml(name(m))}</b> first said it · ${when}${where ? ` · ${escapeHtml(where)}` : ''}</div>
+    return html`<div class="phrase-first ${m.o ? 'sent' : 'recv'}">
+      <div class="phrase-first-head"><b>${name(m)}</b> first said it · ${when}${where ? ` · ${where}` : ''}</div>
       <div class="phrase-quote">${phraseSnippet(m.b, re)}</div>
     </div>`;
   };
-  return `<p class="phrase-headline">${head}</p><div class="phrase-first-grid">${[you, them].filter(Boolean).map(card).join('')}</div>`;
+  return html`<p class="phrase-headline">${head}</p><div class="phrase-first-grid">${[you, them].filter(Boolean).map(card)}</div>`;
 }
 
 /** Word tracker: uses of S.phrase per month in the current selection, and who said it first. */
@@ -2464,7 +2459,7 @@ function renderBrowser(msgs) {
   $('#moreBtn').hidden = start === 0;
   const chip = $('#browserFilter');
   chip.hidden = !mood;
-  if (mood) chip.innerHTML = `<span>${escapeHtml(moodFilterLabel(mood))}</span><button class="btn small ghost" type="button" data-clear-mood aria-label="Show all messages">✕</button>`;
+  if (mood) chip.innerHTML = html`<span>${moodFilterLabel(mood)}</span><button class="btn small ghost" type="button" data-clear-mood aria-label="Show all messages">✕</button>`;
   // Messages with a mood score per month and side: what one message is worth in the chart.
   if (S.showMood) {
     S.moodScored = new Map();
@@ -2558,8 +2553,8 @@ function appSwitchMarker({ from, to, o }, key) {
   el.className = 'app-switch';
   el.setAttribute('role', 'separator');
   el.setAttribute('aria-label', `Switched from ${SOURCES[from]} to ${SOURCES[to]}. ${who}.`);
-  const app = (s) => `<span class="app-dot app-${s}"></span>${escapeHtml(SOURCES[s])}`;
-  el.innerHTML = `<span class="app-switch-pill"><span class="app-route">${app(from)} → ${app(to)}</span> · <span class="app-mover">${escapeHtml(who)}</span></span>`;
+  const app = (s) => html`<span class="app-dot app-${s}"></span>${SOURCES[s]}`;
+  el.innerHTML = html`<span class="app-switch-pill"><span class="app-route">${app(from)} → ${app(to)}</span> · <span class="app-mover">${who}</span></span>`;
   return el;
 }
 
@@ -2663,14 +2658,14 @@ function init() {
     const from = new Date(end.getFullYear(), end.getMonth(), end.getDate() - days + 1).getTime();
     setRange(from, null);
   };
-  $('#gapSeg').innerHTML = CONVO_GAPS.map((g) => `<button data-gap="${g}" title="A conversation ends after ${fmtGapWords(g)} of quiet">${fmtGapShort(g)}</button>`).join('');
+  $('#gapSeg').innerHTML = html`${CONVO_GAPS.map((g) => html`<button data-gap="${g}" title="A conversation ends after ${fmtGapWords(g)} of quiet">${fmtGapShort(g)}</button>`)}`;
   $('#gapSeg').onclick = (e) => {
     const g = +e.target.dataset.gap;
     if (!g) return;
     S.convoGap = g;
     refresh({ timeline: false });
   };
-  $('#appsGapSeg').innerHTML = APPS_GAPS.map((g) => `<button data-gap="${g}" title="A conversation ends after ${fmtGapWords(g)} of quiet">${fmtGapShort(g)}</button>`).join('');
+  $('#appsGapSeg').innerHTML = html`${APPS_GAPS.map((g) => html`<button data-gap="${g}" title="A conversation ends after ${fmtGapWords(g)} of quiet">${fmtGapShort(g)}</button>`)}`;
   $('#appsGapSeg').onclick = (e) => {
     const g = +e.target.dataset.gap;
     if (!g) return;
@@ -2726,7 +2721,7 @@ function init() {
       renderBrowser(inRange(baseMessages()));
     }, 200);
   };
-  $('#phraseIdeas').innerHTML = PHRASE_IDEAS.map((p) => `<button type="button" class="btn small">${escapeHtml(p)}</button>`).join('');
+  $('#phraseIdeas').innerHTML = html`${PHRASE_IDEAS.map((p) => html`<button type="button" class="btn small">${p}</button>`)}`;
   $('#phraseIdeas').onclick = (e) => {
     const b = e.target.closest('button');
     if (!b) return;

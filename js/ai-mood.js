@@ -288,22 +288,22 @@ const AiMood = {
     $$('#moodScorerSeg button').forEach((b) => b.classList.toggle('on', b.dataset.scorer === (busy ? 'ai' : S.moodScorer)));
     const box = $('#aiMoodStatus');
     if (!box) return;
-    let html = '';
+    let markup = '';
     if (this.state === 'asking') {
-      html = `<p>The AI model reads tone better than VADER, sarcasm included. It's about ${AI_MOOD_MODEL_MB} MB, downloaded once from Hugging Face and jsDelivr, then it runs in this tab: your messages never leave this device.</p>
+      markup = html`<p>The AI model reads tone better than VADER, sarcasm included. It's about ${AI_MOOD_MODEL_MB} MB, downloaded once from Hugging Face and jsDelivr, then it runs in this tab: your messages never leave this device.</p>
         <div class="ai-actions"><button class="btn small primary" type="button" data-ai-mood="start">Download and score</button><button class="btn small ghost" type="button" data-ai-mood="cancel">Cancel</button></div>`;
     } else if (this.state === 'loading') {
-      html = `<p><span class="spinner" aria-hidden="true"></span>Downloading the model… ${Math.round(this.pct * 100)}%</p>
+      markup = html`<p><span class="spinner" aria-hidden="true"></span>Downloading the model… ${Math.round(this.pct * 100)}%</p>
         <div class="ai-actions"><button class="btn small ghost" type="button" data-ai-mood="stop">Stop</button></div>`;
     } else if (this.state === 'scoring') {
-      html = `<p><span class="spinner" aria-hidden="true"></span>Scoring ${fmtNum(this.done)} of ${fmtNum(this.total)} messages…</p>
+      markup = html`<p><span class="spinner" aria-hidden="true"></span>Scoring ${fmtNum(this.done)} of ${fmtNum(this.total)} messages…</p>
         <div class="ai-actions"><button class="btn small ghost" type="button" data-ai-mood="stop">Stop</button></div>`;
     } else if (this.state === 'error') {
-      html = `<p class="ai-error">${escapeHtml(this.error)}</p>
+      markup = html`<p class="ai-error">${this.error}</p>
         <div class="ai-actions"><button class="btn small" type="button" data-ai-mood="start">Try again</button></div>`;
     }
-    box.innerHTML = html;
-    box.hidden = !html;
+    box.innerHTML = markup;
+    box.hidden = !markup;
   },
 
   init() {

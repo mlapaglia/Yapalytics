@@ -48,3 +48,4 @@ see, changes what data leaves the browser, or takes more than a day to build.
 | [011 Bots in Google Chat conversations](011-google-chat-bot-members.md) | Implemented ([#18](https://github.com/mlapaglia/Yapalytics/pull/18)) |
 | [012 Searchable conversation pickers](012-searchable-conversation-pickers.md) | Draft: built, awaiting review |
 | [013 Picking which sender is you, in a dialog](013-you-dialog.md) | Approved: built |
+| [014 Restructuring the code: safety, speed and room to grow](014-architecture-refactor.md) | Draft |

@@ -5,7 +5,7 @@
  * A section the code hides (`hidden`, e.g. Groups with no group chats) loses its tab.
  * The open tab is in the URL as `#/<data-slug>` (the `#/` keeps it from matching an
  * element id), so Back and Forward move between tabs.
- * Uses the app's $, $$, escapeHtml, renderLazyIn, onTabHidden and onTabShown.
+ * Uses the app's $, $$, html, renderLazyIn, onTabHidden and onTabShown.
  */
 const Tabs = {
   current: 'sec-glance',
@@ -18,9 +18,8 @@ const Tabs = {
 
   init() {
     const sections = this.sections();
-    $('#tabList').innerHTML = sections
-      .map((sec) => `<button type="button" role="tab" id="tab-${sec.id}" aria-controls="${sec.id}" data-panel="${sec.id}">${escapeHtml(sec.dataset.tab)}</button>`)
-      .join('');
+    $('#tabList').innerHTML = html`${sections
+      .map((sec) => html`<button type="button" role="tab" id="tab-${sec.id}" aria-controls="${sec.id}" data-panel="${sec.id}">${sec.dataset.tab}</button>`)}`;
     for (const sec of sections) {
       sec.setAttribute('role', 'tabpanel');
       sec.setAttribute('aria-labelledby', `tab-${sec.id}`);
@@ -157,9 +156,8 @@ const Tabs = {
       if (c.sec.hidden || c.el.hidden || !c.title) return;
       let g = groups.at(-1);
       if (!g || g.sec !== c.sec) groups.push((g = { sec: c.sec, options: [] }));
-      g.options.push(`<option value="${i}">${escapeHtml(c.title)}</option>`);
+      g.options.push(html`<option value="${i}">${c.title}</option>`);
     });
-    $('#jumpSel').innerHTML = '<option value="">Jump to…</option>' +
-      groups.map((g) => `<optgroup label="${escapeHtml(g.sec.dataset.tab)}">${g.options.join('')}</optgroup>`).join('');
+    $('#jumpSel').innerHTML = html`<option value="">Jump to…</option>${groups.map((g) => html`<optgroup label="${g.sec.dataset.tab}">${g.options}</optgroup>`)}`;
   },
 };
