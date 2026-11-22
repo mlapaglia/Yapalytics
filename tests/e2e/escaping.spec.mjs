@@ -121,8 +121,11 @@ test.describe('spec 014 escaping', () => {
   });
 
   test('R3: nothing on the page shows escaped markup as text', async ({ page }) => {
-    for (const sel of ['#kpis', '#leaderTable', '#c-groupsenders', '#messages', '#appsKpis', '#c-words']) await openTabOf(page, sel);
-    const text = await page.evaluate(() => document.body.innerText);
-    for (const entity of ['&lt;', '&gt;', '&amp;', '&quot;', '&#39;']) expect(text).not.toContain(entity);
+    // Each tab is checked while it's open: a hidden tab's text isn't in innerText.
+    for (const sel of ['#kpis', '#leaderTable', '#c-groupsenders', '#messages', '#appsKpis', '#c-words']) {
+      await openTabOf(page, sel);
+      const text = await page.evaluate(() => document.body.innerText);
+      for (const entity of ['&lt;', '&gt;', '&amp;', '&quot;', '&#39;']) expect(text, `${sel}'s tab`).not.toContain(entity);
+    }
   });
 });

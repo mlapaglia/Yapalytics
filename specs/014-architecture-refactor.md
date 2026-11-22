@@ -155,9 +155,13 @@ What each current site becomes:
 another (Facebook vs Instagram, Telegram vs the encrypted Messenger download). It
 becomes `detectFile(file)` in `sources.js`, which runs each entry's `detect(probe)` in
 a written precedence order. `probe` caches the zip listing and file peeks, so each is
-read once. Before moving it, unit tests pin the current results for every fixture in
-`tests/fixtures/` (Node 22 has `Blob`, `File` and `DecompressionStream`, so `zipLib`
-runs there).
+read once. `tests/fixtures/` holds only images, so before moving it a test helper builds
+representative exports (every demo export, the test helpers' Takeout, WhatsApp,
+iMessage, Telegram, Instagram and Messenger exports) and the cases where rules compete:
+HTML exports, a thread file on its own (Instagram or Facebook), the parts of split
+exports, an encrypted Messenger chat next to other JSON, and files that aren't exports.
+The old `fileKind`'s answers for them are recorded, and the new detection must match
+(AC7). Node 22 has `Blob`, `File` and `DecompressionStream`, so `zipLib` runs there.
 
 The parsers stay where they are: worker code is unchanged.
 
@@ -278,8 +282,8 @@ These figures are estimates, not acceptance criteria:
 | Open a profile | ~140 ms | ~60 ms (index, no word splitting) |
 | Open Words, first time | ~220 ms extra | ~170 ms (one word-splitting pass) |
 
-`npm run bench` (`tests/helpers/bench.mjs`) prints these numbers. It informs, but never
-fails a build.
+These are measured once the steps are built, the same way as in Problem, and reported in
+the PRs. They inform, but aren't acceptance criteria.
 
 ## Acceptance criteria
 
@@ -298,8 +302,9 @@ fails a build.
   extension, a parser that returns two messages), when a matching file is loaded, then
   the app shows in the source filter with its name and logo, and its two messages are
   counted. No other file changes.
-- **AC7** Given each fixture in `tests/fixtures/`, `detectFile` returns the same kind,
-  or the same error message, as `fileKind` did before the change.
+- **AC7** Given each representative export and competing-rule case built for the test
+  (Step 4), `detectFile` returns the same kind, or the same error message, as
+  `fileKind` did before the change.
 - **AC8** Given two overlapping exports of one conversation, when both are added to a
   dataset in either order, then each message is kept once, reactions from both are
   merged, and attachments come from whichever copy can open them.
