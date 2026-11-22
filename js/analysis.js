@@ -202,7 +202,6 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
     replyTimes: [[], []],
     starters: [0, 0],
     doubleTexts: [0, 0],
-    wordFreq: new Map(), // word -> [r, s]
     first: null,
     last: null,
     // key -> { n:[r,s], first, last, starters:[r,s], replyMedian:[r,s], replyN:[r,s], lenSum, lenN, emoji: Map,
@@ -320,13 +319,6 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
       mon.len[o] += r.l;
       mon.lenN[o]++;
       A.words[o] += r.wc;
-
-      for (const tk of tokensOf(r.b)) {
-        if (STOPWORDS.has(tk)) continue;
-        let wf = A.wordFreq.get(tk);
-        if (!wf) A.wordFreq.set(tk, (wf = [0, 0]));
-        wf[o]++;
-      }
     }
 
     for (let i = 0; i < TRAITS.length; i++) {
@@ -478,12 +470,15 @@ function domainOf(host) {
 let swearFamilyOf = null; // messageLib().swearFamily, created on first use
 
 /**
- * Second pass for the text-heavy views: emoji per month, shared link domains,
- * vocabulary (unique words) per month, mood (positive / negative share) per month,
- * scored by `scorer` ('vader' or 'ai'), and swearing.
+ * Second pass for the text-heavy views: the most used words, emoji per month, shared
+ * link domains, vocabulary (unique words) per month, mood (positive / negative share) per
+ * month, scored by `scorer` ('vader' or 'ai'), and swearing. It's the only pass over the
+ * dashboard's selection that splits message text into words (spec 014 R10): once per
+ * message, and a message with a link once more without its links, for the vocabulary.
  */
 function aggregateContent(msgs, scorer = 'vader') {
   const C = {
+    wordFreq: new Map(), // word -> [r, s], filler words left out
     emojiMonths: new Map(), // mo -> Map(emoji -> n)
     emojiTotals: new Map(), // emoji -> n
     domains: new Map(), // domain -> [r, s]
@@ -520,6 +515,12 @@ function aggregateContent(msgs, scorer = 'vader') {
       }
     }
     const tokens = tokensOf(r.b);
+    for (const tk of tokens) {
+      if (STOPWORDS.has(tk)) continue;
+      let wf = C.wordFreq.get(tk);
+      if (!wf) C.wordFreq.set(tk, (wf = [0, 0]));
+      wf[o]++;
+    }
     let vc = vocabCounts.get(r.mo);
     if (!vc) vocabCounts.set(r.mo, (vc = [new Map(), new Map()]));
     // Words only: leave out the pieces of links.

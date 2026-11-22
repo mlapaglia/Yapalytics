@@ -29,9 +29,10 @@ test.describe('spec 014 cached selection', () => {
     await expect(page.locator('#browserCount')).toContainText('matching');
     expect(await aggregates(page)).toBe(0);
 
-    // A new selection does work them out again.
+    // A new selection works them out again, once a tab that shows them is open.
     await page.click('#presets [data-preset="90"]');
-    await expect.poll(() => aggregates(page)).toBeGreaterThan(0);
+    await openTab(page, 'sec-glance');
+    await expect.poll(() => aggregates(page)).toBe(1);
   });
 });
 

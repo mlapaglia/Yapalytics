@@ -9,8 +9,12 @@ const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const Charts = {
   instances: new Map(),
 
-  /** Render (or re-render) a chart into the element with the given id. */
-  set(id, option, { notMerge = true } = {}) {
+  /**
+   * Render (or re-render) a chart into the element with the given id. `on` maps event
+   * names to handlers, attached once when the chart is created ('zr:click' for clicks
+   * anywhere on the canvas); handlers get (params, chart).
+   */
+  set(id, option, { notMerge = true, on = {} } = {}) {
     const el = document.getElementById(id);
     if (!el) return null;
     let chart = this.instances.get(id);
@@ -18,6 +22,10 @@ const Charts = {
       chart = echarts.init(el, null, { renderer: 'canvas' });
       this.instances.set(id, chart);
       new ResizeObserver(() => chart.resize()).observe(el);
+      for (const [name, fn] of Object.entries(on)) {
+        if (name.startsWith('zr:')) chart.getZr().on(name.slice(3), (e) => fn(e, chart));
+        else chart.on(name, (p) => fn(p, chart));
+      }
     }
     chart.setOption(option, { notMerge, lazyUpdate: false });
     return chart;
@@ -555,8 +563,8 @@ function emojiOption(ui, A, limit = 20) {
   return { opt, empty: rows.length === 0 };
 }
 
-function wordsOption(ui, A, limit = 25) {
-  const rows = [...A.wordFreq.entries()]
+function wordsOption(ui, C, limit = 25) {
+  const rows = [...C.wordFreq.entries()]
     .map(([w, v]) => ({ w, r: v[0], s: v[1], t: v[0] + v[1] }))
     .sort((a, b) => b.t - a.t)
     .slice(0, limit);

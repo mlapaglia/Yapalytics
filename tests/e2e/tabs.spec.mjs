@@ -111,9 +111,11 @@ test.describe('spec 003: dashboard tabs', () => {
     expect(await chartDrawn(page, 'c-mood')).toBe(false);
     expect(await chartDrawn(page, 'c-swear')).toBe(false);
     await openTab(page, 'sec-media'); // not the tab the Mood chart is on
+    await expect.poll(() => chartDrawn(page, 'c-domains')).toBe(true);
+    // Each tab draws its own charts when it's shown (spec 014 R9), from the one content pass.
+    expect(await chartDrawn(page, 'c-mood')).toBe(false);
+    await openTab(page, 'sec-mood');
     await expect.poll(() => chartDrawn(page, 'c-mood')).toBe(true);
-    expect(await chartDrawn(page, 'c-domains')).toBe(true);
-    expect(await chartDrawn(page, 'c-vocab')).toBe(true);
   });
 
   test('AC8: arrow keys, Home and End move between the shown tabs', async ({ page }) => {
