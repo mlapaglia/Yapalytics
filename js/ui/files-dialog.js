@@ -124,19 +124,19 @@ async function applyFiles(draft) {
 
 function initFiles() {
   const dlg = $('#filesDlg');
-  $('#filesBtn').onclick = openFilesDialog;
-  dlg.querySelector('.profile-close').onclick = () => dlg.close();
-  $('#filesCancel').onclick = () => dlg.close();
-  $('#filesApply').onclick = () => {
+  $('#filesBtn').addEventListener('click', openFilesDialog);
+  dlg.querySelector('.profile-close').addEventListener('click', () => dlg.close());
+  $('#filesCancel').addEventListener('click', () => dlg.close());
+  $('#filesApply').addEventListener('click', () => {
     const draft = Files.draft;
     dlg.close();
     queueFileOp(() => applyFiles(draft));
-  };
-  $('#addFilesBtn').onclick = () => $('#addInput').click();
-  $('#addInput').onchange = (e) => {
+  });
+  $('#addFilesBtn').addEventListener('click', () => $('#addInput').click());
+  $('#addInput').addEventListener('change', (e) => {
     addToDraft(e.target.files);
     e.target.value = ''; // so picking the same file again fires change
-  };
+  });
   dlg.addEventListener('click', (e) => {
     if (e.target === dlg) { dlg.close(); return; } // the backdrop
     const x = e.target.closest('[data-remove]');

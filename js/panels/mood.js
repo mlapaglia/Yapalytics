@@ -34,9 +34,8 @@ Panels.register({
     const { ui } = ctx;
     const C = ctx.content();
     const mt = C.moodTotal;
-    const share = (n, d) => (d ? Math.round((n / d) * 100) + '%' : '–');
     $('#moodNote').textContent = mt.n[0] + mt.n[1]
-      ? `Share of messages that read positive (up) or negative (down), scored with ${View.moodScorer === 'ai' ? 'the AI model' : 'VADER'}. You: ${share(mt.pos[1], mt.n[1])} positive, ${share(mt.neg[1], mt.n[1])} negative · Them: ${share(mt.pos[0], mt.n[0])} positive, ${share(mt.neg[0], mt.n[0])} negative`
+      ? `Share of messages that read positive (up) or negative (down), scored with ${View.moodScorer === 'ai' ? 'the AI model' : 'VADER'}. You: ${shareText(mt.pos[1], mt.n[1])} positive, ${shareText(mt.neg[1], mt.n[1])} negative · Them: ${shareText(mt.pos[0], mt.n[0])} positive, ${shareText(mt.neg[0], mt.n[0])} negative`
       : 'Share of messages that read positive (up) or negative (down) each month';
     if (mt.n[0] + mt.n[1]) $('#moodNote').textContent += '. Click a bar to read those messages.';
     Charts.set('c-mood', mt.n[0] + mt.n[1] ? moodOption(ui, C) : emptyOption(ui, 'No messages with words in this selection'), { on: MOOD_ON });

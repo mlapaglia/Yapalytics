@@ -237,9 +237,9 @@ function autoGran(spanDays) {
 /** Tooltip title for a day / week / month bucket. */
 function fmtBucket(ts, gran) {
   const d = new Date(ts);
-  if (gran === 'month') return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
-  if (gran === 'week') return 'Week of ' + d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-  return d.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+  if (gran === 'month') return fmtDate.month(d);
+  if (gran === 'week') return 'Week of ' + fmtDate.day(d);
+  return fmtDate.weekday(d);
 }
 
 /** Bucket the start of a day number into day / week (Sunday) / month timestamps. */
@@ -387,7 +387,7 @@ function calendarOption(ui, A, year) {
   opt.tooltip = tooltipBase(ui, 'item');
   opt.tooltip.formatter = (p) => {
     const d = new Date(p.value[0] + 'T00:00:00');
-    const day = d.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+    const day = fmtDate.weekday(d);
     return String(html`<b>${day}</b><br>${fmtNum(p.value[1])} messages<br>${dot(ui.sent)}${fmtNum(p.value[2])} sent &nbsp; ${dot(ui.recv)}${fmtNum(p.value[3])} received`);
   };
   opt.visualMap = {
@@ -475,7 +475,7 @@ function shareOption(ui, A) {
   opt.tooltip = tooltipBase(ui, 'axis', 'line');
   opt.tooltip.formatter = (ps) => {
     const p = ps[0];
-    const d = new Date(p.value[0]).toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
+    const d = fmtDate.month(p.value[0]);
     return String(html`<b>${d}</b><br>You sent <b>${p.value[1]}%</b> of ${fmtNum(p.value[2])} messages`);
   };
   opt.series = [line('% sent by you', data, ui.sent, {
@@ -526,7 +526,7 @@ function lengthTrendOption(ui, A) {
   opt.yAxis = valAxis(ui);
   opt.tooltip = tooltipBase(ui, 'axis', 'line');
   opt.tooltip.formatter = (ps) => {
-    const d = new Date(ps[0].value[0]).toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
+    const d = fmtDate.month(ps[0].value[0]);
     const rows = ps.map((p) => tipRow(p.color, p.seriesName, html`<b>${p.value[1] ?? '–'} chars</b>`));
     return String(html`${tipHead(d)}${rows}`);
   };
@@ -583,7 +583,7 @@ function mediaTrendOption(ui, A) {
   opt.yAxis = valAxis(ui);
   opt.tooltip = tooltipBase(ui, 'axis', 'shadow');
   opt.tooltip.formatter = (ps) => {
-    ps.forEach((p) => (p.axisValueLabel = new Date(p.value[0]).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })));
+    ps.forEach((p) => (p.axisValueLabel = fmtDate.month(p.value[0])));
     return stackTooltip(ps.filter((p) => p.value[1]));
   };
   opt.series = MEDIA_TYPES.map((m, i) => ({
@@ -632,7 +632,7 @@ function callTrendOption(ui, C) {
   opt.yAxis = valAxis(ui);
   opt.tooltip = tooltipBase(ui, 'axis', 'shadow');
   opt.tooltip.formatter = (ps) => {
-    ps.forEach((p) => (p.axisValueLabel = new Date(p.value[0]).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })));
+    ps.forEach((p) => (p.axisValueLabel = fmtDate.month(p.value[0])));
     return stackTooltip(ps.filter((p) => p.value[1]));
   };
   opt.series = CALL_TYPES.map((ct, i) => ({
@@ -684,8 +684,6 @@ function timeAxis(ui) {
   return { type: 'time', axisLine: { lineStyle: { color: ui.axis } }, axisTick: { show: false }, axisLabel: { color: ui.muted, fontSize: 11, hideOverlap: true }, splitLine: { show: false } };
 }
 
-const monthName = (ts) => new Date(ts).toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
-
 /** Stacked monthly bars: `series` = [{ name, color, get(mo) }] over sorted month keys. */
 function monthlyStackOption(ui, months, series, { percent = false } = {}) {
   const opt = baseOption(ui, { boxZoom: true });
@@ -693,7 +691,7 @@ function monthlyStackOption(ui, months, series, { percent = false } = {}) {
   opt.yAxis = valAxis(ui, percent ? { max: 100, axisLabel: { color: ui.muted, fontSize: 11, formatter: '{value}%' } } : {});
   opt.tooltip = tooltipBase(ui, 'axis', 'shadow');
   opt.tooltip.formatter = (ps) => {
-    ps.forEach((p) => (p.axisValueLabel = monthName(p.value[0])));
+    ps.forEach((p) => (p.axisValueLabel = fmtDate.month(p.value[0])));
     return stackTooltip(ps.filter((p) => p.value[1]).map((p) => (percent ? { ...p, value: [p.value[0], p.value[2]] } : p)));
   };
   const totals = months.map((mo) => series.reduce((s, x) => s + x.get(mo), 0) || 1);
@@ -745,7 +743,7 @@ function nightOwlOption(ui, A) {
   opt.tooltip = tooltipBase(ui, 'axis', 'line');
   opt.tooltip.formatter = (ps) => {
     const v = ps[0].value;
-    return String(html`<b>${monthName(v[0])}</b><br><b>${v[1]}%</b> after midnight · ${fmtNum(v[2])} of ${fmtNum(v[3])} messages`);
+    return String(html`<b>${fmtDate.month(v[0])}</b><br><b>${v[1]}%</b> after midnight · ${fmtNum(v[2])} of ${fmtNum(v[3])} messages`);
   };
   opt.series = [line('After midnight', data, ui.series[3], { showSymbol: data.length < 40, areaStyle: { color: ui.series[3], opacity: 0.1 } })];
   opt.dataZoom = [insideZoom({ xAxisIndex: 0 })];
@@ -776,7 +774,7 @@ function relationshipsOption(ui, A, labelFor, top = 8) {
   opt.yAxis = valAxis(ui);
   opt.tooltip = tooltipBase(ui, 'axis', 'line');
   opt.tooltip.formatter = (ps) => {
-    ps.forEach((p) => (p.axisValueLabel = monthName(p.value[0])));
+    ps.forEach((p) => (p.axisValueLabel = fmtDate.month(p.value[0])));
     return stackTooltip(ps.filter((p) => p.value[1]).sort((a, b) => b.value[1] - a.value[1]));
   };
   const area = (name, get, color) => ({
@@ -806,7 +804,7 @@ function newPeopleOption(ui, rows) {
     const r = rows[ps[0].dataIndex];
     const names = r.names.slice(0, 8).map((n) => html`<div>${n}</div>`);
     const list = names.length ? html`<div style="color:#888;margin-top:4px">${names}${r.names.length > 8 ? '…' : ''}</div>` : '';
-    return String(html`<b>${monthName(ps[0].value[0])}</b><br>${fmtNum(r.n)} new conversation${r.n === 1 ? '' : 's'}${list}`);
+    return String(html`<b>${fmtDate.month(ps[0].value[0])}</b><br>${fmtNum(r.n)} new conversation${r.n === 1 ? '' : 's'}${list}`);
   };
   opt.series = [{ ...bar('New conversations', rows.map((r) => [monthToTs(r.mo), r.n]), ui.series[4], ui), barMaxWidth: 14 }];
   opt.dataZoom = [insideZoom({ xAxisIndex: 0 })];
@@ -922,7 +920,7 @@ function vocabOption(ui, C, selMo) {
         : '';
       return html`${tipRow(p.color, p.seriesName, html`<b>${p.value[1] == null ? '–' : fmtNum(p.value[1])} words</b>`)}${words}`;
     });
-    return String(html`${tipHead(monthName(ps[0].value[0]))}${rows}${tipNote('Click to list the new words')}`);
+    return String(html`${tipHead(fmtDate.month(ps[0].value[0]))}${rows}${tipNote('Click to list the new words')}`);
   };
   opt.series = [line('You', mk(1), ui.sent, { connectNulls: true }), line('Them', mk(0), ui.recv, { connectNulls: true })];
   if (selMo != null) {
@@ -961,7 +959,7 @@ function moodOption(ui, C) {
     const row = (label, o, color) => m.n[o]
       ? tipRow(color, label, html`<span><b>${pct(m.pos[o], m.n[o])}%</b> positive · <b>${pct(m.neg[o], m.n[o])}%</b> negative <span style="color:#888">of ${fmtNum(m.n[o])}</span></span>`)
       : '';
-    return String(html`${tipHead(monthName(monthToTs(mo)))}${row('You', 1, ui.sent)}${row('Them', 0, ui.recv)}${tipNote('Click a bar to read those messages')}`);
+    return String(html`${tipHead(fmtDate.month(monthToTs(mo)))}${row('You', 1, ui.sent)}${row('Them', 0, ui.recv)}${tipNote('Click a bar to read those messages')}`);
   };
   // Positive and negative bars share a name, so the legend toggles both together.
   opt.legend.data = ['You', 'Them'];
@@ -991,7 +989,7 @@ function swearOption(ui, C) {
       const [, v, w, n] = p.value;
       return tipRow(p.color, p.seriesName, html`<span><b>${v == null ? '–' : v}</b> per 1,000 messages <span style="color:#888">(${fmtNum(w)} in ${fmtNum(n)})</span></span>`);
     });
-    return String(html`${tipHead(monthName(ps[0].value[0]))}${rows}`);
+    return String(html`${tipHead(fmtDate.month(ps[0].value[0]))}${rows}`);
   };
   opt.series = [line('You', rate(1), ui.sent, { connectNulls: true }), line('Them', rate(0), ui.recv, { connectNulls: true })];
   opt.dataZoom = [insideZoom({ xAxisIndex: 0 })];

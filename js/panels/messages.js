@@ -27,7 +27,7 @@ function moodMatches(m, f) {
 function moodFilterLabel(f) {
   const kind = { pos: 'Positive', neg: 'Negative', any: 'Positive and negative' }[f.kind];
   const who = f.o === 1 ? ' you sent' : f.o === 0 ? ' you received' : '';
-  return `${kind} messages${who} · ${monthName(monthToTs(f.mo))}`;
+  return `${kind} messages${who} · ${fmtDate.month(monthToTs(f.mo))}`;
 }
 
 /** From the mood chart: list that month's positive or negative messages, and go there. */
@@ -44,7 +44,7 @@ function showMoodMessages(mo, o, kind) {
 function moodWhyHtml(m) {
   const kind = moodKind(m);
   const n = (Shown.moodScored && Shown.moodScored.get(`${m.mo}|${m.o}`)) || 1;
-  const month = monthName(monthToTs(m.mo));
+  const month = fmtDate.month(monthToTs(m.mo));
   const whose = m.o ? 'you sent' : 'you received';
   const word = MOOD_WORD[kind];
   const effect = kind === 'neu'
@@ -52,11 +52,10 @@ function moodWhyHtml(m) {
     : `One of the ${fmtNum(n)} messages ${whose} in ${month} with a mood score: worth about ${(100 / n).toFixed(1)} points of the ${word} bar.`;
   if (View.moodScorer === 'ai') {
     // The model's three probabilities (spec 001, R9), with VADER's score to compare.
-    const pct = (x) => Math.round(x * 100) + '%';
     const [neg, neu, pos] = m.ai;
     return html`<div class="mood-why">
     <div><b>${fmtScore(moodScore(m, 'ai'))} ${word}.</b> ${effect}</div>
-    <div class="mood-words"><span class="mw pos">positive <b>${pct(pos)}</b></span><span class="mw">neutral <b>${pct(neu)}</b></span><span class="mw neg">negative <b>${pct(neg)}</b></span><span class="mw">VADER <b>${fmtScore(m.v)}</b></span></div>
+    <div class="mood-words"><span class="mw pos">positive <b>${pctText(pos)}</b></span><span class="mw">neutral <b>${pctText(neu)}</b></span><span class="mw neg">negative <b>${pctText(neg)}</b></span><span class="mw">VADER <b>${fmtScore(m.v)}</b></span></div>
     <div class="mood-note">How sure the AI model is of each reading. It takes the likeliest one; the score is positive minus negative.</div>
   </div>`;
   }
@@ -73,20 +72,20 @@ function moodWhyHtml(m) {
 }
 
 function initMoodDetails() {
-  $('#moodChk').onchange = (e) => {
+  $('#moodChk').addEventListener('change', (e) => {
     View.browser.showMood = e.target.checked;
     renderBrowser(Select.range());
-  };
+  });
   $('#igPreviewsChk').checked = Prefs.igPreviews;
-  $('#igPreviewsChk').onchange = (e) => {
+  $('#igPreviewsChk').addEventListener('change', (e) => {
     Prefs.saveIgPreviews(e.target.checked);
     renderBrowser(Select.range());
-  };
-  $('#browserFilter').onclick = (e) => {
+  });
+  $('#browserFilter').addEventListener('click', (e) => {
     if (!e.target.closest('[data-clear-mood]')) return;
     View.browser.mood = null;
     renderBrowser(Select.range());
-  };
+  });
   $('#messages').addEventListener('click', (e) => {
     const pill = e.target.closest('.mood-pill');
     if (!pill) return;
@@ -212,7 +211,7 @@ function renderBrowser(msgs) {
       pill.title = `Mood score ${score} (${MOOD_WORD[kind]}). Click to see why.`;
       time.appendChild(pill);
     }
-    time.append(new Date(m.t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }));
+    time.append(fmtDate.time(m.t));
     bubble.appendChild(time);
     row.appendChild(bubble);
     frag.appendChild(row);
@@ -274,16 +273,16 @@ Panels.register({
   render: (ctx) => renderBrowser(ctx.msgs()),
   init() {
     initMoodDetails();
-    $('#search').oninput = (e) => {
+    $('#search').addEventListener('input', (e) => {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => View.set({ browser: { query: e.target.value, limit: 200 } }), 200);
-    };
-    $('#moreBtn').onclick = () => {
+    });
+    $('#moreBtn').addEventListener('click', () => {
       const box = $('#messages');
       const fromBottom = box.scrollHeight - box.scrollTop;
       View.set({ browser: { limit: View.browser.limit + 500 } });
       box.scrollTop = box.scrollHeight - fromBottom;
-    };
+    });
   },
 });
 

@@ -108,7 +108,7 @@ function drawWrapped(canvas, W, ui) {
 
   // Stat tiles
   const tiles = [
-    ['Busiest day', A.busiestDay ? `${fmtNum(A.busiestDay.n)} msgs` : '–', A.busiestDay ? new Date(dayToTs(A.busiestDay.d)).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''],
+    ['Busiest day', A.busiestDay ? `${fmtNum(A.busiestDay.n)} msgs` : '–', A.busiestDay ? fmtDate.dayOfMonth(dayToTs(A.busiestDay.d)) : ''],
     ['Night owl', `${W.nightPct.toFixed(1)}%`, 'after midnight'],
     ['Longest chat', A.longestSession ? `${fmtNum(A.longestSession.n)} msgs` : '–', A.longestSession ? labelFor(A.longestSession.k) : ''],
     ['Longest streak', A.longestStreak.len ? `${fmtNum(A.longestStreak.len)} days` : '–', 'in a row'],
@@ -139,7 +139,7 @@ function renderWrapped(ui, base) {
     const b = document.createElement('button');
     b.textContent = y;
     b.className = y === View.wrapYear ? 'on' : '';
-    b.onclick = () => View.set({ wrapYear: y });
+    b.addEventListener('click', () => View.set({ wrapYear: y }));
     wrap.appendChild(b);
   }
   drawWrapped($('#wrapCanvas'), wrappedStats(base, View.wrapYear), ui);
@@ -165,6 +165,6 @@ Panels.register({
     if (base.length) renderWrapped(ctx.ui, base);
   },
   init() {
-    $('#wrapSave').onclick = saveWrapped;
+    $('#wrapSave').addEventListener('click', saveWrapped);
   },
 });

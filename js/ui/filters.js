@@ -100,8 +100,8 @@ function renderScope(n) {
   const all = View.filter.groups ? 'All conversations' : 'All 1-on-1 conversations';
   const who = View.filter.contact === 'all' ? all + src : labelFor(View.filter.contact);
   const { first, last } = dataBounds();
-  const from = new Date(View.filter.from ?? first).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-  const to = new Date(View.filter.to ?? last).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  const from = fmtDate.day(View.filter.from ?? first);
+  const to = fmtDate.day(View.filter.to ?? last);
   $('#scope').textContent = `${who} · ${from} – ${to} · ${fmtNum(n)} messages`;
 }
 
@@ -125,16 +125,16 @@ function initFilters() {
   // Backspace in an empty search would remove the picked conversation, leaving the
   // dashboard with none. Picking "All conversations" is the way back to everything.
   makePicker($('#contactSel'), { onDelete: () => false });
-  $('#contactSel').onchange = (e) => setContact(e.target.value);
-  $('#sourceSeg').onclick = (e) => {
+  $('#contactSel').addEventListener('change', (e) => setContact(e.target.value));
+  $('#sourceSeg').addEventListener('click', (e) => {
     // The buttons hold an app logo, so the click can land on the svg inside one.
     const v = e.target.closest('button[data-source]')?.dataset.source;
     if (v) setSource(v === 'all' ? 'all' : +v);
-  };
-  $('#groupsChk').onchange = (e) => View.set({ filter: { groups: e.target.checked } });
-  $('#fromDate').onchange = (e) => setRange(fromDateInput(e.target.value, false), View.filter.to);
-  $('#toDate').onchange = (e) => setRange(View.filter.from, fromDateInput(e.target.value, true));
-  $('#presets').onclick = (e) => {
+  });
+  $('#groupsChk').addEventListener('change', (e) => View.set({ filter: { groups: e.target.checked } }));
+  $('#fromDate').addEventListener('change', (e) => setRange(fromDateInput(e.target.value, false), View.filter.to));
+  $('#toDate').addEventListener('change', (e) => setRange(View.filter.from, fromDateInput(e.target.value, true)));
+  $('#presets').addEventListener('click', (e) => {
     const p = e.target.dataset.preset;
     if (!p) return;
     if (p === 'all') return setRange(null, null);
@@ -143,6 +143,6 @@ function initFilters() {
     const days = { '30': 30, '90': 90, '365': 365 }[p];
     const from = new Date(end.getFullYear(), end.getMonth(), end.getDate() - days + 1).getTime();
     setRange(from, null);
-  };
-  $('#profileBtn').onclick = () => openProfile(View.filter.contact);
+  });
+  $('#profileBtn').addEventListener('click', () => openProfile(View.filter.contact));
 }

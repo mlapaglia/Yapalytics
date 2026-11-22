@@ -322,14 +322,14 @@ const AiMood = {
   /** `setScorer(scorer)`: switches the dashboard between 'vader' and 'ai'. */
   init({ setScorer }) {
     this.setScorer = setScorer;
-    $('#moodScorerSeg').onclick = (e) => {
+    $('#moodScorerSeg').addEventListener('click', (e) => {
       const s = e.target.dataset.scorer;
       if (!s) return;
       if (s === 'ai') {
         if (View.moodScorer !== 'ai' && this.state !== 'loading' && this.state !== 'scoring') this.choose();
       } else if (View.moodScorer !== 'vader' || this.state !== 'off') this.chooseVader();
-    };
-    $('#aiMoodStatus').onclick = (e) => {
+    });
+    $('#aiMoodStatus').addEventListener('click', (e) => {
       const action = e.target.dataset.aiMood;
       if (action === 'start') this.start();
       else if (action === 'cancel') this.cancel();
@@ -338,7 +338,7 @@ const AiMood = {
         this.stop();
         if (View.moodScorer === 'ai') this.setScorer('vader');
       }
-    };
+    });
     this.render();
   },
 };

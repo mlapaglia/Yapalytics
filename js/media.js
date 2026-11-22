@@ -336,7 +336,7 @@ function makeTile(a, cls, observer, onOpen) {
   }
   tile._att = a;
   tile.dataset.key = attKey(a);
-  tile.onclick = onOpen;
+  tile.addEventListener('click', onOpen);
   observer.observe(tile);
   return tile;
 }
@@ -546,9 +546,9 @@ function initViewer() {
     if (t.tagName === 'IMG' && onPicture(t, e.clientX, e.clientY)) return;
     Viewer.close();
   });
-  dlg.querySelector('.prev').onclick = () => Viewer.step(-1);
-  dlg.querySelector('.next').onclick = () => Viewer.step(1);
-  dlg.querySelector('.viewer-close').onclick = () => Viewer.close();
+  dlg.querySelector('.prev').addEventListener('click', () => Viewer.step(-1));
+  dlg.querySelector('.next').addEventListener('click', () => Viewer.step(1));
+  dlg.querySelector('.viewer-close').addEventListener('click', () => Viewer.close());
   dlg.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowLeft') Viewer.step(-1);
     if (e.key === 'ArrowRight') Viewer.step(1);
@@ -659,7 +659,7 @@ function shareCard(sh, previews) {
     const span = document.createElement('span');
     span.textContent = sh.x;
     text.appendChild(span);
-    text.onclick = () => text.setAttribute('aria-expanded', String(text.classList.toggle('open')));
+    text.addEventListener('click', () => text.setAttribute('aria-expanded', String(text.classList.toggle('open'))));
     card.appendChild(text);
   }
   if (sh.u) {
@@ -735,10 +735,10 @@ function appendGalleryBatch() {
 }
 
 function initGallery() {
-  $('#galleryKinds').onclick = (e) => {
+  $('#galleryKinds').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-kind]');
     if (!b) return;
     Gallery.kind = b.dataset.kind;
     renderGallery(Select.range());
-  };
+  });
 }

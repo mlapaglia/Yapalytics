@@ -3,14 +3,22 @@ import assert from 'node:assert/strict';
 import { loadApp, messageLib } from '../helpers/load.mjs';
 
 const lib = messageLib();
-const { tokensOf, T_REACTION } = loadApp(['tokensOf', 'T_REACTION']);
+const { tokensOf, T_REACTION, T_LINK, TRAITS } = loadApp(['tokensOf', 'T_REACTION', 'T_LINK', 'TRAITS']);
 const analyze = (body) => {
   const rec = {};
   lib.analyzeText(body, rec);
   return rec;
 };
-// Trait bits, kept in sync with analysis.js
-const T = { QUESTION: 1, LINK: 2, LAUGH: 4, CAPS: 8, LOVE: 32 };
+// Trait bits, as the parsers set them.
+const T = lib.TRAIT;
+
+describe('trait bits', () => {
+  it('are defined once, in messageLib, and analysis.js uses those', () => {
+    assert.equal(T_REACTION, T.REACTION);
+    assert.equal(T_LINK, T.LINK);
+    assert.deepEqual(TRAITS.map((t) => t.bit), [T.QUESTION, T.LINK, T.LAUGH, T.LOVE, T.CAPS]);
+  });
+});
 
 describe('analyzeText', () => {
   it('counts characters by code point, not UTF-16 unit', () => {

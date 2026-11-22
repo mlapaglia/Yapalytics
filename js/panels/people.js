@@ -19,8 +19,8 @@ const LEADER_COLS = [
   { key: 'len', title: 'Avg length', sort: (r) => r.lenYou, fmt: (r) => html`${r.lenYou} <span class="muted">/ ${r.lenThem}</span>` },
   { key: 'streak', title: 'Streak', sort: (r) => r.streak, fmt: (r) => `${fmtNum(r.streak)}d` },
   { key: 'sig', title: 'Signature', sort: (r) => r.sig || '', fmt: (r) => r.sig || '' , cls: 'emoji' },
-  { key: 'first', title: 'First', sort: (r) => r.first, fmt: (r) => new Date(r.first).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }) },
-  { key: 'last', title: 'Last', sort: (r) => r.last, fmt: (r) => new Date(r.last).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) },
+  { key: 'first', title: 'First', sort: (r) => r.first, fmt: (r) => fmtDate.monthShort(r.first) },
+  { key: 'last', title: 'Last', sort: (r) => r.last, fmt: (r) => fmtDate.day(r.last) },
 ];
 
 function renderLeaderboard(A) {
@@ -62,7 +62,7 @@ function renderDrifted(A) {
   list.innerHTML = quiet.length
     ? html`${quiet.map((r) => {
       const months = Math.round((A.last - r.last) / (30.4 * DAY_MS));
-      return html`<li data-key="${r.k}"><span>${labelFor(r.k)}</span><span class="meta">${fmtNum(r.n)} messages · last ${new Date(r.last).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })} (${months < 1 ? '<1' : months} mo before the end of this range)</span></li>`;
+      return html`<li data-key="${r.k}"><span>${labelFor(r.k)}</span><span class="meta">${fmtNum(r.n)} messages · last ${fmtDate.day(r.last)} (${months < 1 ? '<1' : months} mo before the end of this range)</span></li>`;
     })}`
     : html`<li class="empty">Nobody you talked to a lot has gone quiet in this range.</li>`;
 }
@@ -88,7 +88,7 @@ function renderMilestones(A) {
     .filter((m) => m.k === null || top.has(m.k))
     .sort((a, b) => b.t - a.t)
     .slice(0, 40);
-  const date = (t) => new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  const date = (t) => fmtDate.long(t);
   $('#milestoneList').innerHTML = items.length
     ? html`${items.map((m) => {
       const title = m.k === null ? `${ordinal(m.n)} message` : m.n === 1 ? `First message with ${labelFor(m.k)}` : `${ordinal(m.n)} message with ${labelFor(m.k)}`;
@@ -120,10 +120,10 @@ Panels.register({
     renderMilestones(A);
   },
   init() {
-    $('#driftList').onclick = (e) => {
+    $('#driftList').addEventListener('click', (e) => {
       const li = e.target.closest('li[data-key]');
       if (li) openProfile(li.dataset.key);
-    };
+    });
   },
 });
 
@@ -135,7 +135,7 @@ Panels.register({
     if (ctx.all) renderLeaderboard(ctx.agg());
   },
   init() {
-    $('#leaderTable').onclick = (e) => {
+    $('#leaderTable').addEventListener('click', (e) => {
       const th = e.target.closest('th');
       if (th) {
         const key = th.dataset.key;
@@ -145,7 +145,7 @@ Panels.register({
       }
       const tr = e.target.closest('tbody tr');
       if (tr) openProfile(tr.dataset.key);
-    };
-    $('#leaderMore').onclick = () => View.set({ leader: { all: !View.leader.all } });
+    });
+    $('#leaderMore').addEventListener('click', () => View.set({ leader: { all: !View.leader.all } }));
   },
 });

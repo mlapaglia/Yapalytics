@@ -31,16 +31,16 @@ const Tabs = {
     this.cards = sections.flatMap((sec) =>
       [...sec.querySelectorAll('article.card')].map((el) => ({ el, sec, title: el.querySelector('h2')?.textContent.trim() || '' })));
 
-    $('#tabList').onclick = (e) => {
+    $('#tabList').addEventListener('click', (e) => {
       const b = e.target.closest('[data-panel]');
       if (b) this.select(b.dataset.panel);
-    };
-    $('#tabList').onkeydown = (e) => this.onKey(e);
-    $('#jumpSel').onchange = (e) => {
+    });
+    $('#tabList').addEventListener('keydown', (e) => this.onKey(e));
+    $('#jumpSel').addEventListener('change', (e) => {
       const card = this.cards[+e.target.value];
       e.target.value = '';
       if (card) this.jump(card);
-    };
+    });
 
     // The tab bar sticks under the filter bar, whose height changes as it wraps.
     const filters = $('#dash .filters');
