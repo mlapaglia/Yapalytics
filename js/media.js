@@ -42,12 +42,12 @@ function attType(a) {
 }
 
 /** Whether the attachment's bytes are in a loaded export file. */
-const attLoadable = (a) => a.z != null && !!S.archives[a.z];
+const attLoadable = (a) => a.z != null && !!Data.archives[a.z];
 const attKey = (a) => `${a.z}:${a.b ?? a.o}`;
 
 /** The attachment's bytes: base64 inside an SMS backup (att.b/att.l) or an entry in a zip. */
 async function attachmentBlob(a, type = attType(a)) {
-  const file = S.archives[a.z];
+  const file = Data.archives[a.z];
   if (a.b != null) {
     const b64 = (await file.slice(a.b, a.b + a.l).text()).replace(/&#(?:10|13);|\s/g, '');
     // atob throws on damaged data, which the callers treat as "can't preview" (a data:

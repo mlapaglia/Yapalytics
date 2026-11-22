@@ -18,12 +18,12 @@
 function VIEW() {
   return {
     // What's loaded
-    get msgs() { return S.msgs; },
-    get calls() { return S.calls; },
-    get contacts() { return S.contacts; },
-    get personOf() { return S.personOf; },
+    get msgs() { return Data.msgs; },
+    get calls() { return Data.calls; },
+    get contacts() { return Data.contacts; },
+    get personOf() { return Data.personOf; },
     get owners() { return S.owners; },
-    get reactions() { return S.reactions; },
+    get reactions() { return Data.reactions; },
     get files() { return S.files; },
 
     // What's picked
@@ -44,8 +44,9 @@ function VIEW() {
     selection: () => inRange(baseMessages()),
     /** Adds analyzed message records to what's loaded and redraws. */
     addMessages(list) {
-      S.msgs.push(...list);
-      S.msgs.sort((a, b) => a.t - b.t);
+      Data.addBatch(list, []);
+      Data.finish();
+      rederive();
       refresh();
     },
     /** Picks a month on the Vocabulary card. */
