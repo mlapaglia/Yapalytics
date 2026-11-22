@@ -213,7 +213,7 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
     latestNight: null, // { t, k, tod } latest time-of-night message
     yearMonths: new Map(), // year -> [12 month counts]
     replyByHour: [Array.from({ length: 24 }, () => []), Array.from({ length: 24 }, () => [])],
-    sourceMonths: new Map(), // mo -> messages per source (index = s, see SOURCES)
+    sourceMonths: new Map(), // mo -> messages per app (index = s, see Sources)
     groupMonths: new Map(), // mo -> [1-on-1, group]
     groupSenders: new Map(), // sender ('You', name, or SMS 1-on-1 key) -> messages in group chats
     sessions: 0,
@@ -281,7 +281,7 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
     ym[r.mo % 12]++;
 
     let sm = A.sourceMonths.get(r.mo);
-    if (!sm) A.sourceMonths.set(r.mo, (sm = [0, 0, 0, 0, 0, 0, 0]));
+    if (!sm) A.sourceMonths.set(r.mo, (sm = Sources.zeros()));
     sm[r.s || 0]++;
 
     let gm = A.groupMonths.get(r.mo);

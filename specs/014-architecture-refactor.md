@@ -125,47 +125,51 @@ one of those app functions directly. Library functions that hold no state
 
 ### Step 4 · App registry
 
-`js/sources.js`:
+`js/sources.js` holds `Sources.list`, one entry per app. The file's header documents
+every field:
 
 ```js
-const Sources = {
-  list: [
-    { id: 0, kind: 'sms', name: 'SMS', logo: 'sms', mark: '',
-      senderNames: false, defaultOwner: null, readTogether: false, archives: 'each',
-      nameRank: 0, shares: false, parse: parseBackupFile, detect: … },
-    { id: 3, kind: 'imessage', name: 'iMessage', logo: 'imessage', mark: '🔵',
-      senderNames: true, defaultOwner: 'Me', readTogether: false, archives: null,
-      nameRank: 1, shares: false, parse: parseIMessageFiles, detect: … },
-    …
-  ],
-  byId(id), byKind(kind), count, // count replaces the literal seven-slot arrays
-};
+{
+  id: 3, kind: 'imessage', name: 'iMessage', logo: 'imessage', mark: '🔵', exportName: 'iMessage',
+  senderNames: true, defaultOwner: 'Me', addrIds: false,
+  jobs: 'together', readTogether: false, archives: false, metaFormat: false, shares: false, nameRank: 1,
+  parse: (files, cb) => parseIMessageFiles(files, cb),
+  detect: { file: async (p) => …, zip: async (p) => … },
+}
 ```
 
-What each current site becomes:
+plus `Sources.byId(id)`, `Sources.byKind(kind)`, `Sources.zeros()` (a zeroed slot per
+app id) and the helpers `hasOwner(s)`, `isDefaultOwner(s, name)`, `sourceName(s)` and
+`sourceNames()`.
 
-| Today | Becomes |
+What each old site becomes:
+
+| Before | After |
 |---|---|
-| `SOURCES`, `SOURCE_MARK`, `SOURCE_LOGO`, `FILE_LOGO` | `Sources.byId(s).name` / `.mark` / `.logo` |
-| `hasOwner(s)`, `isDefaultOwner(s, n)`, `S.owners` setup | `.senderNames`, `.defaultOwner` |
-| Seven blocks in `readFiles` | one loop: group files by kind, one job per file or per group (`readTogether`), archives offset when `archives` is set |
+| `SOURCES`, `SOURCE_MARK`, `SOURCE_LOGO`, `FILE_LOGO` | `sourceName(s)`, `.mark`, `.logo`; pure modules that take a name lookup get `sourceNames()` |
+| `hasOwner(s)`, `isDefaultOwner(s, n)`, `S.owners` setup | the same helpers, reading `.senderNames` and `.defaultOwner`; `S.owners` built from the list |
+| Seven blocks in `readFiles` | one loop over the list: one job per file (`jobs: 'each'`) or per app, files kept for attachments when `.archives` |
+| The Google Chat date error in `readFiles` | `.badDatesError` |
 | `READ_TOGETHER` in `files.js` | `.readTogether` |
-| `PERSON_NAME_ORDER`, `exportOf` in `people.js` | `.nameRank`, plus an `exportOf(contact)` hook on Messenger |
-| `[0, 0, 0, 0, 0, 0, 0]` in `analysis.js`, `crossapp.js` | `zeros(Sources.count)` |
+| `PERSON_NAME_ORDER`, `exportOf`, `!c.s \|\| c.s === 1` in `people.js` | `.nameRank`, Messenger's `exportOf(contact)` hook, `.addrIds` |
+| `[0, 0, 0, 0, 0, 0, 0]` in `analysis.js`, `crossapp.js` | `Sources.zeros()` |
+| `[0, 1, …, 6]` in `charts.js` | the ids in the name lookup it's given |
 | `P.apps.has(5) \|\| P.apps.has(6)` | `.shares` |
-| The HTML-export error messages | `.htmlError` on Telegram, Instagram and Messenger |
+| `'instagram' \|\| 'messenger'` for a loose thread file | `.metaFormat` |
+| Source filter buttons written in `index.html` | added from the list when the dashboard draws |
+| `.app-0` … `.app-6` colours in `styles.css` | `--app` set inline from the app id (the classes stay as hooks) |
 
-**Detection.** `fileKind` is an ordered chain in which some rules weigh one app against
-another (Facebook vs Instagram, Telegram vs the encrypted Messenger download). It
-becomes `detectFile(file)` in `sources.js`, which runs each entry's `detect(probe)` in
-a written precedence order. `probe` caches the zip listing and file peeks, so each is
-read once. `tests/fixtures/` holds only images, so before moving it a test helper builds
-representative exports (every demo export, the test helpers' Takeout, WhatsApp,
-iMessage, Telegram, Instagram and Messenger exports) and the cases where rules compete:
-HTML exports, a thread file on its own (Instagram or Facebook), the parts of split
-exports, an encrypted Messenger chat next to other JSON, and files that aren't exports.
-The old `fileKind`'s answers for them are recorded, and the new detection must match
-(AC7). Node 22 has `Blob`, `File` and `DecompressionStream`, so `zipLib` runs there.
+**Detection.** `fileKind` was an ordered chain in which some rules weigh one app
+against another (Facebook vs Instagram, Telegram vs the encrypted Messenger download).
+It becomes `detectFile(file)` in `sources.js`. Each entry's `detect` holds its rules
+(`file` for a loose file, `zip` and other named rules for a zip), and `DETECT_STEPS`
+lists the order they're tried in, first match wins. An app missing from
+`DETECT_STEPS` has its rules tried first. `fileProbe(file)` reads the start of a file,
+a zip's entries and Meta's layout once, however many rules ask.
+`tests/helpers/detect-cases.mjs` builds 41 files (every demo export, the test helpers'
+exports, HTML exports, loose thread files, split-export parts, non-exports). The old
+`fileKind`'s answers for them were recorded before it was removed (AC7). Node 22 has
+`File` and `DecompressionStream`, so `zipLib` runs there.
 
 The parsers stay where they are: worker code is unchanged.
 
@@ -302,13 +306,12 @@ the PRs. They inform, but aren't acceptance criteria.
   with no off-host request.~~ Dropped with R1.
 - ~~**AC4** Given the app opened from `file://` offline, the demo loads.~~ Dropped with R2.
 - **AC5** Given the browser tests, no file in `tests/e2e/` except `state.mjs` refers to `S.`.
-- **AC6** Given a unit test that adds an eighth app to `Sources.list` (detection by file
-  extension, a parser that returns two messages), when a matching file is loaded, then
-  the app shows in the source filter with its name and logo, and its two messages are
-  counted. No other file changes.
-- **AC7** Given each representative export and competing-rule case built for the test
-  (Step 4), `detectFile` returns the same kind, or the same error message, as
-  `fileKind` did before the change.
+- **AC6** Given a browser test that adds an eighth app to `Sources.list` (detection by
+  file extension, a parser that returns two messages), when a matching file is loaded,
+  then the app shows in the source filter with its name and logo, and its two messages
+  are counted. No other file changes.
+- **AC7** Given each case in `tests/helpers/detect-cases.mjs`, `detectFile` returns the
+  same kind, or the same error message, as `fileKind` did before the change.
 - **AC8** Given two overlapping exports of one conversation, when both are added to a
   dataset in either order, then each message is kept once, reactions from both are
   merged, and attachments come from whichever copy can open them.

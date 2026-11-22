@@ -215,14 +215,7 @@
       <button class="btn people-btn" type="button" id="peopleBtn" hidden>🔗 Link people</button>
       <button class="btn people-btn" type="button" id="ownerBtn" hidden>👤 Which one is you?</button>
       <div class="seg" id="sourceSeg" role="group" aria-label="Message source" hidden>
-        <button data-source="all">All</button>
-        <button data-source="0"><svg class="logo" aria-hidden="true"><use href="#logo-sms"/></svg>SMS</button>
-        <button data-source="1"><svg class="logo" aria-hidden="true"><use href="#logo-googlechat"/></svg>Google Chat</button>
-        <button data-source="2"><svg class="logo" aria-hidden="true"><use href="#logo-whatsapp"/></svg>WhatsApp</button>
-        <button data-source="3"><svg class="logo" aria-hidden="true"><use href="#logo-imessage"/></svg>iMessage</button>
-        <button data-source="4"><svg class="logo" aria-hidden="true"><use href="#logo-telegram"/></svg>Telegram</button>
-        <button data-source="5"><svg class="logo" aria-hidden="true"><use href="#logo-instagram"/></svg>Instagram</button>
-        <button data-source="6"><svg class="logo" aria-hidden="true"><use href="#logo-messenger"/></svg>Messenger</button>
+        <!-- One button per app, from the registry (js/sources.js). -->
       </div>
       <label class="check"><input type="checkbox" id="groupsChk" checked> Include group chats</label>
       <div class="field">
@@ -718,6 +711,7 @@
 
   <script src="js/vendor/vader.js"></script>
   <script src="js/html.js"></script>
+  <script src="js/sources.js"></script>
   <script src="js/zip.js"></script>
   <script src="js/parser.js"></script>
   <script src="js/googlechat.js"></script>

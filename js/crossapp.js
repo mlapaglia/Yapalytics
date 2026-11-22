@@ -79,7 +79,7 @@ function addCrossApp(P, k, list, gap) {
     if (m.sh || (m.f & T_LINK)) a.links++;
     a.hour[m.h]++;
     let mm = P.months.get(m.mo);
-    if (!mm) P.months.set(m.mo, (mm = [0, 0, 0, 0, 0, 0, 0]));
+    if (!mm) P.months.set(m.mo, (mm = Sources.zeros()));
     mm[s]++;
     let da = dayApps.get(m.d);
     if (!da) dayApps.set(m.d, (da = new Set()));
@@ -203,7 +203,7 @@ function mainAppShifts(months) {
   if (!mos.length) return [];
   const leaders = [];
   for (let mo = mos[0] + SHIFT_WINDOW - 1; mo <= mos[mos.length - 1]; mo++) {
-    const sum = [0, 0, 0, 0, 0, 0, 0];
+    const sum = Sources.zeros();
     for (let x = mo - SHIFT_WINDOW + 1; x <= mo; x++) {
       const v = months.get(x);
       if (v) for (let i = 0; i < sum.length; i++) sum[i] += v[i] || 0;

@@ -8,8 +8,6 @@
 /** Names that stand for "someone" rather than a person, so they never match. */
 const PLACEHOLDER_NAMES = new Set(['instagram user', 'deleted account', 'me', 'unknown', 'facebook user']);
 
-/** Apps whose names come from your contact book first (R5): SMS, iMessage, WhatsApp, Google Chat, Telegram, Instagram, Messenger. */
-const PERSON_NAME_ORDER = [0, 3, 2, 1, 4, 5, 6];
 
 const PERSON_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PERSON_PHONE_RE = /^[+\d\s\-().]+$/;
@@ -40,7 +38,7 @@ const isRealName = (s) => !!s && /\p{L}/u.test(s) && !isEmail(s) && !normPhone(s
 function identityTokens(c, ownNames = []) {
   const own = new Set(ownNames.filter(Boolean).map(normName));
   const values = [c.name, c.title];
-  if (!c.s || c.s === 1) values.push(...String(c.addr || '').split('~'));
+  if (Sources.byId(c.s)?.addrIds) values.push(...String(c.addr || '').split('~'));
   const out = new Set();
   for (const v of values) {
     if (!v) continue;
@@ -58,7 +56,10 @@ function identityTokens(c, ownNames = []) {
  * (R3): its app, except that Messenger's encrypted chats download counts apart from
  * Facebook's DYI export, since a chat's older and newer history sit one in each (spec 009 R12).
  */
-const exportOf = (t) => (t.s === 6 && /^(?:g:)?fb:e2ee:/.test(t.key) ? '6e' : String(t.s || 0));
+const exportOf = (t) => {
+  const src = Sources.byId(t.s);
+  return src?.exportOf ? src.exportOf(t) : String(t.s || 0);
+};
 
 /** A suggestion's identity: its conversation keys, sorted. Dismissals are stored by it. */
 const linkSignature = (keys) => [...keys].sort().join('\n');
@@ -121,12 +122,12 @@ function suggestLinks(threads, { personOf = new Map(), dismissed = new Set(), ow
 }
 
 /**
- * The name a person goes by by default (R5): the first real name in app order
- * SMS → iMessage → WhatsApp → Google Chat → Telegram → Instagram → Messenger, the busier
+ * The name a person goes by by default (R5): the first real name in app order (Sources:
+ * nameRank, SMS → iMessage → WhatsApp → Google Chat → Telegram → Instagram → Messenger), the busier
  * conversation first on a tie. `threads` are { s, name, n }.
  */
 function defaultPersonName(threads) {
-  const rank = (t) => { const i = PERSON_NAME_ORDER.indexOf(t.s || 0); return i < 0 ? PERSON_NAME_ORDER.length : i; };
+  const rank = (t) => Sources.byId(t.s)?.nameRank ?? Infinity;
   const real = threads.filter((t) => isRealName(t.name)).sort((a, b) => rank(a) - rank(b) || (b.n || 0) - (a.n || 0));
   if (real.length) return real[0].name;
   const any = threads.find((t) => t.name);

@@ -16,9 +16,9 @@ const S = {
   files: [], // loaded export files (spec 006): { id, file, name, size, lastModified, kind, on }, in the order added
   filesDraft: [], // the Files dialog's edited copy of `files` (rows it adds also have `added`, unreadable ones `error`)
   filter: { contact: 'all', source: 'all', groups: true, from: null, to: null },
-  // Your sender name per source whose records carry sender names (WhatsApp, iMessage, Telegram, Instagram, Messenger);
+  // Your sender name per app whose records carry sender names (Sources: senderNames);
   // `auto` is false once picked by hand.
-  owners: { 2: { name: '', auto: true }, 3: { name: '', auto: true }, 4: { name: '', auto: true }, 5: { name: '', auto: true }, 6: { name: '', auto: true } },
+  owners: Object.fromEntries(Sources.list.filter((s) => s.senderNames).map((s) => [s.id, { name: '', auto: true }])),
   firstSeen: new Map(), // key -> time of the first message ever loaded for that conversation
   archives: [], // loaded export files (zips, SMS XML); message attachments point into these by index (att.z)
   docFreq: null, // { sig, value } cache for "What you talk about"
@@ -51,65 +51,8 @@ const $$ = (sel) => [...document.querySelectorAll(sel)];
 
 // ------------------------------------------------------------------ loading
 
-const SOURCES = { 0: 'SMS', 1: 'Google Chat', 2: 'WhatsApp', 3: 'iMessage', 4: 'Telegram', 5: 'Instagram', 6: 'Messenger' };
-const SOURCE_MARK = { 1: '💬', 2: '🟢', 3: '🔵', 4: '✈️', 5: '📸', 6: '⚡' };
-/** Each source's logo symbol in index.html (#logo-…), shown in the conversation pickers (spec 012 R7). */
-const SOURCE_LOGO = { 0: 'sms', 1: 'googlechat', 2: 'whatsapp', 3: 'imessage', 4: 'telegram', 5: 'instagram', 6: 'messenger' };
-const isZip = (f) => /\.zip$/i.test(f.name) || /zip/.test(f.type);
-/** Records from these sources carry their sender in `sn` and get `o` from S.owners. */
-const hasOwner = (s) => s === 2 || s === 3 || s === 4 || s === 5 || s === 6;
-const TELEGRAM_HTML = "This is Telegram's HTML export, which can't be read. Export again and choose “Machine-readable JSON” as the format.";
-const INSTAGRAM_HTML = "This is Instagram's HTML export, which can't be read. Export again and choose “JSON” as the format.";
-const MESSENGER_HTML = "This is Facebook's HTML export, which can't be read. Export again and choose “JSON” as the format.";
-/** Instagram and Facebook keep each conversation in messages/<folder>/<name>_<id>/message_N.json. */
-const INSTAGRAM_THREAD = /(?:^|\/)messages\/[^/]+\/[^/]+\/message_\d+\.(?:json|html)$/;
-/** Signs that a DYI export, or one of its threads, is Facebook's rather than Instagram's (spec 009 R6, R7). */
-const FACEBOOK_SIGN = /your_facebook_activity\/|"Facebook user"/i;
-/** A thread of Messenger's encrypted chats download (spec 009 R2), from the start of its JSON. */
-const looksLikeEncryptedChat = (text) => /"threadName"\s*:/.test(text) && /"(?:senderName|participants)"\s*:/.test(text);
-/** Enough of a JSON file to tell what it is. */
-const JSON_PEEK = 65536;
-
-/** imessage-exporter txt starts with "May 17, 2022  5:29:42 PM"; WhatsApp with "1/2/24, …". */
-const looksLikeIMessage = (text) =>
-  /^\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{2}, \d{4} {1,2}\d{1,2}:\d{2}:\d{2} [AP]M/.test(text.replace(/^\ufeff/, ''));
-
-/** 'sms' | 'gchat' | 'whatsapp' | 'imessage' | 'telegram' | 'instagram' | 'messenger', from the extension and what's inside. */
-async function fileKind(f) {
-  // A thread on its own: Instagram unless it shows Facebook's signs. A guess, so the Files dialog can change it (spec 009 R7, R13).
-  if (/^message_\d+\.json$/i.test(f.name)) return FACEBOOK_SIGN.test(await f.slice(0, JSON_PEEK).text()) ? 'messenger' : 'instagram';
-  if (/\.json$/i.test(f.name)) return looksLikeEncryptedChat(await f.slice(0, JSON_PEEK).text()) ? 'messenger' : 'telegram';
-  if (/^message_\d+\.html$/i.test(f.name)) throw new Error(INSTAGRAM_HTML);
-  if (/\.html?$/i.test(f.name)) throw new Error(/^messages\d*\.html$/i.test(f.name) ? TELEGRAM_HTML : `${f.name} isn't an export this app can read`);
-  if (/\.txt$/i.test(f.name)) return looksLikeIMessage(await f.slice(0, 4096).text()) ? 'imessage' : 'whatsapp';
-  if (!isZip(f)) return 'sms';
-  const { listZip, readEntryText } = zipLib();
-  const entries = (await listZip(f)).filter((e) => !e.name.endsWith('/'));
-  if (entries.some((e) => /(?:^|\/)Google Chat\//.test(e.name))) return 'gchat';
-  const ig = entries.filter((e) => INSTAGRAM_THREAD.test(e.name));
-  // Facebook's export: its folders, its profile file, or (older exports) a thread that points into Facebook's.
-  const facebook = entries.some((e) => /(?:^|\/)(?:your_facebook_activity\/|profile_information\.json$)/.test(e.name)) ||
-    (!entries.some((e) => /(?:^|\/)your_instagram_activity\//.test(e.name)) && ig.some((e) => e.name.endsWith('.json')) &&
-      FACEBOOK_SIGN.test((await readEntryText(ig.find((e) => e.name.endsWith('.json')))).slice(0, JSON_PEEK)));
-  if (ig.some((e) => e.name.endsWith('.json'))) return facebook ? 'messenger' : 'instagram';
-  if (ig.length) throw new Error(facebook ? MESSENGER_HTML : INSTAGRAM_HTML);
-  if (facebook) return 'messenger'; // another part of a split export: media, or your profile
-  // The other parts of a split Instagram export: media, or your profile.
-  if (entries.some((e) => /(?:^|\/)(?:your_instagram_activity\/|personal_information\/|messages\/(?:inbox|archived_threads|message_requests)\/)/.test(e.name))) return 'instagram';
-  if (entries.some((e) => /(?:^|\/)result\.json$/.test(e.name))) return 'telegram';
-  // Messenger's encrypted chats download: a .json per chat, maybe next to other .json files.
-  for (const e of entries.filter((x) => /\.json$/i.test(x.name))) {
-    if (looksLikeEncryptedChat((await readEntryText(e)).slice(0, JSON_PEEK))) return 'messenger';
-  }
-  if (entries.some((e) => /(?:^|\/)messages\d*\.html$/.test(e.name))) throw new Error(TELEGRAM_HTML);
-  if (entries.some((e) => /(?:^|\/)(?:_chat|WhatsApp[^/]*)\.txt$/i.test(e.name))) return 'whatsapp';
-  const txt = entries.find((e) => /\.txt$/i.test(e.name) && !/(?:^|\/)orphaned\.txt$/i.test(e.name)) || entries.find((e) => /\.txt$/i.test(e.name));
-  if (txt) return looksLikeIMessage(await readEntryText(txt)) ? 'imessage' : 'whatsapp';
-  throw new Error(`${f.name} isn't a Google Takeout, WhatsApp, iMessage, Telegram, Instagram or Messenger export`);
-}
-
 let fileSeq = 0;
-/** An entry in S.files (spec 006) for `file` of `kind` (fileKind's result). */
+/** An entry in S.files (spec 006) for `file` of `kind` (detectFile's result). */
 const fileEntry = (file, kind) => ({ id: ++fileSeq, file, name: file.name, size: file.size, lastModified: file.lastModified, kind, on: true });
 
 /**
@@ -138,7 +81,7 @@ function loadFiles(fileList) {
     showProgress();
     let entries;
     try {
-      const kinds = await Promise.all(files.map(fileKind));
+      const kinds = await Promise.all(files.map(detectFile));
       entries = files.map((f, i) => fileEntry(f, kinds[i]));
     } catch (err) {
       console.error(err);
@@ -167,49 +110,24 @@ async function readFiles(entries) {
   const bar = $('#progressBar');
   const text = $('#progressText');
 
-  let chatBadDates = 0;
+  let badDates = ''; // an app's message when its dates couldn't be read
   let job = null;
 
   try {
-    // Each SMS backup is parsed on its own; all Takeout zips go together because a
-    // split export spreads one conversation across parts, and all WhatsApp exports
-    // go together so their date formats can be worked out from each other.
-    const of = (kind) => entries.filter((e) => e.kind === kind).map((e) => e.file);
-    const jobs = of('sms').map((f) => {
-      const attBase = S.archives.push(f) - 1;
-      return { files: [f], attBase, parse: (cb) => parseBackupFile(f, cb) };
-    });
-    const gchat = of('gchat');
-    if (gchat.length) {
-      // Attachments reference their zip by index into this job's files; offset that into S.archives.
-      const attBase = S.archives.length;
-      S.archives.push(...gchat);
-      jobs.push({ files: gchat, gchat: true, attBase, parse: (cb) => parseGoogleChatZips(gchat, cb) });
-    }
-    const wa = of('whatsapp');
-    if (wa.length) jobs.push({ files: wa, parse: (cb) => parseWhatsAppFiles(wa, cb) });
-    const im = of('imessage');
-    if (im.length) jobs.push({ files: im, parse: (cb) => parseIMessageFiles(im, cb) });
-    const tg = of('telegram');
-    if (tg.length) {
-      // Attachments in a zipped export point at their file by index into this job's files.
-      const attBase = S.archives.length;
-      S.archives.push(...tg);
-      jobs.push({ files: tg, attBase, parse: (cb) => parseTelegramFiles(tg, cb) });
-    }
-    const ig = of('instagram');
-    if (ig.length) {
-      // All parts of a split export go together: a conversation's media can be in another part.
-      const attBase = S.archives.length;
-      S.archives.push(...ig);
-      jobs.push({ files: ig, attBase, parse: (cb) => parseInstagramFiles(ig, cb) });
-    }
-    const fb = of('messenger');
-    if (fb.length) {
-      // Same as Instagram, and the encrypted chats download goes with the DYI export (spec 009 R11).
-      const attBase = S.archives.length;
-      S.archives.push(...fb);
-      jobs.push({ files: fb, attBase, parse: (cb) => parseMessengerFiles(fb, cb) });
+    // One job per file or per app (Sources: jobs). Attachments point at their file by
+    // index into the job's files (att.z); attBase moves that into S.archives.
+    const jobs = [];
+    for (const src of Sources.list) {
+      const files = entries.filter((e) => e.kind === src.kind).map((e) => e.file);
+      if (!files.length) continue;
+      for (const group of src.jobs === 'each' ? files.map((f) => [f]) : [files]) {
+        const job = { files: group, src, parse: (cb) => src.parse(group, cb) };
+        if (src.archives) {
+          job.attBase = S.archives.length;
+          S.archives.push(...group);
+        }
+        jobs.push(job);
+      }
     }
 
     for (let i = 0; i < jobs.length; i++) {
@@ -267,7 +185,7 @@ async function readFiles(entries) {
           }
         }
       }
-      if (job.gchat) chatBadDates += done.counts.badDates || 0;
+      if (job.src.badDatesError && done.counts.badDates) badDates = job.src.badDatesError;
     }
   } catch (err) {
     console.error(err);
@@ -276,9 +194,7 @@ async function readFiles(entries) {
 
   if (!S.msgs.length && !S.calls.length) {
     return {
-      error: chatBadDates
-        ? 'The Google Chat dates are in a language this app can\'t read yet. Set your Google account language to English, export again, and retry.'
-        : 'No messages or calls were found. Use an XML backup from SMS Backup & Restore (sms-*.xml or calls-*.xml), a Google Takeout zip that includes Google Chat, a WhatsApp chat export (.txt or .zip), an iMessage export, a Telegram export (result.json, or a zip of the export folder), an Instagram export (.zip, JSON format), or a Facebook Messenger export (.zip, JSON format, or the encrypted chats download).',
+      error: badDates || 'No messages or calls were found. Use an XML backup from SMS Backup & Restore (sms-*.xml or calls-*.xml), a Google Takeout zip that includes Google Chat, a WhatsApp chat export (.txt or .zip), an iMessage export, a Telegram export (result.json, or a zip of the export folder), an Instagram export (.zip, JSON format), or a Facebook Messenger export (.zip, JSON format, or the encrypted chats download).',
       failed: entries.map((e) => e.file),
     };
   }
@@ -365,7 +281,7 @@ function formatAddr(a) {
 
 function contactLabel(c) {
   if (c.person) return '🔗 ' + contactName(c);
-  const chat = SOURCE_MARK[c.s] || '';
+  const chat = Sources.byId(c.s).mark;
   if (c.group) return chat + '👥 ' + contactName(c);
   return (chat ? chat + ' ' : '') + contactName(c);
 }
@@ -393,9 +309,6 @@ function keySources(key) {
 // ------------------------------------------------------------------ export owner (WhatsApp, iMessage, Telegram, Instagram, Messenger)
 
 const sameName = (a, b) => a.replace(/[\s~]/g, '').toLowerCase() === b.replace(/[\s~]/g, '').toLowerCase();
-
-/** imessage-exporter calls you "Me" unless the export used --custom-name / --use-caller-id. */
-const isDefaultOwner = (s, name) => s === 3 && name === 'Me';
 
 /**
  * Conversations whose owner has to be worked out: every WhatsApp, Telegram and Instagram
@@ -468,8 +381,8 @@ function renderOwnerDialog(sources) {
       const li = document.createElement('li');
       li.className = 'owner-row';
       li.dataset.source = s;
-      li.dataset.app = SOURCES[s];
-      li.innerHTML = html`<label class="owner-app" for="owner-${s}">${logoSvg(s)}${SOURCES[s]}</label>
+      li.dataset.app = sourceName(s);
+      li.innerHTML = html`<label class="owner-app" for="owner-${s}">${logoSvg(s)}${sourceName(s)}</label>
         <div class="owner-pick"><select id="owner-${s}"></select><span class="owner-origin"></span></div>`;
       const sel = li.querySelector('select');
       for (const [n, k] of ownerChoices(s)) {
@@ -501,7 +414,7 @@ function updateOwnerButton(sources) {
   btn.hidden = !sources.length;
   btn.textContent = guessed.length ? `👤 Which one is you? (${guessed.length})` : '👤 Which one is you?';
   btn.title = guessed.length
-    ? `Check ${andList(guessed.map((s) => SOURCES[s]))}: who's you was guessed`
+    ? `Check ${andList(guessed.map((s) => sourceName(s)))}: who's you was guessed`
     : "Pick which sender is you in apps whose exports don't say";
 }
 
@@ -686,7 +599,7 @@ function unlinkThread(key) {
 
 function threadChip(key, extra = '') {
   const c = S.contacts.get(key);
-  return html`<span class="chip person-chip">${threadName(c)} <small>${SOURCES[c.s || 0]} · ${fmtNum(S.threadN.get(key) || 0)}</small>${extra}</span>`;
+  return html`<span class="chip person-chip">${threadName(c)} <small>${sourceName(c.s)} · ${fmtNum(S.threadN.get(key) || 0)}</small>${extra}</span>`;
 }
 
 function renderPeopleDialog() {
@@ -718,7 +631,7 @@ function renderPeopleDialog() {
     sel.innerHTML = '<option value="">Choose a conversation…</option>';
     for (const c of linkable) {
       const n = S.threadN.get(c.key) || 0;
-      sel.add(pickerOption(c, `${threadName(c)} (${SOURCES[c.s || 0]}, ${fmtNum(n)})`, fmtNum(n), countWords(n)));
+      sel.add(pickerOption(c, `${threadName(c)} (${sourceName(c.s)}, ${fmtNum(n)})`, fmtNum(n), countWords(n)));
     }
     sel.value = S.linkable.some((c) => c.key === keep) ? keep : '';
     refreshPicker(sel);
@@ -793,9 +706,8 @@ function initPeople() {
 
 // ------------------------------------------------------------------ loaded files (spec 006)
 
-const FILE_LOGO = { sms: 'sms', gchat: 'googlechat', whatsapp: 'whatsapp', imessage: 'imessage', telegram: 'telegram', instagram: 'instagram', messenger: 'messenger' };
 /** A thread file on its own, whose app is a guess the user can change (spec 009 R13). */
-const isGuessedThread = (e) => !e.error && (e.kind === 'instagram' || e.kind === 'messenger') && /^message_\d+\.json$/i.test(e.name);
+const isGuessedThread = (e) => !e.error && !!Sources.byKind(e.kind)?.metaFormat && /^message_\d+\.json$/i.test(e.name);
 
 /** The filter bar's Files button: how many files are loaded, and how many are in use (R1). Off while files are read (R15). */
 function updateFilesButton() {
@@ -824,10 +736,10 @@ function renderFilesDialog() {
       const name = e.name;
       const mark = e.error
         ? html`<span class="files-warn" aria-hidden="true">⚠</span>`
-        : html`<svg class="logo" aria-hidden="true"><use href="#logo-${FILE_LOGO[e.kind]}"/></svg>`;
+        : html`<svg class="logo" aria-hidden="true"><use href="#logo-${Sources.byKind(e.kind).logo}"/></svg>`;
       // A thread file on its own could be either app: say which it's read as, and let the user change it (spec 009 R13).
       const app = isGuessedThread(e)
-        ? html`<select class="files-app" aria-label="App for ${name}">${['instagram', 'messenger'].map((k) => html`<option value="${k}"${e.kind === k ? raw(' selected') : ''}>${k === 'instagram' ? 'Instagram' : 'Messenger'}</option>`)}</select>`
+        ? html`<select class="files-app" aria-label="App for ${name}">${Sources.list.filter((src) => src.metaFormat).map((src) => html`<option value="${src.kind}"${e.kind === src.kind ? raw(' selected') : ''}>${src.name}</option>`)}</select>`
         : '';
       return html`<li data-file="${e.id}"${e.on ? '' : raw(' class="off"')}>
         <label class="files-pick"><input type="checkbox"${e.on ? raw(' checked') : ''}${e.error ? raw(' disabled') : ''}>${mark}<span class="files-name">${name}</span>${e.added ? html`<small class="files-new">new</small>` : ''}</label>
@@ -857,7 +769,7 @@ async function addToDraft(fileList) {
   syncFilesActions();
   const entries = await Promise.all(files.map(async (f) => {
     try {
-      return { ...fileEntry(f, await fileKind(f)), added: true };
+      return { ...fileEntry(f, await detectFile(f)), added: true };
     } catch (err) {
       return { ...fileEntry(f, null), on: false, error: err.message, added: true };
     }
@@ -947,7 +859,7 @@ function initFiles() {
       li.classList.toggle('off', !d.on);
     } else if (e.target.classList.contains('files-app')) {
       d.kind = e.target.value;
-      li.querySelector('.logo use').setAttribute('href', `#logo-${FILE_LOGO[d.kind]}`);
+      li.querySelector('.logo use').setAttribute('href', `#logo-${Sources.byKind(d.kind).logo}`);
     } else return;
     syncFilesActions();
   });
@@ -955,7 +867,9 @@ function initFiles() {
 
 // ------------------------------------------------------------------ conversation pickers (spec 012)
 
-const logoSvg = (s) => html`<svg class="logo" aria-hidden="true"><use href="#logo-${SOURCE_LOGO[s]}"/></svg>`;
+const logoSvg = (s) => html`<svg class="logo" aria-hidden="true"><use href="#logo-${Sources.byId(s).logo}"/></svg>`;
+/** An app's chart colour as the --app custom property (spec 010's app edges and dots). */
+const appColor = (s) => `--app: var(--series-${((s || 0) % 8) + 1})`;
 const countWords = (n, calls = 0) => [n && `${fmtNum(n)} message${n === 1 ? '' : 's'}`, calls && `${fmtNum(calls)} call${calls === 1 ? '' : 's'}`].filter(Boolean).join(', ');
 
 /**
@@ -973,7 +887,7 @@ function pickerOption(c, text, count, words) {
     sources: sources.join(','),
     kind: c.person ? 'person' : c.group ? 'group' : '',
     count,
-    aria: [name, ...sources.map((s) => SOURCES[s]), words].filter(Boolean).join(', '),
+    aria: [name, ...sources.map((s) => sourceName(s)), words].filter(Boolean).join(', '),
   });
   return opt;
 }
@@ -1089,6 +1003,7 @@ function populateContacts() {
   sel.value = S.filter.contact;
   refreshPicker(sel);
   const present = loadedSources();
+  addSourceButtons();
   $('#sourceSeg').hidden = present.size < 2;
   $$('#sourceSeg button').forEach((b) => {
     b.hidden = b.dataset.source !== 'all' && !present.has(+b.dataset.source);
@@ -1096,6 +1011,15 @@ function populateContacts() {
   });
   updatePeopleButton();
   updateFilesButton();
+}
+
+/** The source filter's buttons: All, then one per app in the registry (added once each, so focus stays put). */
+function addSourceButtons() {
+  const seg = $('#sourceSeg');
+  if (!seg.querySelector('[data-source="all"]')) seg.insertAdjacentHTML('beforeend', String(html`<button data-source="all">All</button>`));
+  for (const src of Sources.list) {
+    if (!seg.querySelector(`[data-source="${src.id}"]`)) seg.insertAdjacentHTML('beforeend', String(html`<button data-source="${src.id}">${logoSvg(src.id)}${src.name}</button>`));
+  }
 }
 
 function setContact(key) {
@@ -1323,7 +1247,7 @@ function refresh({ timeline = true } = {}) {
   // Sources
   const multi = all && S.filter.source === 'all' && [...A.sourceMonths.values()].reduce((set, v) => (v.forEach((n, i) => n && set.add(i)), set), new Set()).size > 1;
   show('#sec-sources', multi);
-  if (multi) Charts.set('c-platforms', platformMixOption(ui, A, SOURCES));
+  if (multi) Charts.set('c-platforms', platformMixOption(ui, A, sourceNames()));
 
   // Across apps (spec 007): only for linked people with messages on 2+ apps here
   const crossApp = S.filter.source === 'all' && (all ? X.total.n > 0 : X.people.has(S.filter.contact));
@@ -1612,7 +1536,7 @@ function partsHtml(parts) {
 }
 
 function renderHighlights(msgs, A, X) {
-  const crossApp = X ? crossAppHighlight(X, { labelFor: plainName, names: SOURCES }) : null;
+  const crossApp = X ? crossAppHighlight(X, { labelFor: plainName, names: sourceNames() }) : null;
   const items = buildHighlights(msgs, A, { labelFor: plainName, senderLabel, single: S.filter.contact !== 'all', crossApp, limit: Infinity });
   $('#highlights').innerHTML = items.length
     ? html`${items.map((h, i) => html`<li${i >= HIGHLIGHT_LIMIT ? raw(' class="hl-more" hidden') : ''}><span class="hl-icon" aria-hidden="true">${h.icon}</span><span>${partsHtml(h.parts)}</span></li>`)}`
@@ -1746,8 +1670,8 @@ function openProfile(key) {
       <div class="avatar" style="background: var(--series-${hue + 1})" aria-hidden="true">${initials}</div>
       <div>
         <h2 id="profileName">${name}</h2>
-        <p class="sub">${group ? `Group chat · ${fmtNum(members)} people` : '1-on-1'} on ${c.person ? andList(c.sources.map((s) => SOURCES[s])) : SOURCES[c.s || 0]} · all time</p>
-        ${c.person ? html`<p class="sub profile-linked">Linked: ${c.threads.map((k) => `${threadName(S.contacts.get(k))} (${SOURCES[S.contacts.get(k).s || 0]})`).join(', ')}</p>` : ''}
+        <p class="sub">${group ? `Group chat · ${fmtNum(members)} people` : '1-on-1'} on ${c.person ? andList(c.sources.map((s) => sourceName(s))) : sourceName(c.s)} · all time</p>
+        ${c.person ? html`<p class="sub profile-linked">Linked: ${c.threads.map((k) => `${threadName(S.contacts.get(k))} (${sourceName(S.contacts.get(k).s)})`).join(', ')}</p>` : ''}
       </div>
     </header>
     <div class="kpis profile-kpis">${tiles}</div>
@@ -1824,14 +1748,14 @@ function initGlance() {
 
 const shareText = (a, b) => (b ? Math.round((a / b) * 100) + '%' : '–');
 const sortedApps = (P) => [...P.apps.keys()].sort((a, b) => a - b);
-const appNames = (apps) => andList([...apps].sort((a, b) => a - b).map((s) => SOURCES[s]));
+const appNames = (apps) => andList([...apps].sort((a, b) => a - b).map((s) => sourceName(s)));
 const monthText = (mo) => new Date(monthToTs(mo)).toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
 const TRIGGER_TEXT = { share: 'A shared post', link: 'A link', media: 'A photo, video or GIF', text: 'A plain message' };
 
 /** M1: a bar of each app's share. `counts`: [[app, n]]. */
 function appSplitBar(counts, cls = '') {
   const total = counts.reduce((s, [, n]) => s + n, 0);
-  const parts = counts.filter(([, n]) => n).map(([s, n]) => ({ s, n, text: `${SOURCES[s]} ${shareText(n, total)}` }));
+  const parts = counts.filter(([, n]) => n).map(([s, n]) => ({ s, n, text: `${sourceName(s)} ${shareText(n, total)}` }));
   const bar = html`<div class="app-split ${cls}" role="img" aria-label="${parts.map((p) => p.text).join(', ')}">${parts.map((p) =>
     html`<span style="flex: ${p.n} 1 0; background: var(--series-${p.s + 1})" title="${p.text}"></span>`)}</div>`;
   return { bar, parts };
@@ -1905,20 +1829,20 @@ function renderCrossApp(ui, X) {
         const { bar } = appSplitBar(sortedApps(Q).map((s) => [s, Q.apps.get(s).n[0] + Q.apps.get(s).n[1]]), 'mini');
         return html`<tr data-person="${k}"><td>${personLink(k)}</td><td>${fmtNum(Q.n)}</td><td class="apps-cell">${bar}</td><td>${fmtNum(Q.switches)}</td>
           <td>${Q.sessions ? (Q.switches / Q.sessions).toFixed(1) : '–'}</td><td>${shareText(Q.multiSessions, Q.sessions)}</td>
-          <td>${who ? `${who[0]} ${who[1]}` : '–'}</td><td>${SOURCES[Q.mainApp]}</td></tr>`;
+          <td>${who ? `${who[0]} ${who[1]}` : '–'}</td><td>${sourceName(Q.mainApp)}</td></tr>`;
       })}</tbody>`;
   }
 
   // M11: main app over time
-  Charts.set('c-appshare', appShareOption(ui, P.months, SOURCES));
+  Charts.set('c-appshare', appShareOption(ui, P.months, sourceNames()));
   const shifts = all ? [...X.people].flatMap(([k, Q]) => Q.shifts.map((s) => ({ ...s, k }))) : P.shifts;
   const moves = shifts.sort((a, b) => a.mo - b.mo).map((s, i) =>
-    html`${i ? '; ' : ''}${all ? html`${personLink(s.k)}: m` : 'M'}oved from ${SOURCES[s.from]} to ${SOURCES[s.to]} around ${monthText(s.mo)}`);
+    html`${i ? '; ' : ''}${all ? html`${personLink(s.k)}: m` : 'M'}oved from ${sourceName(s.from)} to ${sourceName(s.to)} around ${monthText(s.mo)}`);
   $('#appsShareNote').innerHTML = html`Each app’s share of messages per month${moves.length ? html`. ${moves}.` : ''}`;
 
   // M7, M8: routes and what sets off a switch
-  Charts.set('c-routes', P.switches ? switchRoutesOption(ui, P.routes, SOURCES) : emptyOption(ui, 'No switches in this selection'));
-  const kinds = CROSS_TRIGGERS.filter((t) => t !== 'share' || P.apps.has(5) || P.apps.has(6) || P.triggers.share);
+  Charts.set('c-routes', P.switches ? switchRoutesOption(ui, P.routes, sourceNames()) : emptyOption(ui, 'No switches in this selection'));
+  const kinds = CROSS_TRIGGERS.filter((t) => t !== 'share' || [...P.apps.keys()].some((s) => Sources.byId(s).shares) || P.triggers.share);
   $('#appsTriggers').innerHTML = P.switches
     ? html`${kinds.map((t) => html`<li><span>${TRIGGER_TEXT[t]}</span><span class="meter" aria-hidden="true"><i style="width: ${(P.triggers[t] / P.switches) * 100}%"></i></span><span class="meta">${shareText(P.triggers[t], P.switches)} · ${fmtNum(P.triggers[t])}</span></li>`)}`
     : html`<li class="empty">No switches in this selection.</li>`;
@@ -1940,7 +1864,7 @@ function renderCrossApp(ui, X) {
     [`${all ? 'They usually reply' : `${them} usually replies`} in`, (a) => fmtDuration(a.replyMedian[0])],
   ];
   $('#appsForNote').textContent = 'A conversation counts on the app it started on; a reply on the app it was sent on';
-  $('#appsFor').innerHTML = html`<thead><tr><th></th>${apps.map((s) => html`<th scope="col">${SOURCES[s]}</th>`)}</tr></thead>
+  $('#appsFor').innerHTML = html`<thead><tr><th></th>${apps.map((s) => html`<th scope="col">${sourceName(s)}</th>`)}</tr></thead>
     <tbody>${rows.map(([label, fmt]) => html`<tr><th scope="row">${label}</th>${apps.map((s) => html`<td>${fmt(P.apps.get(s))}</td>`)}</tr>`)}</tbody>`;
 }
 
@@ -2146,7 +2070,7 @@ function saveWrapped() {
 }
 
 function renderScope(n) {
-  const src = S.filter.source === 'all' ? '' : ` (${SOURCES[S.filter.source]})`;
+  const src = S.filter.source === 'all' ? '' : ` (${sourceName(S.filter.source)})`;
   const all = S.filter.groups ? 'All conversations' : 'All 1-on-1 conversations';
   const who = S.filter.contact === 'all' ? all + src : labelFor(S.filter.contact);
   const { first, last } = dataBounds();
@@ -2485,10 +2409,11 @@ function renderBrowser(msgs) {
     if (mark) frag.appendChild(appSwitchMarker(mark, m.k));
     const row = document.createElement('div');
     row.className = 'msg ' + (m.o ? 'sent' : 'recv') + (appEdges ? ` app-edge app-${m.s || 0}` : '');
+    if (appEdges) row.style.cssText = appColor(m.s);
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     const sender = !m.o && m.k.startsWith('g:') && (m.sn || m.sk) ? senderLabel(m.sn || m.sk) : '';
-    const via = m.tk ? SOURCES[m.s || 0] : ''; // a linked person's messages say which app (spec 005 R7)
+    const via = m.tk ? sourceName(m.s) : ''; // a linked person's messages say which app (spec 005 R7)
     if (showWho && (S.filter.contact === 'all' || sender || via)) {
       const who = document.createElement('div');
       who.className = 'who';
@@ -2552,8 +2477,8 @@ function appSwitchMarker({ from, to, o }, key) {
   const el = document.createElement('div');
   el.className = 'app-switch';
   el.setAttribute('role', 'separator');
-  el.setAttribute('aria-label', `Switched from ${SOURCES[from]} to ${SOURCES[to]}. ${who}.`);
-  const app = (s) => html`<span class="app-dot app-${s}"></span>${SOURCES[s]}`;
+  el.setAttribute('aria-label', `Switched from ${sourceName(from)} to ${sourceName(to)}. ${who}.`);
+  const app = (s) => html`<span class="app-dot app-${s}" style="${appColor(s)}"></span>${sourceName(s)}`;
   el.innerHTML = html`<span class="app-switch-pill"><span class="app-route">${app(from)} → ${app(to)}</span> · <span class="app-mover">${who}</span></span>`;
   return el;
 }

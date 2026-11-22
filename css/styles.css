@@ -532,14 +532,7 @@ table.leader .muted { color: var(--muted); }
 .msg.sent .bubble { background: var(--bubble-sent); color: var(--bubble-sent-ink); border-bottom-right-radius: 5px; }
 .msg.recv .bubble { border-bottom-left-radius: 5px; }
 .bubble .who { font-size: 11px; font-weight: 600; opacity: 0.75; margin-bottom: 2px; }
-/* Spec 010: a linked person's apps. Each app takes its chart colour. */
-.app-0 { --app: var(--series-1); }
-.app-1 { --app: var(--series-2); }
-.app-2 { --app: var(--series-3); }
-.app-3 { --app: var(--series-4); }
-.app-4 { --app: var(--series-5); }
-.app-5 { --app: var(--series-6); }
-.app-6 { --app: var(--series-7); }
+/* Spec 010: a linked person's apps. Each app takes its chart colour, set as --app (appColor in app.js). */
 /* The edge sits just outside the bubble: inside, SMS's blue would vanish on a sent bubble. */
 .msg.app-edge.recv { padding-left: 8px; }
 .msg.app-edge.sent { padding-right: 8px; }
