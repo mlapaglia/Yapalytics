@@ -189,20 +189,32 @@ function sentRecvStack(ui, labels, A_sent, A_recv, { horizontal = false } = {}) 
 }
 
 function dot(color) {
-  return `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${color};margin-right:6px"></span>`;
+  return html`<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${color};margin-right:6px"></span>`;
+}
+
+/*
+ * Tooltip markup. Series names, axis labels and row labels can be conversation names,
+ * sender names or words from messages, so everything goes through html`…` (spec 014 R3).
+ * ECharts needs a string back from a formatter: hence String(…).
+ */
+const tipHead = (text) => html`<div style="font-weight:600;margin-bottom:4px">${text}</div>`;
+const tipRow = (color, name, value) => html`<div style="display:flex;justify-content:space-between;gap:16px"><span>${dot(color)}${name}</span>${value}</div>`;
+const tipNote = (text) => html`<div style="margin-top:4px;color:#888">${text}</div>`;
+
+/** Rows of a stacked chart's tooltip, with a total under two or more (SafeHtml). */
+function stackTooltipHtml(params) {
+  if (!params.length) return html``;
+  let total = 0;
+  for (const p of params) total += +(Array.isArray(p.value) ? p.value[1] : p.value) || 0;
+  const rows = params.map((p) => tipRow(p.color, p.seriesName, html`<b>${fmtNum(+(Array.isArray(p.value) ? p.value[1] : p.value) || 0)}</b>`));
+  const sum = params.length > 1
+    ? html`<div style="display:flex;justify-content:space-between;gap:16px;margin-top:4px;border-top:1px solid rgba(127,127,127,.25);padding-top:4px"><span>Total</span><b>${fmtNum(total)}</b></div>`
+    : '';
+  return html`${tipHead(params[0].axisValueLabel)}${rows}${sum}`;
 }
 
 function stackTooltip(params) {
-  if (!params.length) return '';
-  let total = 0;
-  for (const p of params) total += +(Array.isArray(p.value) ? p.value[1] : p.value) || 0;
-  let html = `<div style="font-weight:600;margin-bottom:4px">${params[0].axisValueLabel}</div>`;
-  for (const p of params) {
-    const v = +(Array.isArray(p.value) ? p.value[1] : p.value) || 0;
-    html += `<div style="display:flex;justify-content:space-between;gap:16px"><span>${dot(p.color)}${p.seriesName}</span><b>${fmtNum(v)}</b></div>`;
-  }
-  if (params.length > 1) html += `<div style="display:flex;justify-content:space-between;gap:16px;margin-top:4px;border-top:1px solid rgba(127,127,127,.25);padding-top:4px"><span>Total</span><b>${fmtNum(total)}</b></div>`;
-  return html;
+  return String(stackTooltipHtml(params));
 }
 
 // ------------------------------------------------------------------ message charts
@@ -337,7 +349,7 @@ function heatOption(ui, A) {
     inRange: { color: ui.heat },
   };
   opt.tooltip = tooltipBase(ui, 'item');
-  opt.tooltip.formatter = (p) => `<b>${DOW_LABELS[p.value[1]]} ${HOUR_LABELS[p.value[0]]}</b><br>${fmtNum(p.value[2])} messages`;
+  opt.tooltip.formatter = (p) => String(html`<b>${DOW_LABELS[p.value[1]]} ${HOUR_LABELS[p.value[0]]}</b><br>${fmtNum(p.value[2])} messages`);
   opt.series = [{
     type: 'heatmap',
     data,
@@ -367,8 +379,8 @@ function calendarOption(ui, A, year) {
   opt.tooltip = tooltipBase(ui, 'item');
   opt.tooltip.formatter = (p) => {
     const d = new Date(p.value[0] + 'T00:00:00');
-    return `<b>${d.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}</b><br>` +
-      `${fmtNum(p.value[1])} messages<br>${dot(ui.sent)}${fmtNum(p.value[2])} sent &nbsp; ${dot(ui.recv)}${fmtNum(p.value[3])} received`;
+    const day = d.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+    return String(html`<b>${day}</b><br>${fmtNum(p.value[1])} messages<br>${dot(ui.sent)}${fmtNum(p.value[2])} sent &nbsp; ${dot(ui.recv)}${fmtNum(p.value[3])} received`);
   };
   opt.visualMap = {
     min: 0,
@@ -413,7 +425,7 @@ function splitOption(ui, A) {
   opt.legend.bottom = 0;
   opt.legend.left = 'center';
   opt.tooltip = tooltipBase(ui, 'item');
-  opt.tooltip.formatter = (p) => `${dot(p.color)}<b>${p.name}</b><br>${fmtNum(p.value)} messages (${p.percent}%)`;
+  opt.tooltip.formatter = (p) => String(html`${dot(p.color)}<b>${p.name}</b><br>${fmtNum(p.value)} messages (${p.percent}%)`);
   const total = A.dir[0] + A.dir[1];
   opt.title = {
     text: fmtNum(total),
@@ -456,7 +468,7 @@ function shareOption(ui, A) {
   opt.tooltip.formatter = (ps) => {
     const p = ps[0];
     const d = new Date(p.value[0]).toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
-    return `<b>${d}</b><br>You sent <b>${p.value[1]}%</b> of ${fmtNum(p.value[2])} messages`;
+    return String(html`<b>${d}</b><br>You sent <b>${p.value[1]}%</b> of ${fmtNum(p.value[2])} messages`);
   };
   opt.series = [line('% sent by you', data, ui.sent, {
     showSymbol: data.length < 40,
@@ -485,9 +497,8 @@ function lengthOption(ui, A) {
   opt.grid.bottom = 18;
   const counts = [A.lenHist[1], A.lenHist[0]];
   opt.tooltip.formatter = (ps) => {
-    let html = `<div style="font-weight:600;margin-bottom:4px">${ps[0].axisValueLabel} characters</div>`;
-    for (const p of ps) html += `<div style="display:flex;justify-content:space-between;gap:16px"><span>${dot(p.color)}${p.seriesName}</span><span><b>${p.value}%</b> · ${fmtNum(counts[p.seriesIndex][p.dataIndex])}</span></div>`;
-    return html;
+    const rows = ps.map((p) => tipRow(p.color, p.seriesName, html`<span><b>${p.value}%</b> · ${fmtNum(counts[p.seriesIndex][p.dataIndex])}</span>`));
+    return String(html`${tipHead(`${ps[0].axisValueLabel} characters`)}${rows}`);
   };
   opt.series = [
     bar('Sent', pct(A.lenHist[1]), ui.sent, ui),
@@ -508,9 +519,8 @@ function lengthTrendOption(ui, A) {
   opt.tooltip = tooltipBase(ui, 'axis', 'line');
   opt.tooltip.formatter = (ps) => {
     const d = new Date(ps[0].value[0]).toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
-    let html = `<div style="font-weight:600;margin-bottom:4px">${d}</div>`;
-    for (const p of ps) html += `<div style="display:flex;justify-content:space-between;gap:16px"><span>${dot(p.color)}${p.seriesName}</span><b>${p.value[1] ?? '–'} chars</b></div>`;
-    return html;
+    const rows = ps.map((p) => tipRow(p.color, p.seriesName, html`<b>${p.value[1] ?? '–'} chars</b>`));
+    return String(html`${tipHead(d)}${rows}`);
   };
   opt.series = [line('Sent', mk(1), ui.sent, { connectNulls: true }), line('Received', mk(0), ui.recv, { connectNulls: true })];
   opt.dataZoom = [insideZoom({ xAxisIndex: 0 })];
@@ -528,7 +538,7 @@ function topContactsOption(ui, rows) {
   if (opt.dataZoom) opt.grid.right = 26;
   opt.tooltip.formatter = (ps) => {
     ps.forEach((p) => (p.axisValueLabel = rows[p.dataIndex].label));
-    return stackTooltip(ps) + '<div style="color:#888;margin-top:4px;font-size:11px">Click to focus this conversation</div>';
+    return String(html`${stackTooltipHtml(ps)}<div style="color:#888;margin-top:4px;font-size:11px">Click to focus this conversation</div>`);
   };
   return opt;
 }
@@ -586,9 +596,8 @@ function replyOption(ui, A) {
   opt.xAxis = catAxis(ui, A.replyBins.map((b) => b.label));
   opt.yAxis = valAxis(ui, { axisLabel: { color: ui.muted, fontSize: 11, formatter: '{value}%' } });
   opt.tooltip.formatter = (ps) => {
-    let html = `<div style="font-weight:600;margin-bottom:4px">Replied within ${ps[0].axisValueLabel}</div>`;
-    for (const p of ps) html += `<div style="display:flex;justify-content:space-between;gap:16px"><span>${dot(p.color)}${p.seriesName}</span><span><b>${p.value}%</b> · ${fmtNum(counts[p.seriesIndex][p.dataIndex])}</span></div>`;
-    return html;
+    const rows = ps.map((p) => tipRow(p.color, p.seriesName, html`<span><b>${p.value}%</b> · ${fmtNum(counts[p.seriesIndex][p.dataIndex])}</span>`));
+    return String(html`${tipHead(`Replied within ${ps[0].axisValueLabel}`)}${rows}`);
   };
   opt.series = [bar('Your replies', pct(A.reply[1]), ui.sent, ui), bar('Their replies', pct(A.reply[0]), ui.recv, ui)];
   return opt;
@@ -652,7 +661,7 @@ function callContactsOption(ui, rows) {
   opt.xAxis = valAxis(ui, { axisLabel: { color: ui.muted, fontSize: 11, formatter: (v) => fmtDuration(v * 1000) } });
   opt.tooltip.formatter = (ps) => {
     const r = rows[ps[0].dataIndex];
-    return `<b>${r.label}</b><br>${fmtDuration(r.talk * 1000)} talk time<br>${fmtNum(r.n)} calls`;
+    return String(html`<b>${r.label}</b><br>${fmtDuration(r.talk * 1000)} talk time<br>${fmtNum(r.n)} calls`);
   };
   opt.series = [bar('Talk time', rows.map((x) => x.talk), ui.series[0], ui, { horizontal: true })];
   return opt;
@@ -698,12 +707,11 @@ function yearOverYearOption(ui, A) {
   opt.yAxis = valAxis(ui);
   opt.tooltip = tooltipBase(ui, 'axis', 'line');
   opt.tooltip.formatter = (ps) => {
-    let html = `<div style="font-weight:600;margin-bottom:4px">${ps[0].axisValueLabel}</div>`;
-    for (const p of [...ps].reverse()) {
+    const rows = [...ps].reverse().map((p) => {
       const total = A.yearMonths.get(+p.seriesName).reduce((a, b) => a + b, 0);
-      html += `<div style="display:flex;justify-content:space-between;gap:16px"><span>${dot(p.color)}${p.seriesName}</span><span><b>${p.value == null ? '–' : fmtNum(p.value)}</b> <span style="color:#888">· ${fmtNum(total)} in year</span></span></div>`;
-    }
-    return html;
+      return tipRow(p.color, p.seriesName, html`<span><b>${p.value == null ? '–' : fmtNum(p.value)}</b> <span style="color:#888">· ${fmtNum(total)} in year</span></span>`);
+    });
+    return String(html`${tipHead(ps[0].axisValueLabel)}${rows}`);
   };
   opt.series = years.map((y, i) => {
     const latest = i === years.length - 1;
@@ -729,7 +737,7 @@ function nightOwlOption(ui, A) {
   opt.tooltip = tooltipBase(ui, 'axis', 'line');
   opt.tooltip.formatter = (ps) => {
     const v = ps[0].value;
-    return `<b>${monthName(v[0])}</b><br><b>${v[1]}%</b> after midnight · ${fmtNum(v[2])} of ${fmtNum(v[3])} messages`;
+    return String(html`<b>${monthName(v[0])}</b><br><b>${v[1]}%</b> after midnight · ${fmtNum(v[2])} of ${fmtNum(v[3])} messages`);
   };
   opt.series = [line('After midnight', data, ui.series[3], { showSymbol: data.length < 40, areaStyle: { color: ui.series[3], opacity: 0.1 } })];
   opt.dataZoom = [insideZoom({ xAxisIndex: 0 })];
@@ -743,7 +751,7 @@ function sessionsOption(ui, A) {
   opt.grid.bottom = 18;
   opt.xAxis = catAxis(ui, SESSION_BINS.map((b) => b.label), { name: 'messages per conversation', nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: ui.muted, fontSize: 11 } });
   opt.yAxis = valAxis(ui);
-  opt.tooltip.formatter = (ps) => `<b>${ps[0].axisValueLabel} messages</b><br>${fmtNum(ps[0].value)} conversations`;
+  opt.tooltip.formatter = (ps) => String(html`<b>${ps[0].axisValueLabel} messages</b><br>${fmtNum(ps[0].value)} conversations`);
   opt.series = [bar('Conversations', A.sessionHist, ui.series[2], ui)];
   return opt;
 }
@@ -788,8 +796,9 @@ function newPeopleOption(ui, rows) {
   opt.tooltip = tooltipBase(ui, 'axis', 'shadow');
   opt.tooltip.formatter = (ps) => {
     const r = rows[ps[0].dataIndex];
-    const names = r.names.slice(0, 8).map((n) => `<div>${n}</div>`).join('');
-    return `<b>${monthName(ps[0].value[0])}</b><br>${fmtNum(r.n)} new conversation${r.n === 1 ? '' : 's'}${names ? `<div style="color:#888;margin-top:4px">${names}${r.names.length > 8 ? '…' : ''}</div>` : ''}`;
+    const names = r.names.slice(0, 8).map((n) => html`<div>${n}</div>`);
+    const list = names.length ? html`<div style="color:#888;margin-top:4px">${names}${r.names.length > 8 ? '…' : ''}</div>` : '';
+    return String(html`<b>${monthName(ps[0].value[0])}</b><br>${fmtNum(r.n)} new conversation${r.n === 1 ? '' : 's'}${list}`);
   };
   opt.series = [{ ...bar('New conversations', rows.map((r) => [monthToTs(r.mo), r.n]), ui.series[4], ui), barMaxWidth: 14 }];
   opt.dataZoom = [insideZoom({ xAxisIndex: 0 })];
@@ -803,7 +812,7 @@ function groupSendersOption(ui, rows) {
   opt.grid.top = 28;
   opt.yAxis = catAxis(ui, rows.map((r) => truncate(r.label, 24)), { inverse: true });
   opt.xAxis = valAxis(ui);
-  opt.tooltip.formatter = (ps) => `<b>${rows[ps[0].dataIndex].label}</b><br>${fmtNum(ps[0].value)} messages in group chats`;
+  opt.tooltip.formatter = (ps) => String(html`<b>${rows[ps[0].dataIndex].label}</b><br>${fmtNum(ps[0].value)} messages in group chats`);
   opt.series = [{
     ...bar('Messages', rows.map((r) => ({ value: r.n, itemStyle: { color: r.you ? ui.sent : ui.recv } })), ui.recv, ui, { horizontal: true }),
     barMaxWidth: 16,
@@ -826,9 +835,8 @@ function replyByHourOption(ui, A) {
   opt.yAxis = valAxis(ui, { axisLabel: { color: ui.muted, fontSize: 11, formatter: (v) => `${v}m` } });
   opt.tooltip = tooltipBase(ui, 'axis', 'line');
   opt.tooltip.formatter = (ps) => {
-    let html = `<div style="font-weight:600;margin-bottom:4px">Replies sent at ${ps[0].axisValueLabel}</div>`;
-    for (const p of ps) html += `<div style="display:flex;justify-content:space-between;gap:16px"><span>${dot(p.color)}${p.seriesName}</span><b>${p.value == null ? '–' : fmtDuration(p.value * 60000)}</b></div>`;
-    return html;
+    const rows = ps.map((p) => tipRow(p.color, p.seriesName, html`<b>${p.value == null ? '–' : fmtDuration(p.value * 60000)}</b>`));
+    return String(html`${tipHead(`Replies sent at ${ps[0].axisValueLabel}`)}${rows}`);
   };
   opt.series = [
     line('You', mins(A.replyHourMedian[1]), ui.sent, { showSymbol: true, symbolSize: 5, connectNulls: true }),
@@ -899,15 +907,14 @@ function vocabOption(ui, C, selMo) {
   opt.tooltip.formatter = (ps) => {
     const d = new Date(ps[0].value[0]);
     const fresh = C.vocabNew.get(d.getFullYear() * 12 + d.getMonth());
-    let html = `<div style="font-weight:600;margin-bottom:4px">${monthName(ps[0].value[0])}</div>`;
-    for (const p of ps) {
+    const rows = ps.map((p) => {
       const nw = fresh && fresh[p.seriesIndex === 0 ? 1 : 0];
-      html += `<div style="display:flex;justify-content:space-between;gap:16px"><span>${dot(p.color)}${p.seriesName}</span><b>${p.value[1] == null ? '–' : fmtNum(p.value[1])} words</b></div>`;
-      if (nw && nw.top.length) {
-        html += `<div style="margin:0 0 4px 14px;color:#888;max-width:260px;white-space:normal">new: ${nw.top.slice(0, 6).map(([w]) => escapeHtml(w)).join(', ')}${nw.n > 6 ? '…' : ''}</div>`;
-      }
-    }
-    return html + '<div style="margin-top:4px;color:#888">Click to list the new words</div>';
+      const words = nw && nw.top.length
+        ? html`<div style="margin:0 0 4px 14px;color:#888;max-width:260px;white-space:normal">new: ${nw.top.slice(0, 6).map(([w]) => w).join(', ')}${nw.n > 6 ? '…' : ''}</div>`
+        : '';
+      return html`${tipRow(p.color, p.seriesName, html`<b>${p.value[1] == null ? '–' : fmtNum(p.value[1])} words</b>`)}${words}`;
+    });
+    return String(html`${tipHead(monthName(ps[0].value[0]))}${rows}${tipNote('Click to list the new words')}`);
   };
   opt.series = [line('You', mk(1), ui.sent, { connectNulls: true }), line('Them', mk(0), ui.recv, { connectNulls: true })];
   if (selMo != null) {
@@ -944,9 +951,9 @@ function moodOption(ui, C) {
     const mo = keys[ps[0].dataIndex];
     const m = C.mood.get(mo);
     const row = (label, o, color) => m.n[o]
-      ? `<div style="display:flex;justify-content:space-between;gap:16px"><span>${dot(color)}${label}</span><span><b>${pct(m.pos[o], m.n[o])}%</b> positive · <b>${pct(m.neg[o], m.n[o])}%</b> negative <span style="color:#888">of ${fmtNum(m.n[o])}</span></span></div>`
+      ? tipRow(color, label, html`<span><b>${pct(m.pos[o], m.n[o])}%</b> positive · <b>${pct(m.neg[o], m.n[o])}%</b> negative <span style="color:#888">of ${fmtNum(m.n[o])}</span></span>`)
       : '';
-    return `<div style="font-weight:600;margin-bottom:4px">${monthName(monthToTs(mo))}</div>${row('You', 1, ui.sent)}${row('Them', 0, ui.recv)}<div style="margin-top:4px;color:#888">Click a bar to read those messages</div>`;
+    return String(html`${tipHead(monthName(monthToTs(mo)))}${row('You', 1, ui.sent)}${row('Them', 0, ui.recv)}${tipNote('Click a bar to read those messages')}`);
   };
   // Positive and negative bars share a name, so the legend toggles both together.
   opt.legend.data = ['You', 'Them'];
@@ -972,12 +979,11 @@ function swearOption(ui, C) {
   opt.yAxis = valAxis(ui, { min: 0 });
   opt.tooltip = tooltipBase(ui, 'axis', 'line');
   opt.tooltip.formatter = (ps) => {
-    let html = `<div style="font-weight:600;margin-bottom:4px">${monthName(ps[0].value[0])}</div>`;
-    for (const p of ps) {
+    const rows = ps.map((p) => {
       const [, v, w, n] = p.value;
-      html += `<div style="display:flex;justify-content:space-between;gap:16px"><span>${dot(p.color)}${p.seriesName}</span><span><b>${v == null ? '–' : v}</b> per 1,000 messages <span style="color:#888">(${fmtNum(w)} in ${fmtNum(n)})</span></span></div>`;
-    }
-    return html;
+      return tipRow(p.color, p.seriesName, html`<span><b>${v == null ? '–' : v}</b> per 1,000 messages <span style="color:#888">(${fmtNum(w)} in ${fmtNum(n)})</span></span>`);
+    });
+    return String(html`${tipHead(monthName(ps[0].value[0]))}${rows}`);
   };
   opt.series = [line('You', rate(1), ui.sent, { connectNulls: true }), line('Them', rate(0), ui.recv, { connectNulls: true })];
   opt.dataZoom = [insideZoom({ xAxisIndex: 0 })];

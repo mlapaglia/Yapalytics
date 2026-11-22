@@ -453,7 +453,7 @@ const Viewer = {
       links.replaceChildren(); // the box has its own link
       const box = document.createElement('div');
       box.className = 'viewer-file';
-      box.innerHTML = `<div class="viewer-file-icon">${ATT_ICON[a.k] || '📎'}</div><div>${escapeHtml(a.n)} · ${fmtBytes(blob.size)}</div><div class="viewer-file-note">${escapeHtml(note)}</div>`;
+      box.innerHTML = html`<div class="viewer-file-icon">${ATT_ICON[a.k] || '📎'}</div><div>${a.n} · ${fmtBytes(blob.size)}</div><div class="viewer-file-note">${note}</div>`;
       const link = fileLink(url, a.n, 'Download');
       link.className = 'btn small';
       box.appendChild(link);
@@ -690,10 +690,9 @@ function renderGallery(msgs) {
   const counts = { all: all.length };
   for (const { a } of all) counts[a.k] = (counts[a.k] || 0) + 1;
   if (Gallery.kind !== 'all' && !counts[Gallery.kind]) Gallery.kind = 'all';
-  $('#galleryKinds').innerHTML = ATT_KINDS
+  $('#galleryKinds').innerHTML = html`${ATT_KINDS
     .filter((k) => k.key === 'all' || counts[k.key])
-    .map((k) => `<button data-kind="${k.key}" class="${k.key === Gallery.kind ? 'on' : ''}">${k.label} <span class="muted">${fmtNum(counts[k.key] || 0)}</span></button>`)
-    .join('');
+    .map((k) => html`<button data-kind="${k.key}" class="${k.key === Gallery.kind ? 'on' : ''}">${k.label} <span class="muted">${fmtNum(counts[k.key] || 0)}</span></button>`)}`;
 
   Gallery.items = Gallery.kind === 'all' ? all : all.filter((x) => x.a.k === Gallery.kind);
   Gallery.shown = 0;
