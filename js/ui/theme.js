@@ -12,9 +12,9 @@ function applyTheme(mode) {
 
 function initTheme() {
   applyTheme(Prefs.theme);
-  $('#themeBtn').onclick = () => {
+  $('#themeBtn').addEventListener('click', () => {
     const order = ['auto', 'light', 'dark'];
     applyTheme(order[(order.indexOf($('#themeBtn').dataset.mode) + 1) % 3]);
-  };
+  });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => Panels.invalidate(['theme']));
 }

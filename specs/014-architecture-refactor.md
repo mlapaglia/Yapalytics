@@ -1,6 +1,6 @@
 # 014 Restructuring the code: safety, speed and room to grow
 
-Status: Draft · Author: · PR:
+Status: Draft: built, awaiting review · Author: · PR: #21–#27
 
 ## Problem
 
@@ -300,14 +300,24 @@ It lands as one PR: the panels share `View.set` and topics, so moving some tabs 
 
 ### Step 8 · Cleanups
 
-- `js/format.js` collects the 34 hand-written `toLocaleDateString` calls into
-  `fmtDate.short`, `.long`, `.monthYear` and `.time`, and keeps one each of `andList`
-  (dropping `crossAppList`) and `pct` (dropping `pctText`, `shareText`, `crossPct`).
-- The trait flags (`T_REACTION`, `T_LINK`, …) are defined once in `messageLib`, which
-  must stay self-contained for the workers. `analysis.js` reads them from there instead
-  of keeping its own copy "in sync".
-- Event wiring uses `addEventListener` throughout. The page-wide click handler in
-  `initGlance` splits so each panel handles its own `data-*` actions.
+- `js/format.js` is the one place text formats are written down. `fmtNum`,
+  `fmtDuration`, `fmtBytes`, `fmtGapWords`, `fmtGapShort`, `fmtGap`, `pctText`,
+  `shareText`, `timesText`, `ordinal`, `andList` and `hourText` move there. `fmtDate`
+  holds each date format once (`day`, `weekday`, `long`, `month`, `monthShort`,
+  `dayOfMonth`, `dayOfMonthLong`, `numeric`, `time`, `hour`), using cached
+  `Intl.DateTimeFormat` objects. It replaces the 34 hand-written `toLocaleDateString` /
+  `toLocaleTimeString` calls and the aliases `longDate`, `dateText`, `monthName`,
+  `monthYearText`, `clockText` and `monthText`. `crossPct`, `crossAppList` and the local
+  `pct` / `share` copies go too.
+- The trait flags are defined once, as `TRAIT` in `messageLib`, which stays
+  self-contained for the workers. `analysis.js` reads `messageLib().TRAIT` instead of
+  keeping its own copy "in sync".
+- UI controls are wired with `addEventListener` (68 handlers). Load and error callbacks
+  on scripts, media elements and workers stay as properties: they're one-shot, and one
+  of them reads the handler already set.
+- The page-wide click handler that `initGlance` held was split in step 7: the profile
+  handles `data-profile` / `data-focus` / `data-link-people`, and On this day handles
+  `data-otd-day` / `data-otd-goto`.
 
 ### Effect
 

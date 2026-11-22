@@ -10,12 +10,6 @@
 const HIGHLIGHT_LIMIT = 6;
 const WEEKDAY_PLURAL = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
 
-const pctText = (x) => Math.round(x * 100) + '%';
-const timesText = (x) => (x >= 10 ? Math.round(x) : Math.round(x * 10) / 10) + '×';
-const hourText = (h) => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' });
-const dateText = (t) => new Date(t).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-const monthYearText = (t) => new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
-const clockText = (t) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 const HL_DAY = 86400e3;
 const HL_YEAR = 365.25 * HL_DAY;
 const traitIndex = (bit) => TRAITS.findIndex((t) => t.bit === bit);
@@ -200,7 +194,7 @@ function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, to
   const avgDay = total / Math.max(A.activeDays, 1);
   if (bd && bd.n >= 100 && bd.n >= 4 * avgDay) {
     const score = 28 + Math.min(12, Math.log2(bd.n / avgDay) * 3);
-    const when = dateText(dayToTs(bd.d));
+    const when = fmtDate.weekday(dayToTs(bd.d));
     if (single) add('busiestDay', score, '🗓️', ['The busiest day here was ', when, ': ', { b: fmtNum(bd.n) }, ' messages.']);
     else {
       const top = busiestConversation(msgs.filter((m) => m.d === bd.d));
@@ -215,16 +209,16 @@ function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, to
   if (ls && ls.n >= 100) {
     const over = { b: fmtDuration(ls.end - ls.start) };
     add('marathon', 27 + Math.min(10, Math.log2(ls.n / 100) * 4), '🏃', single
-      ? ['The longest conversation here: ', { b: fmtNum(ls.n) }, ' messages over ', over, ' on ', dateText(ls.start), '.']
-      : ['Your longest conversation: ', { b: fmtNum(ls.n) }, ' messages with ', person(ls.k), ' over ', over, ' on ', dateText(ls.start), '.']);
+      ? ['The longest conversation here: ', { b: fmtNum(ls.n) }, ' messages over ', over, ' on ', fmtDate.weekday(ls.start), '.']
+      : ['Your longest conversation: ', { b: fmtNum(ls.n) }, ' messages with ', person(ls.k), ' over ', over, ' on ', fmtDate.weekday(ls.start), '.']);
   }
 
   // AC3: the message latest in the night
   const ln = A.latestNight;
   if (ln && ln.tod >= 180) {
     add('latest', 16 + (ln.tod - 180) / 20, '🦉', single
-      ? ['The latest late-night message here: ', { b: clockText(ln.t) }, ', on ', dateText(ln.t), '.']
-      : ['Your latest late-night message: ', { b: clockText(ln.t) }, ', with ', person(ln.k), ' on ', dateText(ln.t), '.']);
+      ? ['The latest late-night message here: ', { b: fmtDate.time(ln.t) }, ', on ', fmtDate.weekday(ln.t), '.']
+      : ['Your latest late-night message: ', { b: fmtDate.time(ln.t) }, ', with ', person(ln.k), ' on ', fmtDate.weekday(ln.t), '.']);
   }
 
   // AC4: the biggest milestone in the last 6 months (a conversation's beats the total on a tie)
@@ -236,10 +230,10 @@ function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, to
   if (ms) {
     const n = { b: fmtNum(ms.n) };
     add('milestone', ms.t >= lastT - 30 * HL_DAY ? 38 : 30, '🎉', single
-      ? ['This conversation passed ', n, ' messages on ', dateText(ms.t), '.']
+      ? ['This conversation passed ', n, ' messages on ', fmtDate.weekday(ms.t), '.']
       : ms.k == null
-        ? ['You passed ', n, ' messages in total on ', dateText(ms.t), '.']
-        : ['You passed ', n, ' messages with ', person(ms.k), ' on ', dateText(ms.t), '.']);
+        ? ['You passed ', n, ' messages in total on ', fmtDate.weekday(ms.t), '.']
+        : ['You passed ', n, ' messages with ', person(ms.k), ' on ', fmtDate.weekday(ms.t), '.']);
   }
 
   // AC5: the oldest conversation that's still going
@@ -251,7 +245,7 @@ function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, to
   const oldFirst = single ? firstT : old?.bc.first;
   const years = old ? Math.floor((lastT - oldFirst) / HL_YEAR) : 0;
   if (years >= (single ? 2 : 3)) {
-    const since = [' since ', { b: monthYearText(oldFirst) }, ': over ', { b: years === 1 ? '1 year' : `${years} years` }, '.'];
+    const since = [' since ', { b: fmtDate.monthShort(oldFirst) }, ': over ', { b: years === 1 ? '1 year' : `${years} years` }, '.'];
     add('oldest', 16 + Math.min(16, years * 1.5), '🕰️', single ? ["You've been talking here", ...since] : ["You've been texting ", person(old.k), ...since]);
   }
 
@@ -260,7 +254,7 @@ function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, to
     for (let i = 1; i < Math.min(rows.length, 5); i++) {
       const r = rows[i];
       if (r.n < 50 || r.bc.first < lastT - 182 * HL_DAY) continue;
-      add('newcomer', 36 + (4 - i) * 2, '✨', ['Your conversation with ', person(r.k), ' started in ', { b: monthYearText(r.bc.first) }, ' and is already your ', { b: `#${i + 1}` }, '.']);
+      add('newcomer', 36 + (4 - i) * 2, '✨', ['Your conversation with ', person(r.k), ' started in ', { b: fmtDate.monthShort(r.bc.first) }, ' and is already your ', { b: `#${i + 1}` }, '.']);
       break;
     }
   }
@@ -276,8 +270,8 @@ function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, to
   if (gap) {
     const days = { b: `${fmtNum(gap.g.len)} days` };
     add('reunion', 24 + Math.min(14, gap.g.len / 60), '🤝', single
-      ? ['The longest silence here: ', days, ', until ', dateText(gap.g.end), '.']
-      : ['You and ', person(gap.k), ' went ', days, ' without a message, then picked back up on ', dateText(gap.g.end), '.']);
+      ? ['The longest silence here: ', days, ', until ', fmtDate.weekday(gap.g.end), '.']
+      : ['You and ', person(gap.k), ' went ', days, ' without a message, then picked back up on ', fmtDate.weekday(gap.g.end), '.']);
   }
 
   // AC8: the biggest calendar year

@@ -18,16 +18,16 @@ Panels.register({
     const gapWords = fmtGapWords(View.convoGap);
     const ls = A.longestSession;
     $('#sessionNote').textContent = `A conversation ends after ${gapWords} of quiet` + (ls
-      ? ` · Longest: ${fmtNum(ls.n)} messages over ${fmtDuration(ls.end - ls.start)} with ${labelFor(ls.k)} on ${new Date(ls.start).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`
+      ? ` · Longest: ${fmtNum(ls.n)} messages over ${fmtDuration(ls.end - ls.start)} with ${labelFor(ls.k)} on ${fmtDate.day(ls.start)}`
       : '');
     $('#replyNote').textContent = `How quickly each side answers (within ${gapWords})`;
     $('#habitsNote').textContent = `Conversation starters (after ${fmtGapShort(View.convoGap)} of quiet), double texts and message traits`;
   },
   init() {
     $('#gapSeg').innerHTML = html`${CONVO_GAPS.map((g) => html`<button data-gap="${g}" title="A conversation ends after ${fmtGapWords(g)} of quiet"${g === View.convoGap ? raw(' class="on"') : ''}>${fmtGapShort(g)}</button>`)}`;
-    $('#gapSeg').onclick = (e) => {
+    $('#gapSeg').addEventListener('click', (e) => {
       const g = +e.target.dataset.gap;
       if (g) View.set({ convoGap: g });
-    };
+    });
   },
 });

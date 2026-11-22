@@ -31,7 +31,7 @@ function renderOwnerDialog(sources) {
       list.appendChild(li); // before makePicker, so it finds the <label for>
       // An app always has an owner, so Backspace can't empty the picker (as for #contactSel).
       if (makePicker(sel, { onDelete: () => false })) sel.tomselect.control_input.placeholder = 'Search names';
-      sel.onchange = () => setOwner(s, sel.value);
+      sel.addEventListener('change', () => setOwner(s, sel.value));
     }
   }
   for (const li of list.children) {
@@ -57,8 +57,8 @@ function updateOwnerButton(sources) {
 
 function initOwners() {
   const dlg = $('#ownerDlg');
-  $('#ownerBtn').onclick = () => { if (!dlg.open) dlg.showModal(); };
-  dlg.querySelector('.profile-close').onclick = () => dlg.close();
+  $('#ownerBtn').addEventListener('click', () => { if (!dlg.open) dlg.showModal(); });
+  dlg.querySelector('.profile-close').addEventListener('click', () => dlg.close());
   dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // the backdrop
 }
 

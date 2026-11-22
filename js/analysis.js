@@ -17,15 +17,17 @@
  *
  * Arrays indexed by direction use [received, sent] (i.e. index = record.o).
  */
+/** The trait bits the parsers set on `f` (messageLib, parser.js). */
+const TRAIT = messageLib().TRAIT;
 const TRAITS = [
-  { bit: 1, label: 'Questions' },
-  { bit: 2, label: 'Links' },
-  { bit: 4, label: 'Laughs' },
-  { bit: 32, label: 'Love' },
-  { bit: 8, label: 'ALL CAPS' },
+  { bit: TRAIT.QUESTION, label: 'Questions' },
+  { bit: TRAIT.LINK, label: 'Links' },
+  { bit: TRAIT.LAUGH, label: 'Laughs' },
+  { bit: TRAIT.LOVE, label: 'Love' },
+  { bit: TRAIT.CAPS, label: 'ALL CAPS' },
 ];
-const T_REACTION = 16;
-const T_LINK = 2;
+const T_REACTION = TRAIT.REACTION;
+const T_LINK = TRAIT.LINK;
 
 const LEN_BINS = [
   [1, 4], [5, 9], [10, 19], [20, 29], [30, 49], [50, 74], [75, 99],
@@ -54,17 +56,6 @@ function replyBins(gap) {
   }
   bins[bins.length - 1].max = Infinity; // replies right at the gap still land in a bin
   return bins;
-}
-
-/** "30 minutes", "1 hour", "6 hours": a conversation gap in words. */
-function fmtGapWords(ms) {
-  const [n, unit] = ms < 3600e3 ? [ms / 60e3, 'minute'] : [ms / 3600e3, 'hour'];
-  return `${n} ${unit}${n === 1 ? '' : 's'}`;
-}
-
-/** "30m", "1h", "24h": a conversation gap, short. */
-function fmtGapShort(ms) {
-  return ms < 3600e3 ? `${ms / 60e3}m` : `${ms / 3600e3}h`;
 }
 
 // A "session" is a run of messages in one thread with no conversation gap of silence.
@@ -119,28 +110,6 @@ const STOPWORDS = new Set((
   "really well now want need can just see https http www com"
 ).split(/\s+/));
 
-const fmtNum = (n) => (n == null ? '–' : Math.round(n).toLocaleString());
-
-function fmtDuration(ms) {
-  if (ms == null || !isFinite(ms)) return '–';
-  const s = ms / 1000;
-  if (s < 60) return Math.round(s) + 's';
-  if (s < 3600) return Math.round(s / 60) + 'm';
-  if (s < 86400) {
-    const h = Math.floor(s / 3600);
-    const m = Math.round((s % 3600) / 60);
-    return m ? `${h}h ${m}m` : `${h}h`;
-  }
-  return (s / 86400).toFixed(1) + 'd';
-}
-
-function fmtBytes(b) {
-  if (!b) return '0 B';
-  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.min(u.length - 1, Math.floor(Math.log(b) / Math.log(1024)));
-  return (b / Math.pow(1024, i)).toFixed(i ? 1 : 0) + ' ' + u[i];
-}
-
 /** Local-midnight timestamp for a local day number. */
 function dayToTs(d) {
   const u = new Date(d * 86400000);
@@ -154,7 +123,7 @@ function monthToTs(mo) {
   return new Date(Math.floor(mo / 12), mo % 12, 1).getTime();
 }
 function dayLabel(d) {
-  return new Date(dayToTs(d)).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', weekday: 'short' });
+  return fmtDate.weekday(dayToTs(d));
 }
 
 function median(arr) {

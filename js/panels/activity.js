@@ -58,11 +58,11 @@ function renderCalendar(ui, A, none) {
     const b = document.createElement('button');
     b.textContent = y;
     b.className = y === View.calYear ? 'on' : '';
-    b.onclick = () => {
+    b.addEventListener('click', () => {
       View.calYear = y;
       $$('#calYears button').forEach((x) => x.classList.toggle('on', x === b));
       Charts.set('c-calendar', calendarOption(currentTheme(), A, y));
-    };
+    });
     wrap.appendChild(b);
   }
   Charts.set('c-calendar', calendarOption(ui, A, View.calYear));
@@ -74,10 +74,10 @@ Panels.register({
   topics: ['data', 'filter.contact', 'filter.source', 'filter.groups', 'filter.dates', 'gran', 'theme'],
   render: (ctx) => renderTimeline(ctx.ui, ctx.base()),
   init() {
-    $('#granSeg').onclick = (e) => {
+    $('#granSeg').addEventListener('click', (e) => {
       const g = e.target.dataset.gran;
       if (g) View.set({ gran: g });
-    };
+    });
   },
 });
 
@@ -96,7 +96,7 @@ Panels.register({
     ctx.put('c-night', () => nightOwlOption(ui, A));
     const ln = A.latestNight;
     $('#nightNote').textContent = ln
-      ? `Latest: ${new Date(ln.t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} on ${new Date(ln.t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })} with ${labelFor(ln.k)}`
+      ? `Latest: ${fmtDate.time(ln.t)} on ${fmtDate.day(ln.t)} with ${labelFor(ln.k)}`
       : 'Share of messages sent or received between midnight and 5am';
   },
 });

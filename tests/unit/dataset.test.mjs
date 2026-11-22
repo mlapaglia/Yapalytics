@@ -112,7 +112,7 @@ describe('spec 014 dataset', () => {
 
   it('AC10: the dataset, registry, selection and settings load without a page, and never touch one', () => {
     // Each loads after what it reads as it loads (index.html's order).
-    loadScripts(['sources.js', 'store.js', 'dataset.js', 'analysis.js', 'crossapp.js', 'select.js'], []);
+    loadScripts(['format.js', 'sources.js', 'store.js', 'parser.js', 'dataset.js', 'analysis.js', 'crossapp.js', 'select.js'], []);
     for (const file of ['sources.js', 'dataset.js', 'select.js', 'store.js']) {
       const src = readFileSync(new URL(`../../js/${file}`, import.meta.url), 'utf8');
       assert.doesNotMatch(src, /\bdocument\b|\bwindow\b|\$\(/, file);

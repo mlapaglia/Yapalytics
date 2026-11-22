@@ -1,12 +1,8 @@
 /* The Across apps tab (spec 007): how linked people move between apps. */
 
-const shareText = (a, b) => (b ? Math.round((a / b) * 100) + '%' : '–');
-
 const sortedApps = (P) => [...P.apps.keys()].sort((a, b) => a - b);
 
 const appNames = (apps) => andList([...apps].sort((a, b) => a - b).map((s) => sourceName(s)));
-
-const monthText = (mo) => new Date(monthToTs(mo)).toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
 
 const TRIGGER_TEXT = { share: 'A shared post', link: 'A link', media: 'A photo, video or GIF', text: 'A plain message' };
 
@@ -73,7 +69,7 @@ function renderCrossApp(ui, X) {
   if (b) {
     const d = new Date(b.start);
     const day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    $('#appsJuggle').innerHTML = html`Biggest juggle: <b>${fmtNum(b.switches)} switch${b.switches === 1 ? '' : 'es'}</b> between ${appNames(b.apps)}${all ? html` with ${personLink(b.k)}` : ''} on ${longDate(b.start)}. ` +
+    $('#appsJuggle').innerHTML = html`Biggest juggle: <b>${fmtNum(b.switches)} switch${b.switches === 1 ? '' : 'es'}</b> between ${appNames(b.apps)}${all ? html` with ${personLink(b.k)}` : ''} on ${fmtDate.weekday(b.start)}. ` +
       html`<button class="btn small ghost" type="button" data-otd-day="${day}" data-contact="${b.k}">Read that day →</button>`;
   } else $('#appsJuggle').textContent = 'No conversation here has moved between apps yet.';
 
@@ -95,7 +91,7 @@ function renderCrossApp(ui, X) {
   Charts.set('c-appshare', appShareOption(ui, P.months, sourceNames()));
   const shifts = all ? [...X.people].flatMap(([k, Q]) => Q.shifts.map((s) => ({ ...s, k }))) : P.shifts;
   const moves = shifts.sort((a, b) => a.mo - b.mo).map((s, i) =>
-    html`${i ? '; ' : ''}${all ? html`${personLink(s.k)}: m` : 'M'}oved from ${sourceName(s.from)} to ${sourceName(s.to)} around ${monthText(s.mo)}`);
+    html`${i ? '; ' : ''}${all ? html`${personLink(s.k)}: m` : 'M'}oved from ${sourceName(s.from)} to ${sourceName(s.to)} around ${fmtDate.monthShort(monthToTs(s.mo))}`);
   $('#appsShareNote').innerHTML = html`Each app’s share of messages per month${moves.length ? html`. ${moves}.` : ''}`;
 
   // M7, M8: routes and what sets off a switch
@@ -135,9 +131,9 @@ Panels.register({
   },
   init() {
     $('#appsGapSeg').innerHTML = html`${APPS_GAPS.map((g) => html`<button data-gap="${g}" title="A conversation ends after ${fmtGapWords(g)} of quiet"${g === View.appsGap ? raw(' class="on"') : ''}>${fmtGapShort(g)}</button>`)}`;
-    $('#appsGapSeg').onclick = (e) => {
+    $('#appsGapSeg').addEventListener('click', (e) => {
       const g = +e.target.dataset.gap;
       if (g) View.set({ appsGap: g });
-    };
+    });
   },
 });

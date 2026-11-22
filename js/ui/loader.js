@@ -180,12 +180,12 @@ function rederive() {
 }
 
 function initLoader() {
-  $('#fileInput').onchange = (e) => {
+  $('#fileInput').addEventListener('change', (e) => {
     loadFiles(e.target.files);
     e.target.value = '';
-  };
-  $('#demoBtn').onclick = () => loadFiles(buildDemoFiles());
-  $$('[data-demo]').forEach((b) => { b.onclick = () => loadFiles(buildDemoFiles()); });
+  });
+  $('#demoBtn').addEventListener('click', () => loadFiles(buildDemoFiles()));
+  $$('[data-demo]').forEach((b) => { b.addEventListener('click', () => loadFiles(buildDemoFiles())); });
 
   // Drag & drop anywhere on the page
   let dragDepth = 0;

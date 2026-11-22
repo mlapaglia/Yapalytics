@@ -99,8 +99,8 @@ function initPeople() {
   const dlg = $('#peopleDlg');
   // Their options come later, so the empty option can't give the placeholder yet.
   for (const sel of [$('#peopleA'), $('#peopleB')]) makePicker(sel, { placeholder: 'Choose a conversation…' });
-  $('#peopleBtn').onclick = () => openPeopleDialog();
-  dlg.querySelector('.profile-close').onclick = () => dlg.close();
+  $('#peopleBtn').addEventListener('click', () => openPeopleDialog());
+  dlg.querySelector('.profile-close').addEventListener('click', () => dlg.close());
   dlg.addEventListener('click', (e) => {
     if (e.target === dlg) { dlg.close(); return; } // the backdrop
     const t = e.target.closest('[data-accept], [data-dismiss], [data-unlink], [data-unlink-all]');
@@ -121,13 +121,13 @@ function initPeople() {
       if (p) changeLinks(() => { p.name = e.target.value; });
     } else if (e.target.id === 'peopleA' || e.target.id === 'peopleB') syncPeopleLink();
   });
-  $('#peopleLink').onclick = () => {
+  $('#peopleLink').addEventListener('click', () => {
     const keys = [$('#peopleA').value, $('#peopleB').value];
     setPickerValue($('#peopleA'), '');
     setPickerValue($('#peopleB'), '');
     changeLinks(() => Prefs.linkThreads(keys));
-  };
-  $('#peopleForget').onclick = () => changeLinks(() => { Prefs.people.clear(); Prefs.dismissed.clear(); });
+  });
+  $('#peopleForget').addEventListener('click', () => changeLinks(() => { Prefs.people.clear(); Prefs.dismissed.clear(); }));
   // Another tab changed the links (R10): take its version, so this tab's next change
   // can't write back links that were forgotten there.
   window.addEventListener('storage', (e) => {

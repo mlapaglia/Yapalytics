@@ -70,8 +70,9 @@ function messageLib(vader) {
   const UPPER_RE = /\p{Lu}/u;
   const LOWER_RE = /\p{Ll}/u;
 
-  // Trait bit flags (kept in sync with analysis.js)
-  const T_QUESTION = 1, T_LINK = 2, T_LAUGH = 4, T_CAPS = 8, T_REACTION = 16, T_LOVE = 32;
+  // Trait bit flags on rec.f. Defined only here: analysis.js reads them from messageLib().TRAIT.
+  const TRAIT = { QUESTION: 1, LINK: 2, LAUGH: 4, CAPS: 8, REACTION: 16, LOVE: 32 };
+  const { QUESTION: T_QUESTION, LINK: T_LINK, LAUGH: T_LAUGH, CAPS: T_CAPS, REACTION: T_REACTION, LOVE: T_LOVE } = TRAIT;
 
   function analyzeText(body, rec) {
     rec.b = body;
@@ -167,7 +168,7 @@ function messageLib(vader) {
     for (const n of names) if (n && !x.n.includes(n)) x.n.push(n);
   }
 
-  return { analyzeText, stampTime, swearFamily, explainMood, addReaction, T_REACTION };
+  return { analyzeText, stampTime, swearFamily, explainMood, addReaction, TRAIT, T_REACTION };
 }
 
 /*

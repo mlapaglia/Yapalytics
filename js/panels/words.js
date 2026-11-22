@@ -27,7 +27,7 @@ function renderVocab(ui = currentTheme()) {
     </div>`;
   };
   const firstNote = mo === months[0] ? ' (the first month here, so every word counts as new)' : '';
-  box.innerHTML = html`<div class="vocab-head"><b>New in ${new Date(monthToTs(mo)).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}</b>
+  box.innerHTML = html`<div class="vocab-head"><b>New in ${fmtDate.month(monthToTs(mo))}</b>
     <span class="muted">Words each side used for the first time in this selection${firstNote}. Click the chart to pick a month, or a word to track it.</span></div>
     <div class="vocab-cols">${col(1, 'You')}${col(0, 'Them')}</div>`;
 }
@@ -61,7 +61,7 @@ function phraseFirstsHtml(P, re) {
     head = you ? 'Only you have said it.' : html`You've never said it. <b>${name(them)}</b> said it first.`;
   }
   const card = (m) => {
-    const when = new Date(m.t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    const when = fmtDate.day(m.t);
     const conv = labelFor(m.k);
     const where = m.k.startsWith('g:') ? `in ${conv}` : m.o ? `to ${conv}` : '';
     return html`<div class="phrase-first ${m.o ? 'sent' : 'recv'}">
@@ -149,18 +149,18 @@ Panels.register({
   render: (ctx) => renderPhrase(ctx.ui),
   init() {
     $('#phraseIdeas').innerHTML = html`${PHRASE_IDEAS.map((p) => html`<button type="button" class="btn small">${p}</button>`)}`;
-    $('#phraseIdeas').onclick = (e) => {
+    $('#phraseIdeas').addEventListener('click', (e) => {
       const b = e.target.closest('button');
       if (b) trackPhrase(b.textContent);
-    };
-    $('#phraseGranSeg').onclick = (e) => {
+    });
+    $('#phraseGranSeg').addEventListener('click', (e) => {
       const g = e.target.dataset.gran;
       if (g) View.set({ phraseGran: g });
-    };
-    $('#phraseInput').oninput = (e) => {
+    });
+    $('#phraseInput').addEventListener('input', (e) => {
       clearTimeout(phraseTimer);
       phraseTimer = setTimeout(() => View.set({ phrase: e.target.value }), 250);
-    };
+    });
   },
 });
 
@@ -170,11 +170,11 @@ Panels.register({
   topics: ['data', 'selection', 'vocab', 'theme'],
   render: (ctx) => renderVocab(ctx.ui),
   init() {
-    $('#vocabWords').onclick = (e) => {
+    $('#vocabWords').addEventListener('click', (e) => {
       const b = e.target.closest('[data-word]');
       if (!b) return;
       trackPhrase(b.dataset.word);
       $('#phraseCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    };
+    });
   },
 });

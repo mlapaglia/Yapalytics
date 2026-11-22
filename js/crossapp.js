@@ -226,9 +226,6 @@ function mainAppShifts(months) {
   return out;
 }
 
-const crossPct = (x) => Math.round(x * 100) + '%';
-const crossAppList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
-
 /**
  * R5: the strongest cross-app finding, as a highlight ({ kind, score, icon, parts }), or
  * null. `names`: app number -> name. `labelFor`: person key -> name.
@@ -238,23 +235,23 @@ function crossAppHighlight(X, { labelFor = (k) => k, names = {} } = {}) {
   const offer = (score, icon, parts) => { if (!best || score > best.score) best = { kind: 'apps', score, icon, parts }; };
   for (const [k, P] of X.people) {
     const person = { k, text: labelFor(k) };
-    const apps = crossAppList([...P.apps.keys()].sort((a, b) => a - b).map((s) => names[s] || String(s)));
+    const apps = andList([...P.apps.keys()].sort((a, b) => a - b).map((s) => names[s] || String(s)));
     if (P.switches >= 10) {
       const you = P.switchBy[1] / P.switches;
       const share = Math.max(you, 1 - you);
       if (share >= 0.65) {
         offer(30 + (share - 0.5) * 40, '🔀', you >= 0.5
-          ? ['When you and ', person, ' switch apps mid-conversation, you make the move ', { b: crossPct(share) }, ' of the time.']
-          : ['When you and ', person, ' switch apps mid-conversation, ', person, ' makes the move ', { b: crossPct(share) }, ' of the time.']);
+          ? ['When you and ', person, ' switch apps mid-conversation, you make the move ', { b: pctText(share) }, ' of the time.']
+          : ['When you and ', person, ' switch apps mid-conversation, ', person, ' makes the move ', { b: pctText(share) }, ' of the time.']);
       }
     }
     if (P.sessions >= 10 && P.bounceSessions / P.sessions >= 0.2) {
       const share = P.bounceSessions / P.sessions;
-      offer(28 + share * 30, '🔁', ['You and ', person, ' bounce back and forth between ', apps, ' in ', { b: crossPct(share) }, ' of your conversations.']);
+      offer(28 + share * 30, '🔁', ['You and ', person, ' bounce back and forth between ', apps, ' in ', { b: pctText(share) }, ' of your conversations.']);
     }
     const shift = P.shifts[P.shifts.length - 1];
     if (shift) {
-      const when = new Date(monthToTs(shift.mo)).toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
+      const when = fmtDate.monthShort(monthToTs(shift.mo));
       offer(34, '🧭', ['You and ', person, ' moved from ', { b: names[shift.from] || String(shift.from) }, ' to ', { b: names[shift.to] || String(shift.to) }, ' around ', when, '.']);
     }
   }

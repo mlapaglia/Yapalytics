@@ -732,10 +732,10 @@ const AiAnalysis = {
       <details id="aiPreview"><summary>See exactly what will be sent</summary><pre></pre></details>
       <div class="ai-actions"><button class="btn small primary" type="button" data-ai="send">Send to Claude</button><button class="btn small ghost" type="button" data-ai="cancel">Cancel</button></div>
     </div>`);
-    $('#aiPreview').ontoggle = (e) => {
+    $('#aiPreview').addEventListener('toggle', (e) => {
       const pre = e.target.querySelector('pre');
       if (e.target.open && !pre.textContent) pre.textContent = `${ANALYSIS_SYSTEM}\n\n---\n\n${analysisPrompt(t.text, $('#aiQuestion').value)}`;
-    };
+    });
     this.pending = { conv, t };
   },
 
@@ -794,7 +794,7 @@ const AiAnalysis = {
         : backend === 'lmstudio' ? `LM Studio (${this.settings.lmstudioModel})`
         : (CLAUDE_MODELS.find((m) => m.id === this.settings.claudeModel) || CLAUDE_MODELS[0]).label;
     const moodWord = { positive: 'Positive', negative: 'Negative', mixed: 'Mixed', neutral: 'Neutral' };
-    const day = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    const day = (iso) => fmtDate.day(`${iso}T12:00:00`);
     const report = html`
       ${question.trim() && r.answer ? html`<section class="ai-answer"><h3>${question.trim()}</h3><p>${r.answer}</p></section>` : ''}
       ${r.summary ? html`<h3>Summary</h3><p>${r.summary}</p>` : ''}
@@ -954,35 +954,35 @@ const AiAnalysis = {
     $('#aiRedact').checked = this.backend === 'claude';
     $('#aiOllamaNote').textContent = `Ollama has to allow this page: start it with OLLAMA_ORIGINS=${location.origin}. Your browser may ask to allow access to your local network.`;
 
-    $('#aiBackendSeg').onclick = (e) => {
+    $('#aiBackendSeg').addEventListener('click', (e) => {
       const b = e.target.dataset.backend;
       if (b && b !== this.backend && !this.busy) this.setBackend(b);
-    };
+    });
     for (const sel of ['#aiWebllmModel', '#aiClaudeModel', '#aiOllamaUrl', '#aiOllamaModel', '#aiLmstudioUrl', '#aiLmstudioModel']) {
       // The LM Studio model decides the transcript budget, so the scope line follows it.
-      $(sel).onchange = () => { this.readSettings(); this.save(); this.render(); };
+      $(sel).addEventListener('change', () => { this.readSettings(); this.save(); this.render(); });
     }
-    $('#aiRedact').onchange = () => {
+    $('#aiRedact').addEventListener('change', () => {
       this.redactTouched = true;
       this.hideStatus();
       this.render();
-    };
-    $('#aiOllamaConnect').onclick = () => this.connectOllama();
-    $('#aiLmstudioConnect').onclick = () => this.connectLmStudio();
-    $('#aiRun').onclick = () => this.analyze();
-    $('#aiQuestion').onkeydown = (e) => { if (e.key === 'Enter') this.analyze(); };
-    $('#aiStatus').onclick = (e) => {
+    });
+    $('#aiOllamaConnect').addEventListener('click', () => this.connectOllama());
+    $('#aiLmstudioConnect').addEventListener('click', () => this.connectLmStudio());
+    $('#aiRun').addEventListener('click', () => this.analyze());
+    $('#aiQuestion').addEventListener('keydown', (e) => { if (e.key === 'Enter') this.analyze(); });
+    $('#aiStatus').addEventListener('click', (e) => {
       const a = e.target.dataset.ai;
       if (a === 'send' && this.pending) this.send(this.pending.conv, this.pending.t);
       else if (a === 'cancel') this.hideStatus();
       else if (a === 'stop') this.stop();
-    };
-    $('#aiReport').onclick = (e) => {
+    });
+    $('#aiReport').addEventListener('click', (e) => {
       const b = e.target.closest('[data-day]');
       if (!b) return;
       const [y, m, d] = b.dataset.day.split('-').map(Number);
       this.app.readDay(new Date(y, m - 1, d).getTime());
-    };
+    });
     this.render();
   },
 };
@@ -993,8 +993,7 @@ function fmtDayRange(first, last) {
   const d = (iso) => new Date(`${iso}T12:00:00`);
   const a = d(first);
   const b = d(last);
-  const full = { year: 'numeric', month: 'short', day: 'numeric' };
-  if (first === last) return a.toLocaleDateString(undefined, full);
+  if (first === last) return fmtDate.day(a);
   const sameYear = a.getFullYear() === b.getFullYear();
-  return `${a.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : full)} – ${b.toLocaleDateString(undefined, full)}`;
+  return `${sameYear ? fmtDate.dayOfMonth(a) : fmtDate.day(a)} – ${fmtDate.day(b)}`;
 }

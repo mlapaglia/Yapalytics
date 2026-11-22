@@ -19,17 +19,16 @@ function openProfile(key) {
   const group = key.startsWith('g:');
   const name = plainName(key);
   const them = group ? 'Everyone else' : name;
-  const pct = (a, b) => (b ? Math.round((a / b) * 100) + '%' : '–');
   const members = group ? new Set(msgs.filter((m) => !m.o).map((m) => m.sn || m.sk).filter(Boolean)).size + 1 : 0;
   const initials = group ? '👥' : (name.match(/\p{L}[\p{L}'-]*/gu) || []).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '#';
   const hue = [...key].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % 8;
 
   const tiles = [
-    kpi('Messages', fmtNum(F.n), `${pct(F.you.messages, F.n)} from you`),
-    kpi('Since', new Date(F.first.t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }), agoText(F.first.t)),
-    kpi('Last message', new Date(F.last.t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }), agoText(F.last.t)),
+    kpi('Messages', fmtNum(F.n), `${shareText(F.you.messages, F.n)} from you`),
+    kpi('Since', fmtDate.day(F.first.t), agoText(F.first.t)),
+    kpi('Last message', fmtDate.day(F.last.t), agoText(F.last.t)),
     kpi('Longest streak', F.longestStreak.len ? `${fmtNum(F.longestStreak.len)} days` : '–', F.longestStreak.len ? `${shortDate(F.longestStreak.start)} – ${shortDate(F.longestStreak.end)}` : '', 'Consecutive days with at least one message'),
-    kpi('Busiest month', F.busiestMonth ? new Date(monthToTs(F.busiestMonth.mo)).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }) : '–', F.busiestMonth ? `${fmtNum(F.busiestMonth.n)} messages` : ''),
+    kpi('Busiest month', F.busiestMonth ? fmtDate.monthShort(monthToTs(F.busiestMonth.mo)) : '–', F.busiestMonth ? `${fmtNum(F.busiestMonth.n)} messages` : ''),
     kpi('Favorite time', hourText(F.peakHour), WEEKDAY_PLURAL[F.peakDow]),
   ];
 
@@ -74,13 +73,13 @@ function openProfile(key) {
   if (group) {
     const rows = senderBreakdown(msgs, key);
     bottom.push(html`<h3 class="profile-h">Most active</h3><ol class="plain-list member-list">${rows.map((r) =>
-      html`<li><span>${r.label}</span><span class="meta">${fmtNum(r.n)} · ${pct(r.n, F.n)}</span></li>`)}</ol>`);
+      html`<li><span>${r.label}</span><span class="meta">${fmtNum(r.n)} · ${shareText(r.n, F.n)}</span></li>`)}</ol>`);
   }
   if (words.length) {
     bottom.push(html`<h3 class="profile-h">What you talk about</h3><p class="sub profile-sub">Words that set this conversation apart</p><div class="chips">${words.map((w) => html`<span class="chip">${w.w}</span>`)}</div>`);
   }
   if (started) {
-    bottom.push(html`<h3 class="profile-h">How it started</h3><blockquote class="first-msg"><p>${clip(started.b, 280)}</p><footer>${started.o ? 'You' : momentSender(started)}, ${longDate(started.t)}</footer></blockquote>`);
+    bottom.push(html`<h3 class="profile-h">How it started</h3><blockquote class="first-msg"><p>${clip(started.b, 280)}</p><footer>${started.o ? 'You' : momentSender(started)}, ${fmtDate.weekday(started.t)}</footer></blockquote>`);
   }
   const linkLabel = c.person ? 'Manage links…' : isLinkable(c) ? 'Same person on another app? Link…' : '';
   const linkBtn = linkLabel ? html`<button class="btn" type="button" data-link-people="${key}">${linkLabel}</button>` : '';
@@ -102,7 +101,7 @@ function openProfile(key) {
 
 function initProfile() {
   const dlg = $('#profile');
-  dlg.querySelector('.profile-close').onclick = () => dlg.close();
+  dlg.querySelector('.profile-close').addEventListener('click', () => dlg.close());
   dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // the backdrop
   // Names across the dashboard open profiles; a profile's buttons focus it or link it.
   document.addEventListener('click', (e) => {

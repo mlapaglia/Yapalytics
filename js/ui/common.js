@@ -11,10 +11,6 @@ const show = (sel, on) => ($(sel).hidden = !on);
 
 const DAY_MS = 86400000;
 
-const ordinal = (n) => fmtNum(n) + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
-
-const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
-
 const logoSvg = (s) => html`<svg class="logo" aria-hidden="true"><use href="#logo-${Sources.byId(s).logo}"/></svg>`;
 
 /** An app's chart colour as the --app custom property (spec 010's app edges and dots). */
@@ -53,22 +49,10 @@ const personLink = (k, text = plainName(k)) => html`<button type="button" class=
 
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s);
 
-const longDate = (t) => new Date(t).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-
 const agoText = (t) => (Date.now() - t < DAY_MS ? 'today' : `${fmtGap(Date.now() - t)} ago`);
 
 function shortDate(d) {
-  return new Date(dayToTs(d)).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-/** "4h 10m", "3 days", "5 months", "2.5 years": how far apart two moments are. */
-function fmtGap(ms) {
-  const days = ms / 86400000;
-  if (days < 1) return fmtDuration(ms);
-  const plural = (n, unit) => `${n} ${unit}${n === 1 ? '' : 's'}`;
-  if (days < 60) return plural(Math.round(days), 'day');
-  if (days < 730) return plural(Math.round(days / 30.44), 'month');
-  return `${(days / 365.25).toFixed(1).replace(/\.0$/, '')} years`;
+  return fmtDate.day(dayToTs(d));
 }
 
 /** Highlight parts (strings, { b }, { k, text }) as HTML. */
