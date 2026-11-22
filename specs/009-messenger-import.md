@@ -142,7 +142,7 @@ UTF-8 fix-up.
 `parseInstagramFiles` keeps its signature; `parseMessengerFiles(files, callbacks)` is new.
 Both still go through `runParserWorker`, so the worker stays self-contained.
 
-**Linking** (`suggestLinks`, `js/people.js`). The "two people with this name on one app"
+**Linking** (`suggestLinks`, `js/links.js`). The "two people with this name on one app"
 check groups conversations by app and, for Messenger, by export: keys starting with
 `fb:e2ee:` count apart from other `fb:` keys (R12). Nothing else in linking changes.
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { loadApp, loadScripts, makeMessage, messageLib } from '../helpers/load.mjs';
 
-const { createDataset } = loadApp(['createDataset']);
+const { createDataset, hashKey } = loadApp(['createDataset', 'hashKey']);
 const lib = messageLib();
 
 // An Instagram chat between Alex and Jamie (records name their sender), and an SMS one with Alex.
@@ -43,6 +43,20 @@ describe('spec 014 dataset', () => {
       assert.equal(hey.att[0].z, 1, `${order}: the attachment points at the second export's file`);
       assert.equal(D.reactions, 1, order);
     }
+  });
+
+  it('AC16: keeps a 53-bit hash per message, and 300,000 different messages get 300,000 different hashes', () => {
+    const hashes = new Set();
+    const senders = ['Alex Rivera', 'Jamie Park', 'Sam Patel', 'Noor', ''];
+    for (let i = 0; i < 300000; i++) {
+      // Shaped like the real keys: time | sender or direction | conversation | length | MMS
+      const key = `${1700000000000 + i * 37000}|${senders[i % 5] || i % 2}|${i % 3 ? 'ig:alexrivera_1111' : '51234567'}|${i % 160}|${i % 7 ? 0 : 1}`;
+      const h = hashKey(key);
+      assert.ok(Number.isSafeInteger(h) && h >= 0);
+      hashes.add(h);
+    }
+    assert.equal(hashes.size, 300000);
+    assert.equal(hashKey('same|key'), hashKey('same|key'));
   });
 
   it('merges a conversation read from two exports: newest name, every member', () => {

@@ -99,7 +99,7 @@ the person contacts, recomputes first-seen times, labels and search text, and mo
 selected conversation to its person (or to "All" if its person is gone). It runs after
 loading files and after every change in the People dialog.
 
-**Code.** `js/people.js` holds the pure parts: `normName`, `normPhone`,
+**Code.** `js/links.js` (named `js/people.js` until spec 014) holds the pure parts: `normName`, `normPhone`,
 `identityTokens(contact, ownNames)`, `suggestLinks(threads, personOf, dismissed)` and
 `defaultPersonName(threads)`. app.js holds state, storage, `applyLinks` and the dialog.
 

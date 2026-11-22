@@ -1,8 +1,9 @@
 /*
  * Linked people (spec 005): one person's 1-on-1 conversations across apps. This file
- * holds the pure parts — matching and naming — so they can be unit tested; app.js
- * keeps the state, storage and dialog. Only conversation names, numbers and emails
- * are read here, never message text.
+ * holds the pure parts — matching and naming — so they can be unit tested. The saved
+ * links are in store.js (Prefs), applying them in dataset.js, the dialog in
+ * ui/people-dialog.js. Only conversation names, numbers and emails are read here,
+ * never message text.
  */
 
 /** Names that stand for "someone" rather than a person, so they never match. */

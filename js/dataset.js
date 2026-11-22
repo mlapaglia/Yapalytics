@@ -38,13 +38,34 @@ const threadName = (c) => formatAddr(c.name) || formatAddr(c.addr) || c.key;
 const isLinkable = (c) => !!c && !c.group && !c.person && c.key !== 'unknown';
 /** A person's key: 'p:' + the first of its conversation keys, so it stays the same across reloads. */
 const personKeyOf = (threads) => 'p:' + [...threads].sort()[0];
+/**
+ * A 53-bit hash of a string (cyrb53), so the dedupe sets keep a number per message rather
+ * than its key string (spec 014 R15). Two different keys share a hash about once in 2^53:
+ * with a million messages, the chance that any two collide is about 1 in 18,000, and then
+ * the later one would be dropped as a duplicate.
+ */
+function hashKey(str) {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
+  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+
 /** Two sender names that are the same apart from case and spacing. */
 const sameName = (a, b) => a.replace(/[\s~]/g, '').toLowerCase() === b.replace(/[\s~]/g, '').toLowerCase();
 
 function createDataset() {
-  // Dedupe keys of what's been read, so an overlapping export adds nothing twice.
-  let seenMsgs = new Map(); // key -> the message kept (null for reactions sent as texts)
-  let seenCalls = new Set();
+  // What's been read, by hashKey of its dedupe key, so an overlapping export adds nothing twice.
+  let seenMsgs = new Map(); // hash -> the message kept (null for reactions sent as texts)
+  let seenCalls = new Set(); // hashes
 
   const D = {
     msgs: [],
@@ -72,7 +93,7 @@ function createDataset() {
       const rebase = (att) => { if (attBase) for (const a of att) if (a.z != null) a.z += attBase; };
       for (const m of msgs) {
         // Apps that name senders get `o` in rederive, so key them by sender.
-        const key = `${m.t}|${hasOwner(m.s) ? m.sn : m.o}|${m.k}|${m.l}|${m.m}`;
+        const key = hashKey(`${m.t}|${hasOwner(m.s) ? m.sn : m.o}|${m.k}|${m.l}|${m.m}`);
         const seen = seenMsgs.get(key);
         if (seen !== undefined) {
           // The same message in an overlapping export: keep the reactions both list, and
@@ -93,7 +114,7 @@ function createDataset() {
         D.msgs.push(m);
       }
       for (const c of calls) {
-        const key = `${c.t}|${c.ty}|${c.k}`;
+        const key = hashKey(`${c.t}|${c.ty}|${c.k}`);
         if (seenCalls.has(key)) continue;
         seenCalls.add(key);
         D.calls.push(c);

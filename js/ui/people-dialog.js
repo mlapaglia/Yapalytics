@@ -1,4 +1,4 @@
-/* The People dialog (spec 005): suggested links, linked people and linking by hand. Matching is in people.js. */
+/* The People dialog (spec 005): suggested links, linked people and linking by hand. Matching is in links.js. */
 
 /** What the dialog shows: loaded 1-on-1 conversations, their message counts, and the links worth suggesting. */
 const PeopleDlg = { threadN: new Map(), linkable: [], suggestions: [] };

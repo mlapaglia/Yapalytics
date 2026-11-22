@@ -187,6 +187,20 @@ code { font-size: 0.92em; background: var(--surface-2); padding: 1px 5px; border
   font-size: 13px;
 }
 .error { margin: 0 0 16px; color: var(--error); font-weight: 500; }
+/* A load that failed while the dashboard shows (spec 014 R17). */
+.dash-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--error);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--error);
+  font-weight: 500;
+}
 
 .guide-title { margin: 56px 0 4px; text-align: center; font-size: 20px; letter-spacing: -0.01em; }
 .guide-sub { margin: 0 0 20px; text-align: center; color: var(--text-2); }

@@ -240,14 +240,12 @@ test.describe('spec 006 managing loaded files', () => {
 
     test('AC16: is left out, and exactly the other checked files stay loaded', async ({ page }) => {
       await loadFiles(page, [sms()]);
-      const alerts = [];
-      page.on('dialog', (d) => { alerts.push(d.message()); d.accept(); });
       await openDialog(page);
       await page.setInputFiles('#addInput', { name: 'result.json', mimeType: 'application/json', buffer: Buffer.from('{oops') });
       await expect(rows(page)).toHaveCount(2);
       await apply(page);
-      await expect.poll(() => alerts.length).toBe(1);
-      expect(alerts[0]).toMatch(/^Could not read that file: .*valid JSON/);
+      await expect(page.locator('#dashError')).toBeVisible();
+      await expect(page.locator('#dashErrorText')).toHaveText(/^Could not read that file: .*valid JSON/);
       await dashboard(page);
       await expect(page.locator('#filesBtn')).toHaveText('📁 Files (1)');
       expect(await counts(page)).toEqual({ msgs: 5, telegram: 0 });
