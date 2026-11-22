@@ -1,6 +1,6 @@
 # 014 Restructuring the code: safety, speed and room to grow
 
-Status: Draft: built, awaiting review · Author: · PR: #21–#27
+Status: Draft: built, awaiting review · Author: · PR: #21–#28
 
 ## Problem
 
@@ -77,11 +77,18 @@ four ways:
   `ms-people`, `yapa-ai`) and formats, so nothing saved before the change is lost.
 - **R14** What the dashboard shows doesn't change. Existing acceptance tests for specs
   001–013 keep passing; only their way of reading the page (R12) is updated.
+- **R15** The sets that keep loaded messages and calls from being added twice hold a
+  53-bit hash of each dedupe key, not the key string.
+- **R16** The link-suggestion module is `js/links.js`, so it can't be mistaken for the
+  People tab's panel (`js/panels/people.js`).
+- **R17** A file that fails to read while the dashboard is showing doesn't open a browser
+  alert. The message shows at the top of the dashboard, read out to screen readers,
+  with a ✕ that hides it, and it goes away when the next load starts.
 
 ## Privacy
 
 No message text goes anywhere new, and nothing new is downloaded. Stored data is
-unchanged (R13). Escaping (R3) closes a way for a crafted export to run script that
+unchanged (R13). The dedupe hashes (R15) live in memory only, like the keys they replace. Escaping (R3) closes a way for a crafted export to run script that
 could read every loaded message.
 
 ## Design
@@ -319,6 +326,20 @@ It lands as one PR: the panels share `View.set` and topics, so moving some tabs 
   handles `data-profile` / `data-focus` / `data-link-people`, and On this day handles
   `data-otd-day` / `data-otd-goto`.
 
+### Step 9 · Follow-ups (the open questions, settled in review)
+
+- **Dedup hashes (R15).** `hashKey(str)` in `dataset.js` is cyrb53, a fast 53-bit
+  string hash. `addBatch` keeps `Map<hash, message>` and `Set<hash>` instead of the
+  key strings. Two different keys share a hash about once in 2^53: with a million
+  messages, the chance that any two collide is about 1 in 18,000, and the later message
+  would then be dropped as a duplicate. For 300,000 keys shaped like real ones, the map
+  takes 18.6 MB instead of 33.2 MB (Node, `--expose-gc`).
+- **`js/links.js` (R16).** `js/people.js` and its unit test are renamed. Specs 005 and
+  009 point at the new name.
+- **Load errors (R17).** `#dashError` sits at the top of `#dash` with `role="alert"`.
+  `showLoadError` fills it instead of calling `alert()`; `showProgress` hides it, and so
+  does its ✕.
+
 ### Effect
 
 Measured after step 7 the same way as in Problem: the demo copied to 302,700 messages,
@@ -378,13 +399,14 @@ aggregating the busiest conversation is most of its cost.
   them apply.
 - **AC15** All existing unit and browser tests pass, changed only to read the page
   through `state.mjs`.
+- **AC16** Given 300,000 different keys shaped like real dedupe keys, `hashKey` gives
+  300,000 different safe integers, and the same key always gives the same hash. AC8
+  still holds with the hashed sets.
+- **AC17** Given an SMS backup loaded, when a file that can't be read is loaded, then no
+  browser dialog opens, the dashboard stays, and `#dashError` (role `alert`) says "Could
+  not read that file: …". Clicking its ✕ hides it.
 
 ## Open questions
 
-- **Dedup memory.** `addBatch` keeps a string key per message for the whole session.
-  A 53-bit hash would use far less memory, at a tiny chance of two different messages
-  colliding and one being dropped. Keep strings for now?
-- **`js/people.js` naming.** With `js/panels/people.js` added, should the link-suggestion
-  module become `js/links.js`?
-- **Load-error alert.** `showLoadError` uses `alert()` when data is already loaded.
-  Replacing it with an inline message is a visible change, so it would need its own spec.
+- None. Review settled the three left after the build: hash the dedupe keys (R15),
+  rename `js/people.js` to `js/links.js` (R16), and show load errors on the page (R17).

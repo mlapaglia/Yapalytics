@@ -47,6 +47,7 @@ function loadFiles(fileList) {
 }
 
 function showProgress() {
+  $('#dashError').hidden = true;
   $('#landing').hidden = false;
   $('#drop').hidden = true;
   $('#progress').hidden = false;
@@ -158,10 +159,12 @@ function showLoadError(msg) {
   const el = $('#loadError');
   el.textContent = msg;
   el.hidden = false;
+  // With something still loaded, the dashboard comes back and says what went wrong (R17).
   if (Data.msgs.length || Data.calls.length) {
     $('#landing').hidden = true;
     $('#dash').hidden = false;
-    alert(msg);
+    $('#dashErrorText').textContent = msg;
+    $('#dashError').hidden = false;
   }
 }
 
@@ -180,6 +183,7 @@ function rederive() {
 }
 
 function initLoader() {
+  $('#dashErrorClose').addEventListener('click', () => { $('#dashError').hidden = true; });
   $('#fileInput').addEventListener('change', (e) => {
     loadFiles(e.target.files);
     e.target.value = '';

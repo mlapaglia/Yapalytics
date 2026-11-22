@@ -207,6 +207,10 @@
 
   <!-- ============================================================ dashboard -->
   <main id="dash" hidden>
+    <div class="dash-error" id="dashError" role="alert" hidden>
+      <span id="dashErrorText"></span>
+      <button class="btn small ghost" type="button" id="dashErrorClose" aria-label="Dismiss">✕</button>
+    </div>
     <div class="filters">
       <div class="field grow">
         <label for="contactSel">Conversation</label>
@@ -731,7 +735,7 @@
   <script src="js/ai-mood.js"></script>
   <script src="js/ai-analysis.js"></script>
   <script src="js/tabs.js"></script>
-  <script src="js/people.js"></script>
+  <script src="js/links.js"></script>
   <script src="js/files.js"></script>
   <script src="js/dataset.js"></script>
   <script src="js/panels.js"></script>
