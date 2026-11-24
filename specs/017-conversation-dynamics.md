@@ -1,6 +1,6 @@
 # 017 How two people talk
 
-Status: Approved · PR:
+Status: Approved · PR: [#32](https://github.com/mlapaglia/Yapalytics/pull/32)
 
 ## Problem
 
