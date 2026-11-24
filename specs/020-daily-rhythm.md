@@ -1,6 +1,6 @@
 # 020 Daily rhythm: your day, time away and unusual days
 
-Status: Draft · Author: · PR:
+Status: Draft · PR: [#36](https://github.com/mlapaglia/Yapalytics/pull/36)
 
 ## Problem
 
