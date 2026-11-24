@@ -185,6 +185,12 @@ describe('spec 026 exporting stats as CSV', () => {
       const got = new Uint8Array(await (await readEntryBlob(e)).arrayBuffer());
       assert.deepEqual(got, new TextEncoder().encode(files[i].csv), e.name);
     }
+    // The modified time, read from the first local header (MS-DOS time at byte 10, date at 12).
+    // Read here rather than from `unzip -l`, whose date format differs between systems.
+    const head = new DataView(await blob.arrayBuffer());
+    assert.equal(head.getUint32(0, true), 0x04034b50);
+    const time = head.getUint16(10, true), date = head.getUint16(12, true);
+    assert.deepEqual([(date >> 9) + 1980, (date >> 5) & 15, date & 31, time >> 11, (time >> 5) & 63], [2026, 11, 24, 9, 30]);
     // And with a standard tool, when there is one.
     let unzip = true;
     try { execFileSync('unzip', ['-v'], { stdio: 'ignore' }); } catch { unzip = false; }
@@ -195,7 +201,6 @@ describe('spec 026 exporting stats as CSV', () => {
         writeFileSync(path, Buffer.from(await blob.arrayBuffer()));
         const out = execFileSync('unzip', ['-t', path], { encoding: 'utf8' });
         assert.match(out, /No errors detected/);
-        assert.match(execFileSync('unzip', ['-l', path], { encoding: 'utf8' }), /11-24-2026 09:30/);
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
