@@ -1,6 +1,6 @@
 # 021 Comparing two periods
 
-Status: Draft · Author: · PR:
+Status: Draft · PR: [#35](https://github.com/mlapaglia/Yapalytics/pull/35)
 
 ## Problem
 
