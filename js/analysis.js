@@ -67,6 +67,83 @@ const SESSION_BINS = [
   { max: 150, label: '51–150' },
   { max: Infinity, label: '150+' },
 ];
+// Spec 017: messages in a row from one side of a 1-on-1 conversation.
+const TURN_BINS = [
+  { max: 1, label: '1' },
+  { max: 2, label: '2' },
+  { max: 3, label: '3' },
+  { max: 5, label: '4–5' },
+  { max: 10, label: '6–10' },
+  { max: Infinity, label: '11+' },
+];
+
+/*
+ * Spec 017 style sums, per side, over text messages (with text, not reactions):
+ * [messages, words, emoji, questions, laughs, love, ALL CAPS, swearing]. Each marker is
+ * one sum per message; `pct` ones are shares of messages.
+ */
+const STYLE_MARKERS = [
+  { label: 'Words per message', i: 1 },
+  { label: 'Emoji per message', i: 2 },
+  { label: 'Questions', i: 3, pct: true },
+  { label: 'Laughs', i: 4, pct: true },
+  { label: 'Love', i: 5, pct: true },
+  { label: 'ALL CAPS', i: 6, pct: true },
+  { label: 'Swearing', i: 7, pct: true },
+];
+const STYLE_SUMS = 8;
+const STYLE_WINDOW = 3; // a month's point covers it and the months before it, to steady small samples
+const STYLE_MIN_MSGS = 30; // text messages from each side in a window for its month to count
+const STYLE_MIN_HITS = 10; // a marker counts when it adds up to this many on the two sides together
+
+/** A side's style markers (STYLE_MARKERS order) from its sums, or null with no text messages. */
+function styleMarkers(sums) {
+  return sums[0] ? STYLE_MARKERS.map((m) => sums[m.i] / sums[0]) : null;
+}
+
+/** How alike one marker is on two sides, 0–1, or null when it's too rare to compare. */
+function markerMatch(a, b, m) {
+  if (a[m.i] + b[m.i] < STYLE_MIN_HITS) return null;
+  const x = a[m.i] / a[0], y = b[m.i] / b[0];
+  return 1 - Math.abs(x - y) / (x + y);
+}
+
+/**
+ * How alike two sides write, 0–100: 1 − |a − b| / (a + b) for each marker (Language Style
+ * Matching's formula), averaged over the markers seen STYLE_MIN_HITS times. Null when a
+ * side has no text messages or no marker is common enough.
+ */
+function styleMatch(a, b) {
+  if (!a[0] || !b[0]) return null;
+  let sum = 0, n = 0;
+  for (const m of STYLE_MARKERS) {
+    const v = markerMatch(a, b, m);
+    if (v == null) continue;
+    sum += v;
+    n++;
+  }
+  return n ? Math.round((sum / n) * 100) : null;
+}
+
+/**
+ * [[mo, match]] for each month with messages, over that month and the STYLE_WINDOW − 1
+ * before it, when the window has STYLE_MIN_MSGS text messages from each side.
+ */
+function styleSeries(months) {
+  const out = [];
+  for (const mo of [...months.keys()].sort((a, b) => a - b)) {
+    const win = pair(STYLE_SUMS);
+    for (let w = 0; w < STYLE_WINDOW; w++) {
+      const v = months.get(mo - w);
+      if (v) for (let o = 0; o < 2; o++) for (let i = 0; i < STYLE_SUMS; i++) win[o][i] += v[o][i];
+    }
+    if (win[0][0] < STYLE_MIN_MSGS || win[1][0] < STYLE_MIN_MSGS) continue;
+    const m = styleMatch(win[0], win[1]);
+    if (m != null) out.push([mo, m]);
+  }
+  return out;
+}
+
 const NIGHT_END_HOUR = 5; // "night owl" = messages from midnight until 5am
 const MORNING_HOURS = [5, 9]; // "early morning" = messages from 5am until 9am
 const LONG_SILENCE_DAYS = 30; // silences in a conversation this long or longer are kept (byContact.silences)
@@ -175,7 +252,8 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
     last: null,
     // key -> { n:[r,s], first, last, starters:[r,s], replyMedian:[r,s], replyN:[r,s], lenSum, lenN, emoji: Map,
     //   months: Map, longestRun, traits:[[r],[s]], doubles:[r,s], ph:[r,s], weekend, morning,
-    //   silences: [{ len (silent days, at least LONG_SILENCE_DAYS), end (time messages resumed), before (messages before it) }] }
+    //   silences: [{ len (silent days, at least LONG_SILENCE_DAYS), end (time messages resumed), before (messages before it) }],
+    //   spec 017 (1-on-1 only): lastWord:[r,s], noReply:[r,s], qAsked:[r,s], qReplied:[r,s], style: Map(mo -> [sums r, sums s]) }
     byContact: new Map(),
     night: new Map(), // mo -> [night, total]
     latestNight: null, // { t, k, tod } latest time-of-night message
@@ -188,16 +266,47 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
     sessionHist: zeros(SESSION_BINS.length),
     longestSession: null, // { k, start, end, n }
     milestones: [], // { t, k (null = overall), n }
+    // Spec 017, 1-on-1 conversations only. Endings and question replies count settled
+    // conversations: ones that ended more than a gap before the selection's last message.
+    endings: { last: [0, 0], none: [0, 0] }, // last word (both wrote) / no reply (only that side wrote)
+    questionReplies: { asked: [0, 0], replied: [0, 0] },
+    turnHist: pair(TURN_BINS.length),
+    turns: [0, 0],
+    turnMsgs: [0, 0], // messages in those turns
+    styleMonths: new Map(), // mo -> [sums r, sums s] (STYLE_MARKERS)
+    styleTotal: pair(STYLE_SUMS),
   };
-  const lastByThread = new Map(); // key -> open session { k, t, o, start, n }
+  // key -> open session { k, t, o, start, n } plus, for 1-on-1 threads (spec 017),
+  // { bc, sides (bit 1 received, bit 2 sent), turn, pending:[r,s] questions, asked, replied }
+  const lastByThread = new Map();
   let total = 0;
 
-  const closeSession = (ss) => {
+  const closeTurn = (o, n) => {
+    A.turns[o]++;
+    A.turnMsgs[o] += n;
+    for (let i = 0; i < TURN_BINS.length; i++) {
+      if (n <= TURN_BINS[i].max) { A.turnHist[o][i]++; break; }
+    }
+  };
+
+  const closeSession = (ss, settled = true) => {
     A.sessions++;
     for (let i = 0; i < SESSION_BINS.length; i++) {
       if (ss.n <= SESSION_BINS[i].max) { A.sessionHist[i]++; break; }
     }
     if (!A.longestSession || ss.n > A.longestSession.n) A.longestSession = { k: ss.k, start: ss.start, end: ss.t, n: ss.n };
+    if (!ss.bc) return;
+    closeTurn(ss.o, ss.turn);
+    if (!settled) return;
+    const { bc } = ss;
+    if (ss.sides === 3) { A.endings.last[ss.o]++; bc.lastWord[ss.o]++; }
+    else { A.endings.none[ss.o]++; bc.noReply[ss.o]++; }
+    for (let o = 0; o < 2; o++) {
+      A.questionReplies.asked[o] += ss.asked[o];
+      A.questionReplies.replied[o] += ss.replied[o];
+      bc.qAsked[o] += ss.asked[o];
+      bc.qReplied[o] += ss.replied[o];
+    }
   };
 
   for (const r of msgs) {
@@ -213,6 +322,7 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
       bc = {
         n: [0, 0], first: r.t, last: r.t, starters: [0, 0], replies: [[], []], lenSum: [0, 0], lenN: [0, 0], emoji: new Map(), months: new Map(),
         lastDay: null, run: 0, longestRun: 0, traits: pair(TRAITS.length), doubles: [0, 0], ph: [0, 0], weekend: 0, morning: 0, silences: [],
+        lastWord: [0, 0], noReply: [0, 0], qAsked: [0, 0], qReplied: [0, 0], style: new Map(),
       };
       A.byContact.set(r.k, bc);
     }
@@ -288,6 +398,20 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
       mon.len[o] += r.l;
       mon.lenN[o]++;
       A.words[o] += r.wc;
+      if (!isGroup) {
+        // Per conversation here; A.styleMonths and A.styleTotal add them up after the loop.
+        let bm = bc.style.get(r.mo);
+        if (!bm) bc.style.set(r.mo, (bm = pair(STYLE_SUMS)));
+        const v = bm[o], f = r.f;
+        v[0]++;
+        v[1] += r.wc;
+        if (r.e) v[2] += r.e.length;
+        if (f & TRAIT.QUESTION) v[3]++;
+        if (f & TRAIT.LAUGH) v[4]++;
+        if (f & TRAIT.LOVE) v[5]++;
+        if (f & TRAIT.CAPS) v[6]++;
+        if (r.sw) v[7]++;
+      }
     }
 
     for (let i = 0; i < TRAITS.length; i++) {
@@ -317,12 +441,28 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
 
     // Reply times / conversation starters / sessions, per thread
     const prev = lastByThread.get(r.k);
+    const question = r.f & TRAIT.QUESTION ? 1 : 0;
     if (!prev || r.t - prev.t > gap) {
       A.starters[o]++;
       bc.starters[o]++;
       if (prev) closeSession(prev);
-      lastByThread.set(r.k, { k: r.k, t: r.t, o, start: r.t, n: 1 });
+      const ss = { k: r.k, t: r.t, o, start: r.t, n: 1 };
+      if (!isGroup) Object.assign(ss, { bc, sides: 1 << o, turn: 1, pending: [0, 0], asked: [0, 0], replied: [0, 0] });
+      if (!isGroup && question) { ss.asked[o]++; ss.pending[o]++; }
+      lastByThread.set(r.k, ss);
       continue;
+    }
+    if (prev.bc) {
+      // Spec 017: turns, and the other side's questions waiting for a reply
+      prev.sides |= 1 << o;
+      if (prev.o === o) prev.turn++;
+      else {
+        closeTurn(prev.o, prev.turn);
+        prev.turn = 1;
+        prev.replied[1 - o] += prev.pending[1 - o];
+        prev.pending[1 - o] = 0;
+      }
+      if (question) { prev.asked[o]++; prev.pending[o]++; }
     }
     if (prev.o !== o) {
       const wait = r.t - prev.t;
@@ -340,8 +480,20 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
     prev.o = o;
     prev.n++;
   }
-  for (const ss of lastByThread.values()) closeSession(ss);
+  // A conversation still open at the end is settled only if it ended over a gap before the last message.
+  const endT = msgs.length ? msgs[msgs.length - 1].t : 0;
+  for (const ss of lastByThread.values()) closeSession(ss, endT - ss.t > gap);
   for (const bc of A.byContact.values()) {
+    for (const [mo, sums] of bc.style) {
+      let sm = A.styleMonths.get(mo);
+      if (!sm) A.styleMonths.set(mo, (sm = pair(STYLE_SUMS)));
+      for (let o = 0; o < 2; o++) {
+        for (let i = 0; i < STYLE_SUMS; i++) {
+          sm[o][i] += sums[o][i];
+          A.styleTotal[o][i] += sums[o][i];
+        }
+      }
+    }
     bc.replyMedian = [median(bc.replies[0]), median(bc.replies[1])];
     bc.replyN = [bc.replies[0].length, bc.replies[1].length];
     bc.replies = null;

@@ -86,7 +86,7 @@ describe('buildHighlights', () => {
 
   it('talks about "here" for one conversation', () => {
     const mom = msgs.filter((m) => m.k === 'mom');
-    const one = buildHighlights(mom, aggregateMessages(mom), { labelFor, single: true });
+    const one = buildHighlights(mom, aggregateMessages(mom), { labelFor, single: true, limit: Infinity });
     assert.ok(!one.some((h) => h.kind === 'top'));
     const balance = one.find((h) => h.kind === 'balance');
     assert.equal(highlightText(balance), 'You send 67% of the messages here.');
