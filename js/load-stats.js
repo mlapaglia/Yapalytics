@@ -45,9 +45,12 @@ function createLoadStats({ steps = ['check', 'read', 'merge', 'owners', 'draw'],
     samples: [], // [time, bytes read, messages kept]
   };
 
+  /** Files that count towards the percentage: not ones that failed, which aren't read again (R3). */
+  const counted = () => st.files.filter((f) => f.state !== 'failed');
+
   function bytesRead() {
     let b = 0;
-    for (const f of st.files) b += f.state === 'done' ? f.size : f.frac * f.size;
+    for (const f of counted()) b += f.state === 'done' ? f.size : f.frac * f.size;
     return b;
   }
 
@@ -95,7 +98,7 @@ function createLoadStats({ steps = ['check', 'read', 'merge', 'owners', 'draw'],
       for (const f of files) {
         let row = st.files.find((r) => r.file === f.file);
         if (!row) st.files.push((row = { ...f }));
-        Object.assign(row, { state: 'waiting', frac: 0, msgs: 0, calls: 0, start: null, ms: null });
+        Object.assign(row, { state: 'waiting', frac: 0, job: null, start: null, ms: null });
       }
       Object.assign(st, { msgs: 0, calls: 0, keys: new Set(), media: 0, rx: 0, dupes: 0, months: new Map(), first: null, last: null, samples: [] });
       for (const m of base.msgs) addMessage(m);
@@ -107,11 +110,16 @@ function createLoadStats({ steps = ['check', 'read', 'merge', 'owners', 'draw'],
       sample(now);
     },
 
-    /** Job `i` starts on `files` (some of beginRead's, by `file`). */
+    /**
+     * Job `i` starts on `files` (some of beginRead's, by `file`). Its rows share one count
+     * of what it added: the parser reads them together, so it can't say which file a
+     * message came from.
+     */
     startJob(i, files, now = 0) {
       const rows = st.files.filter((r) => files.includes(r.file));
       st.jobs.set(i, rows);
-      for (const r of rows) { r.state = 'reading'; r.start = now; }
+      const job = { msgs: 0, calls: 0, files: rows.length };
+      for (const r of rows) Object.assign(r, { state: 'reading', start: now, job });
     },
 
     /** The worker's progress on job `i`: `loaded` of `total` (its own units, usually bytes). */
@@ -134,13 +142,13 @@ function createLoadStats({ steps = ['check', 'read', 'merge', 'owners', 'draw'],
       st.calls += keptCalls;
       st.dupes += res.dupes;
       st.textRx = data.reactions;
-      // A job of several files shares its counts: they're on its first row.
-      if (rows[0]) { rows[0].msgs += kept; rows[0].calls += keptCalls; }
-      for (const c of found) {
-        st.found.unshift(c);
-        st.foundN++;
+      const job = rows[0]?.job;
+      if (job) { job.msgs += kept; job.calls += keptCalls; }
+      // Newest first, and only the last few of a big batch: no work for the ones that won't show.
+      if (found.length) {
+        st.found = found.slice(-FOUND_SHOWN).reverse().concat(st.found).slice(0, FOUND_SHOWN);
+        st.foundN += found.length;
       }
-      if (st.found.length > FOUND_SHOWN) st.found.length = FOUND_SHOWN;
       sample(now);
     },
 
@@ -156,11 +164,15 @@ function createLoadStats({ steps = ['check', 'read', 'merge', 'owners', 'draw'],
 
     /** Everything the screen draws, at time `now`. */
     snapshot(now = 0) {
-      const total = st.files.reduce((a, f) => a + f.size, 0);
+      const total = counted().reduce((a, f) => a + f.size, 0);
       const read = bytesRead();
-      const s0 = st.samples[0];
+      // Speeds over the window ending now, not at the last sample: from the newest sample
+      // at or before its start (the oldest kept, if none is). So a read that stalls
+      // slows to 0 within the window, and its time left goes away.
       const s1 = st.samples[st.samples.length - 1];
-      const dt = s1 && s0 ? (s1[0] - s0[0]) / 1000 : 0;
+      let s0 = st.samples[0];
+      for (const x of st.samples) if (x[0] <= now - RATE_WINDOW) s0 = x;
+      const dt = s0 ? (now - s0[0]) / 1000 : 0;
       const bps = dt >= 0.25 ? (s1[1] - s0[1]) / dt : null;
       const mps = dt >= 0.25 ? (s1[2] - s0[2]) / dt : null;
       let left = null;
@@ -172,7 +184,8 @@ function createLoadStats({ steps = ['check', 'read', 'merge', 'owners', 'draw'],
         step: st.step,
         detail: st.detail,
         steps: st.steps.map((x) => ({ id: x.id, label: x.label, state: x.state, ms: x.state === 'now' ? now - x.start : x.ms })),
-        files: st.files.map(({ name, size, s, state, frac, msgs, calls, ms }) => ({ name, size, s, state, frac, msgs, calls, ms })),
+        // msgs and calls are the job's: `shared` files added them together (R7).
+        files: st.files.map(({ name, size, s, state, frac, job, ms }) => ({ name, size, s, state, frac, ms, msgs: job?.msgs ?? 0, calls: job?.calls ?? 0, shared: job?.files ?? 1 })),
         pct: total ? (read / total) * 100 : st.step && st.step !== 'demo' && st.step !== 'check' ? 100 : 0,
         bytes: read,
         total,

@@ -43,8 +43,9 @@ messages. Watching the years fill in as files are read is a good first look.
 - **R3** **Progress bar.** It's split into one segment per file, sized by the file's
   share of the total bytes, coloured with that file's app colour. Each segment fills
   as its file is read. The percentage beside it is bytes read over total bytes for
-  the files being read. After reading, the bar stays full and the step list (R8) shows
-  what's left.
+  the files being read: a file that failed keeps its row (R14) but leaves the
+  percentage, so a load that goes on without it still ends at 100%. After reading, the
+  bar stays full and the step list (R8) shows what's left.
 - **R4** **Live counts.** Messages, calls, conversations, photos and videos, reactions
   and duplicates skipped, each counting up as batches arrive. A count shows once it's
   above zero (Messages always shows), so a WhatsApp-only load never shows "0 calls".
@@ -58,7 +59,8 @@ messages. Watching the years fill in as files are read is a good first look.
   - Duplicates skipped: messages already loaded from another file (overlapping
     exports).
 - **R5** **Speed line.** Read speed in MB/s and messages per second, time elapsed, and
-  time left. Speeds are averaged over the last 2 seconds so they don't jump. Time left
+  time left. Speeds are averaged over the 2 seconds up to now, so they don't jump, and
+  a read that stalls slows to 0 within 2 seconds instead of showing its last speed. Time left
   is shown only after 1 second of reading and only while it's over 1 second; it's
   bytes left over the recent byte rate, rounded ("about 12 s left", "about 2 min
   left").
@@ -69,7 +71,9 @@ messages. Watching the years fill in as files are read is a good first look.
 - **R7** **Files.** One row per file being read: app logo, file name, size, and its
   state: waiting, reading (with its own percentage), done (with how many messages and
   calls it added, and how long it took) or failed. Files read together as one job (an
-  Instagram export split across zips) share a state.
+  Instagram export or a Takeout split across zips) share a state and one count, since
+  the parser can't say which file a message came from: each of their rows says
+  "30 messages from these 2 files".
 - **R8** **Steps.** A short list that ticks off as it goes, each with the time it
   took: Preparing the demo (demo only), Checking files, Reading files, Merging and
   sorting, Who's you and linked people, Drawing the dashboard. The current step has

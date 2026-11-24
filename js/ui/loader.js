@@ -158,10 +158,10 @@ async function finishLoad() {
   if (f.contact !== 'all' && (!Data.contacts.has(f.contact) || (f.source !== 'all' && !Data.keySources(f.contact).includes(f.source)))) f.contact = 'all';
   LoadScreen.step('draw');
   await nextFrame();
-  LoadScreen.stop();
   $('#landing').hidden = true;
   $('#dash').hidden = false;
-  Panels.invalidate(['*']);
+  Panels.invalidate(['*']); // draws the open tab now
+  LoadScreen.stop(); // after it, so the step's time is the drawing's
 }
 
 /**

@@ -11,7 +11,18 @@ import { smsBackup } from '../helpers/sms.mjs';
 async function record(page) {
   await page.addInitScript(() => {
     const rec = (window.__rec = { steps: [], stepWrites: 0, maxFound: 0, foundWhileReading: 0, texts: [], maxScroll: 0, anims: 0, demoMsgsAtStart: null, frames: 0, maxChip: 0, chipOverflow: 0 });
-    const tick = () => { rec.frames++; requestAnimationFrame(tick); };
+    // Draws between one frame's callbacks and the next's: what one frame drew (AC15).
+    Object.assign(rec, { lastDraws: 0, maxDrawsPerFrame: 0, framesWithDraws: 0 });
+    const tick = () => {
+      rec.frames++;
+      // eslint-disable-next-line no-undef
+      const draws = typeof LoadScreen === 'undefined' ? 0 : LoadScreen.draws;
+      const d = draws - rec.lastDraws;
+      rec.lastDraws = draws;
+      rec.maxDrawsPerFrame = Math.max(rec.maxDrawsPerFrame, d);
+      if (d > 0) rec.framesWithDraws++;
+      requestAnimationFrame(tick);
+    };
     requestAnimationFrame(tick);
     document.addEventListener('DOMContentLoaded', () => {
       const step = document.getElementById('loadStep');
@@ -160,6 +171,10 @@ test.describe('spec 016 loading screen', () => {
       }
       await expect(page.locator('#loadSteps li[data-state="done"]')).toHaveCount(6);
       await expect(page.locator('#loadSteps li').first()).toContainText('Preparing the demo');
+      // The demo's Takeout comes in two zips, read together: they share one count (R7).
+      const takeout = page.locator('#loadFiles li', { hasText: 'takeout-' });
+      await expect(takeout).toHaveCount(2);
+      for (const row of await takeout.all()) await expect(row.locator('.load-file-state')).toContainText('from these 2 files');
     });
 
     test('AC10: the loading screen shows before the demo data exists', async ({ page }) => {
@@ -213,9 +228,10 @@ test.describe('spec 016 loading screen', () => {
     test('AC15: the screen draws at most once per animation frame', async ({ page }) => {
       await loadDemoRecorded(page);
       const draws = await inApp(page, (app) => app.loadDraws);
-      const { frames } = await recorded(page);
+      const rec = await recorded(page);
       expect(draws).toBeGreaterThan(0);
-      expect(draws).toBeLessThanOrEqual(frames);
+      expect(rec.framesWithDraws, 'frames that drew').toBeGreaterThan(0);
+      expect(rec.maxDrawsPerFrame, 'draws in any one frame').toBe(1);
     });
   });
 

@@ -186,7 +186,9 @@ const LoadScreen = {
         const parts = [];
         if (f.msgs) parts.push(`${fmtNum(f.msgs)} messages`);
         if (f.calls) parts.push(`${fmtNum(f.calls)} calls`);
-        text = `${parts.join(', ') || 'Done'} · ${fmtSeconds(f.ms)}`;
+        // Files read together added their messages together: say so, not that each added them all.
+        const from = parts.length && f.shared > 1 ? ` from these ${f.shared} files` : '';
+        text = `${parts.join(', ') || 'Done'}${from} · ${fmtSeconds(f.ms)}`;
       }
       this.put(li.querySelector('.load-file-state'), text);
     });

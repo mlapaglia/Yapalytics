@@ -31,6 +31,21 @@ describe('spec 016 load stats', () => {
     assert.equal(st.snapshot(0).left, null);
   });
 
+  test('AC6: a read that stalls slows to 0 within 2 s, and its time left goes away', () => {
+    const st = createLoadStats({ steps: ['read'], now: 0 });
+    const file = {};
+    st.beginRead([{ file, name: 'big.zip', size: 100 * MB, s: 0 }], { msgs: [], calls: [], reactions: 0 }, 0);
+    st.step('read', 'big.zip', 0);
+    st.startJob(0, [file], 0);
+    for (let t = 100; t <= 1000; t += 100) st.progress(0, t / 100, 100, t); // 10 MB in 1 s, then nothing
+    assert.ok(st.snapshot(1000).left > 0);
+    const mid = st.snapshot(2000).bps;
+    assert.ok(mid > 0 && mid < 10 * MB, `slowing at 2 s: ${mid / MB} MB/s`);
+    const s = st.snapshot(10_000);
+    assert.equal(s.bps, 0);
+    assert.equal(s.left, null);
+  });
+
   test('AC6: no time left before 1 s of reading, or with under 1 s to go', () => {
     const st = createLoadStats({ steps: ['read'], now: 0 });
     const file = {};
@@ -108,6 +123,51 @@ describe('spec 016 load stats', () => {
     assert.deepEqual(st.snapshot(20).files.map((f) => f.state), ['done', 'failed']);
     st.beginRead([{ file: a, name: 'a', size: 10, s: 0 }], base, 30);
     assert.deepEqual(st.snapshot(30).files.map((f) => f.state), ['waiting', 'failed']);
+  });
+
+  test('R3: a failed file leaves the percentage, so a read that ends after it is at 100%', () => {
+    const st = createLoadStats({ steps: ['read'], now: 0 });
+    const a = {}, b = {};
+    const base = { msgs: [], calls: [], reactions: 0 };
+    st.beginRead([{ file: a, name: 'a', size: 100, s: 0 }, { file: b, name: 'b', size: 100, s: 4 }], base, 0);
+    st.startJob(0, [a], 0);
+    st.endJob(0, {}, 10);
+    st.startJob(1, [b], 10);
+    st.progress(1, 50, 100, 15);
+    st.endJob(1, { error: true }, 20);
+    st.beginRead([{ file: a, name: 'a', size: 100, s: 0 }], base, 30); // read again without b
+    st.startJob(0, [a], 30);
+    st.endJob(0, {}, 40);
+    const s = st.snapshot(40);
+    assert.equal(s.pct, 100);
+    assert.deepEqual([s.bytes, s.total], [100, 100]);
+    assert.equal(s.files[1].state, 'failed');
+  });
+
+  test('R7: files read together share one count, and say so', () => {
+    const st = createLoadStats({ steps: ['read'], now: 0 });
+    const a = {}, b = {};
+    const data = createDataset();
+    st.beginRead([{ file: a, name: 'takeout-1.zip', size: 10, s: 1 }, { file: b, name: 'takeout-2.zip', size: 10, s: 1 }], { msgs: [], calls: [], reactions: 0 }, 0);
+    st.startJob(0, [a, b], 0);
+    const batch = (n, from) => Array.from({ length: n }, (_, i) => makeMessage(lib, { at: new Date(Date.UTC(2024, 0, 1, 0, from + i)).toISOString(), body: `m${from + i}` }));
+    st.batch(0, data, data.addBatch(batch(10, 0), []), [], 5);
+    st.batch(0, data, data.addBatch(batch(20, 10), []), [], 6);
+    st.endJob(0, {}, 10);
+    assert.deepEqual(st.snapshot(10).files.map((f) => [f.msgs, f.shared]), [[30, 2], [30, 2]]);
+  });
+
+  test('AC16: a batch of thousands of new conversations keeps the newest 8, in order, quickly', () => {
+    const st = oneFile();
+    const data = createDataset();
+    st.batch(0, data, data.addBatch([], []), [{ key: 'old', name: 'Old', s: 0, group: false }], 5);
+    const found = Array.from({ length: 50_000 }, (_, i) => ({ key: `k${i}`, name: `Name ${i}`, s: 0, group: false }));
+    const t = performance.now();
+    st.batch(0, data, data.addBatch([], []), found, 10);
+    assert.ok(performance.now() - t < 50, 'linear in the batch');
+    const s = st.snapshot(10);
+    assert.equal(s.foundN, 50_001);
+    assert.deepEqual(s.found.map((c) => c.name), Array.from({ length: 8 }, (_, i) => `Name ${49_999 - i}`));
   });
 
   test('AC16: conversations found are newest first, 8 at most', () => {
