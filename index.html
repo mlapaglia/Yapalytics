@@ -262,6 +262,7 @@
 
     <section class="dash-section" id="sec-glance" data-slug="overview" data-tab="Overview">
       <h2 class="section-title">Overview</h2>
+      <div class="glance-bar"><button class="btn small" id="summaryBtn" type="button" title="One picture of these numbers to save or post. Names are hidden unless you show them.">📸 Summary image</button></div>
       <div class="kpis" id="kpis" aria-label="Summary"></div>
       <div class="grid">
       <article class="card" id="highlightsCard">
@@ -690,6 +691,19 @@
     <div id="profileBottom"></div>
   </dialog>
 
+  <dialog id="summaryDlg" class="profile summary-dlg" aria-labelledby="summaryTitle">
+    <button class="btn ghost icon profile-close" type="button" aria-label="Close">✕</button>
+    <header class="people-head">
+      <h2 id="summaryTitle">Summary image</h2>
+      <p class="sub">The numbers for what's picked on the dashboard. No message text, and people are numbered unless you show their names. It's made and saved on this device.</p>
+    </header>
+    <div class="wrapped"><canvas id="summaryCanvas" width="1080" height="1350" aria-label="Summary image preview"></canvas></div>
+    <div class="profile-actions summary-actions">
+      <label class="check"><input type="checkbox" id="summaryNames"> Show names</label>
+      <button class="btn" id="summarySave" type="button">Save PNG</button>
+    </div>
+  </dialog>
+
   <dialog id="peopleDlg" class="profile people-dlg" aria-labelledby="peopleTitle">
     <button class="btn ghost icon profile-close" type="button" aria-label="Close">✕</button>
     <header class="people-head">
@@ -799,6 +813,7 @@
   <script src="js/ui/people-dialog.js"></script>
   <script src="js/ui/settings-dialog.js"></script>
   <script src="js/ui/profile.js"></script>
+  <script src="js/ui/summary-dialog.js"></script>
   <script src="js/ui/theme.js"></script>
   <script src="js/panels/layout.js"></script>
   <script src="js/panels/overview.js"></script>
