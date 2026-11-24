@@ -163,7 +163,7 @@ and the style table (`#styleMarkers`). Its topics already include `gap`.
 - **AC6** Two sides with the same markers have a style match of 100; a marker that
   adds up to fewer than 10 on the two sides is skipped; a month whose 3-month window has
   fewer than 30 text messages on either side gets no point, and one whose window
-  reaches 30 does.
+  reaches 30 does, even when that month itself has only photos.
 - **AC7** `lastWord`: 40 settled conversations where Alex sends the final message in 32
   give "Alex gets the last word in 80% of your conversations."
 - **AC8** `noReply`: you getting no reply 20 times and Alex 2 times gives "20 times you
@@ -171,6 +171,8 @@ and the style table (`#styleMarkers`). Its topics already include `gap`.
 - **AC9** `questionReplies`: 40 of your questions with 36 replied and 40 of theirs with
   16 replied gives "90% of your questions get a reply from Alex, but only 40% of theirs
   get one from you."
+  The 25-point rule is on the exact difference: 75% against 50.5% doesn't fire, 90%
+  against 65% does.
 - **AC10** `converge`: a conversation whose markers start far apart and end the same
   gives "You and Alex write more alike than you used to: style match up from N to 100."
 - **AC11** For a single conversation, the kinds use their single sentences.

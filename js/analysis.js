@@ -386,6 +386,14 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
     if (!c) A.contacts.set(r.k, (c = [0, 0]));
     c[o]++;
 
+    // Spec 017: every 1-on-1 month gets a style bucket, so a month of only photos still gets
+    // a point when its window has enough text. Only text messages add to the sums.
+    let bm = null;
+    if (!isGroup) {
+      bm = bc.style.get(r.mo);
+      if (!bm) bc.style.set(r.mo, (bm = pair(STYLE_SUMS)));
+    }
+
     const isReaction = r.f & T_REACTION;
     if (r.l > 0 && !isReaction) {
       for (let i = 0; i < LEN_BINS.length; i++) {
@@ -400,8 +408,6 @@ function aggregateMessages(msgs, gap = CONVO_GAP) {
       A.words[o] += r.wc;
       if (!isGroup) {
         // Per conversation here; A.styleMonths and A.styleTotal add them up after the loop.
-        let bm = bc.style.get(r.mo);
-        if (!bm) bc.style.set(r.mo, (bm = pair(STYLE_SUMS)));
         const v = bm[o], f = r.f;
         v[0]++;
         v[1] += r.wc;

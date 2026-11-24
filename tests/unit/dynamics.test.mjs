@@ -105,6 +105,19 @@ describe('spec 017 how two people talk', () => {
     assert.deepEqual(styleSeries(months), [[102, 100]]);
   });
 
+  it('AC6: a month with only a photo still gets a point when its window has enough text', () => {
+    const b = builder();
+    for (let i = 0; i < 15; i++) {
+      for (const d of [i, 31 + i]) { b.say(d, 0, 1, 'see you soon'); b.say(d, 1, 0, 'see you soon'); } // 15 a side in January and in February
+    }
+    b.say(60, 0, 0, ''); // March: one photo, no text
+    const msgs = b.msgs();
+    msgs[msgs.length - 1].ph = 1;
+    const A = aggregateMessages(msgs);
+    const months = styleSeries(A.byContact.get('alex').style).map(([mo]) => mo % 12);
+    assert.deepEqual(months, [1, 2]); // January alone is too few; February's and March's windows have 30 a side
+  });
+
   it('AC7: lastWord names who usually sends the final message', () => {
     const b = builder();
     for (let i = 0; i < 40; i++) {
@@ -133,6 +146,19 @@ describe('spec 017 how two people talk', () => {
     for (let i = 0; i < 24; i++, d++) b.say(d, 0, 0, 'free?');
     b.done();
     assert.equal(kinds(b.msgs()).questionReplies, '90% of your questions get a reply from Alex, but only 40% of theirs get one from you.');
+  });
+
+  it('AC9: the 25-point rule is on the exact difference: 24.5 points don’t fire, 25 do', () => {
+    const run = (askEach, yoursReplied, theirsReplied) => {
+      const b = builder();
+      let d = 0;
+      for (let i = 0; i < askEach; i++, d++) { b.say(d, 0, 1, 'free?'); if (i < yoursReplied) b.say(d, 2, 0, 'sure'); }
+      for (let i = 0; i < askEach; i++, d++) { b.say(d, 0, 0, 'free?'); if (i < theirsReplied) b.say(d, 2, 1, 'sure'); }
+      b.done();
+      return kinds(b.msgs()).questionReplies;
+    };
+    assert.equal(run(200, 150, 101), undefined); // 75% vs 50.5%
+    assert.equal(run(40, 36, 26), '90% of your questions get a reply from Alex, but only 65% of theirs get one from you.');
   });
 
   it('AC10: converge names a conversation whose styles moved together', () => {

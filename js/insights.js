@@ -467,8 +467,9 @@ function dynamicsHighlights(A, { add, person, single, rows, oneOnOne }) {
     const { qAsked, qReplied } = r.bc;
     if (qAsked[0] < 30 || qAsked[1] < 30) continue;
     const them = qReplied[0] / qAsked[0], you = qReplied[1] / qAsked[1];
-    const points = Math.round(Math.abs(you - them) * 100);
-    if (points >= 25 && (!ask || points > ask.points)) ask = { k: r.k, them, you, points };
+    // The threshold is on the exact difference (a hair of slack for float error); rounding is for the score only.
+    const diff = Math.abs(you - them);
+    if (diff >= 0.25 - 1e-9 && (!ask || diff > ask.diff)) ask = { k: r.k, them, you, diff, points: Math.round(diff * 100) };
   }
   if (ask) {
     const p = person(ask.k);
