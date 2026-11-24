@@ -12,16 +12,28 @@ const recordCharts = (page) => page.evaluate(() => {
 });
 const drawn = (page) => page.evaluate(() => window.__drawn.splice(0));
 
-/** Counts how often message text is split into words (tokensOf) from now on. */
+/**
+ * Counts how often message text is split into words (wordsOf, which tokensOf uses) from
+ * now on: everywhere, and inside the selection's text pass (aggregateContent).
+ */
 const countTokenizing = (page) => page.evaluate(() => {
   window.__tokenized = 0;
-  const real = tokensOf;
-  window.tokensOf = (body) => {
+  window.__inContent = 0;
+  const real = wordsOf;
+  const content = aggregateContent;
+  let inside = false;
+  window.wordsOf = (body) => {
     window.__tokenized++;
+    if (inside) window.__inContent++;
     return real(body);
+  };
+  window.aggregateContent = (...args) => {
+    inside = true;
+    try { return content(...args); } finally { inside = false; }
   };
 });
 const tokenized = (page) => page.evaluate(() => window.__tokenized);
+const tokenizedInContent = (page) => page.evaluate(() => window.__inContent);
 
 /** The busiest 1-on-1 conversation's key. */
 const busiest = (page) => inApp(page, (app) => app.topRows.find((r) => !r.key.startsWith('g:')).key);
@@ -53,16 +65,20 @@ test.describe('spec 014 panels', () => {
     expect(await tokenized(page)).toBe(0);
 
     await openTab(page, 'sec-content');
-    await expect.poll(() => tokenized(page)).toBeGreaterThan(0);
-    // Each message with text once, and a message with a link once more without its links (R10).
+    await expect.poll(() => tokenizedInContent(page)).toBeGreaterThan(0);
+    // The selection's pass: each message with text once, and a message with a link once
+    // more without its links (R10). Inside jokes (spec 019) add their own cached passes
+    // over the conversations they show and the word counts across conversations, as
+    // "What you talk about" does for one conversation.
     const expected = await inApp(page, (app) => {
       const text = app.selection().filter((m) => m.b && !(m.f & 16));
       return text.length + text.filter((m) => m.f & 2).length;
     });
-    expect(await tokenized(page)).toBe(expected);
-    // The other content tabs reuse that pass.
+    expect(await tokenizedInContent(page)).toBe(expected);
+    // The other content tabs reuse those passes.
+    const all = await tokenized(page);
     await openTab(page, 'sec-mood');
     await openTab(page, 'sec-media');
-    expect(await tokenized(page)).toBe(expected);
+    expect(await tokenized(page)).toBe(all);
   });
 });

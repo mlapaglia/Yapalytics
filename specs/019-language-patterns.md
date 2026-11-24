@@ -36,11 +36,21 @@ conversation is half in Spanish.
 - **R2** A person's signature phrases are the phrases they use at least 5 times, on at
   least 3 different days, ranked by how much more they use them than everyone else in
   the selection: the weighted log-odds ratio with an informative Dirichlet prior
-  (Monroe, Colaresi and Quinn, "Fightin' Words", 2008), with everyone's counts as the
-  prior. Only phrases with a z-score of 2 or more count. Each person shows their top 8.
+  (Monroe, Colaresi and Quinn, "Fightin' Words", 2008), with everyone's counts scaled by
+  0.1 as the prior. Only phrases with a z-score of 2 or more count, and that the person
+  uses, per phrase they write, at least twice as often as everyone else. Each person
+  shows their top 8.
+  - *Why the 0.1:* with everyone's counts at full weight, a phrase only one side of a
+    1-on-1 uses, 10 times, scores z = 1.8 and never shows.
+  - *Why twice as often:* on the demo, where everyone picks lines from one shared list,
+    z alone let through "heading out" and "happy birthday" for Alex. They're just more
+    of a common line, by chance. The rule removes both and keeps everything else.
 - **R3** When a 3-word phrase and a 2-word phrase inside it both qualify, only the 3-word
   one is shown if it has at least 70% of the 2-word one's uses; otherwise only the 2-word
   one.
+- **R3a** A phrase that overlaps a better-ranked one ("pushed the fix", "fix can you"),
+  with uses within 70% of each other either way, isn't shown: they're pieces of one
+  sentence. Without this, one line used 15 times filled a column with six phrases.
 - **R4** Who gets a column depends on the selection:
   - **All conversations:** You, and the 5 people with the most messages to you in
     1-on-1 conversations (a linked person counts once). Group messages count toward
@@ -60,9 +70,10 @@ conversation is half in Spanish.
   - hardly appears elsewhere: a single word is in at most 2 conversations
     (`buildDocFreq`); a phrase has at least one word of 3+ letters that is in at most 2
     conversations.
-- **R7** Inside jokes rank by uses × log2(days used). For one conversation, the card
-  lists the top 10: the joke, how many times it was used, who used it first and when,
-  and when it was last used.
+- **R7** Inside jokes rank by uses × log2(days used), with R3 and R3a applied to them
+  too (so "moose" and "peak moose energy" don't both show unless their counts differ).
+  For one conversation, the card lists the top 10: the joke, how many times it was used,
+  who used it first and when, and when it was last used.
 - **R8** For All conversations, the card lists the top inside joke of each of the 8
   conversations with the most messages in the selection (200 or more). Conversations
   with no inside joke are left out. Names link to the profile.
@@ -73,7 +84,8 @@ conversation is half in Spanish.
 
 - **R10** A correction is a message that is only one to three words with `*` in front
   (`*there`, `* their`) or behind (`there*`), sent within 5 minutes of the same person's
-  previous message in the same conversation. That earlier message must have a word
+  previous message in the same conversation (their message doesn't count as fixing
+  yours). That earlier message must have a word
   within edit distance max(2, ⌊length / 3⌋) of the correction's first word, without
   being the same word. Messages wrapped in stars (`*sigh*`) are actions, not
   corrections.
@@ -114,7 +126,7 @@ conversation is half in Spanish.
   listed. Names link to the profile.
 - **R17** When the selection has only one language (every other language under 5% of
   messages with a language), the card says so in one line ("Everything here is in
-  English, as far as Yapalytics can tell") instead of drawing the chart.
+  English, as far as Yapalytics can tell") in place of the chart.
 
 **Where they go**
 
@@ -142,53 +154,82 @@ the text is still split once per message. Its cache (`Select.content`) also depe
 the mood scorer, so changing the scorer counts them again. That's rare and costs one
 pass. New fields on its result:
 
-- `phrases`: `{ who: Map(person -> Map(phrase -> [uses, lastDay, days])), all:
-  Map(phrase -> uses) }`. `person` is `'You'`; for All conversations a 1-on-1's `k`; in a
-  group, `sn || sk`. Only the people R4 names are counted. They're found first with a
-  cheap pass that counts messages per person without touching the text.
+- `phrases`: `{ mode, people, who: Map(person -> counter of [uses, lastDay, days]),
+  all: counter of uses }`, where a counter is `{ map, n (phrase uses), floor, cap }`.
+  `person` is `'You'`; for All conversations a 1-on-1's `k`; in a group, `sn || sk`.
+  Only the people R4 names are counted. `phraseWho(msgs)` finds them first with a cheap
+  pass that counts messages per person without touching the text, and sets `mode`
+  (`'all'`, `'one'` or `'group'`) from whether every message is in one conversation.
 - `corrections`: `Map(mo -> [r, s])`, `correctionsTotal: [r, s]`, `correctedWords:
   [Map(word -> n), Map(word -> n)]`. The pass keeps each person's previous message per
-  conversation (`Map(k + who -> message)`) to check R10.
+  conversation (`Map(k -> Map(sender -> message))`, the sender being you, `sn || sk`, or
+  the other side of a 1-on-1) and splits it only when a message with `*` might correct
+  it.
 - `polite`: `Map(mo -> { thanks: [r, s], sorry: [r, s] })`, `politeTotal`. The share's
   base is the existing `swear` month's `n` (messages with text).
 - `lang`: `Map(code -> [r, s])`, `langNone: [r, s]`, `langByContact: Map(k -> Map(code
   -> n))`.
 
-`aggregateContent(msgs, scorer, { phrases = true })`: Year in review passes `phrases:
-false`, so its own pass doesn't count phrases it won't show.
+`aggregateContent(msgs, scorer, { phrases = true, phraseCap = PHRASE_CAP })`: Year in
+review passes `phrases: false`, so its own pass doesn't count phrases it won't show.
+`phraseCap` is there for AC6.
+
+`tokensOf` now filters a new `wordsOf` (every word, single letters and numbers too), so
+phrases keep "what a day" whole while every word count stays as it was.
 
 **Phrase counts are capped.** A big selection has millions of different phrases. When
 `all` or one person's map passes `PHRASE_CAP` (300,000), entries with 1 use are dropped,
-then 2, until it's under the cap (lossy counting). A phrase that survives has a count
-that is low by at most the number dropped, and R2 needs 5 uses anyway. The background
-count of a phrase is never taken as less than the person's count.
-`signaturePhrases(C, limit = 8)` in `analysis.js` scores what's left (R2, R3).
+then 2, until it's under 90% of the cap (lossy counting). Each time, dropping starts
+again from 1 use. A phrase dropped and seen again starts over, so its count can be low
+by the uses it had when dropped, and R2 needs 5 uses anyway. The background count of a
+phrase is never taken as less than the person's count. `signaturePhrases(P, limit = 8)`
+scores what's left (R2, R3, R3a).
 
 **Inside jokes: a pass per conversation.** Inside jokes need, per conversation, every
 word and phrase with who used it and on which days, plus how many conversations use
 each word. Keeping that for every conversation in `aggregateContent` would take too much
 memory, so, like `distinctiveWords` today, it's a separate pass over the conversations
 it shows, using the by-conversation index (`Data.messagesOf`, `inDates`).
-`conversationTerms(msgs)` splits each message once and returns `Map(term -> { n: [r, s],
-who: Set, days: Set, first, last })` for words and phrases. `distinctiveWords` is
-rewritten to read its word counts from it, and `insideJokes(terms, docFreq, limit)`
-ranks R6–R7. `Select.terms(k)` caches `conversationTerms` per conversation by
-`[...rangeDeps(), k]`. For All conversations that's at most 8 conversations (R8).
-`Select.docFreq()` is unchanged.
+`conversationTerms(msgs, docFreq)` splits each message once (twice with a link) and
+returns `{ group, words, phrases }`, each a `Map(term -> { n: [r, s], who: Set, days,
+first (record), last (time) })`. `words` has every token, links included, as
+`distinctiveWords` always counted them. `phrases` has only the phrases with a rare word
+(R6), found in a second walk over the words kept from the first, so a long conversation
+doesn't hold every phrase it ever used. `distinctiveWords(msgs, df, limit, terms)`
+reads its counts from `terms.words` and gives the same rows as before (AC12).
+`insideJokes(terms, docFreq, limit)` ranks R6–R7. `Select.terms(k)` caches
+`conversationTerms` per conversation until the data, app, groups setting or dates
+change. For All conversations that's at most 8 conversations (R8).
+`Select.docFreq()` is unchanged, but the Inside jokes card now needs it for All
+conversations too, where only one conversation's view used it before.
 
-**Languages.** `languageOf(body, tokens)` in `analysis.js` applies R14. `LANG_WORDS` has
-about 30 words per language, chosen to be common and not shared: "the", "and", "you" for
-English but not "a", which several languages use.
+So opening Words on All conversations splits the selection once in `aggregateContent`
+(spec 014 R10 still holds for that pass), plus, once each and cached: every
+conversation of the app for `docFreq`, and the up to 8 conversations Inside jokes shows.
+Spec 014's AC13 test counted every split through `tokensOf`. It now counts `wordsOf`
+calls, checks the selection pass is once per message, checks Overview splits nothing,
+and checks Mood and Media reuse what Words worked out.
+
+**Languages.** `languageOf(text, words)` applies R14. `LANG_WORDS` has about 30 to 50
+common words per language. A word in two lists is a point for both, so the words only
+one language uses decide. Most are unique: "the", "and", "you" for English but not "a",
+which several languages use.
 
 **Code.**
 
-- `js/analysis.js`: the counters above, `signaturePhrases`, `conversationTerms`,
-  `insideJokes`, `languageOf`, `LANG_WORDS`, `THANKS_RE`, `SORRY_RE`, `CORRECTION_RE`,
-  `editDistance`.
-- `js/select.js`: `Select.terms(k)`.
+- `js/patterns.js` (new, loaded after `analysis.js`): `countPatterns` (what
+  `aggregateContent` calls for each message), `phraseWho`, `phrasesOf`, the phrase
+  counter, `phraseZ`, `signaturePhrases`, `conversationTerms`, `insideJokes`,
+  `languageOf`, `LANG_WORDS`, `languageSummary`, `otherLanguageConversations`,
+  `THANKS_RE`, `SORRY_RE`, `CORRECTION_RE`, `editDistance`. `analysis.js` was already
+  over 600 lines.
+- `js/analysis.js`: `wordsOf`, `isToken`, the new fields in `aggregateContent`, and
+  `distinctiveWords` reading `conversationTerms`.
+- `js/select.js`: `Select.messagesOf(k)` and `Select.terms(k)`.
 - `js/panels/words.js`: panels `phrases`, `jokes`, `corrections` and `languages`
   (topics `data`, `selection`, `theme`). Chips reuse `trackPhrase`.
-- `js/panels/mood.js`: panel `polite`.
+- `js/panels/mood.js`: `renderPolite`, drawn by the `mood` panel (it already depends on
+  the content pass).
 - `js/charts.js`: `correctionsOption`, `politeOption` (the shape of `swearOption`),
   `languagesOption`.
 - `index.html`: the five cards (R18).
@@ -250,3 +291,13 @@ English but not "a", which several languages use.
   the earlier message, so they aren't counted.
 - Should any of these become highlights (spec 008 style), such as "Alex says thanks
   3× as often as you"? Left out for now.
+- The demo shows little of this. Everyone in it picks lines from one shared list, so
+  only Priya (Google Chat) has signature phrases, inside jokes turn up only in the
+  WhatsApp chats, nobody corrects a typo and everything is English. Give a few demo
+  people a catchphrase, a running joke, typos and a second language? That changes the
+  demo's text, which other tests read.
+- Speed: `aggregateContent` on the demo ×10 (295,200 messages) takes about 340 ms,
+  against about 130 ms before (about 240 ms with `phrases: false`). Phrases, the
+  language check and the thanks and sorry tests are the cost. It runs once per
+  selection, when a tab that needs it opens, and is cached. The user asked for accuracy
+  over speed, so nothing was traded for it.

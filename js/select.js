@@ -120,4 +120,29 @@ const Select = {
     const { source, groups } = View.filter;
     return this.caches.docFreq.get([Data.version, source, groups], () => buildDocFreq(selectMessages(Data, { contact: 'all', source, groups })));
   },
+
+  /** One conversation's messages in the picked app and dates. */
+  messagesOf(k) {
+    const { source, from, to } = View.filter;
+    return inDates(selectMessages(Data, { contact: k, source, groups: true }), from, to);
+  },
+
+  /**
+   * conversationTerms of a conversation in the picked app and dates (spec 019): its words
+   * and rare phrases, for inside jokes and "What you talk about". Kept per conversation
+   * until the data, app, groups or dates change.
+   */
+  terms(k) {
+    const { source, groups, from, to } = View.filter;
+    const deps = [Data.version, source, groups, from, to].join('\n');
+    if (this.termsDeps !== deps) {
+      this.termsDeps = deps;
+      this.termsByKey = new Map();
+    }
+    let t = this.termsByKey.get(k);
+    if (!t) this.termsByKey.set(k, (t = conversationTerms(this.messagesOf(k), this.docFreq())));
+    return t;
+  },
+  termsDeps: null,
+  termsByKey: new Map(),
 };

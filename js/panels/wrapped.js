@@ -5,7 +5,7 @@ function wrappedStats(base, year) {
   const to = new Date(year + 1, 0, 1).getTime();
   const msgs = base.filter((m) => m.t >= from && m.t < to);
   const A = aggregateMessages(msgs, View.convoGap);
-  const C = aggregateContent(msgs);
+  const C = aggregateContent(msgs, 'vader', { phrases: false }); // no signature phrases here (spec 019 AC19)
   const single = View.filter.contact !== 'all';
   const people = single
     ? senderBreakdown(msgs, View.filter.contact)

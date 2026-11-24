@@ -587,9 +587,9 @@ table.leader .muted { color: var(--muted); }
 .vocab-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
 .vocab-words .muted { color: var(--muted); }
 .vocab-head .muted { font-size: 12px; }
-.vocab-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-.vocab-col { min-width: 0; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); border-left: 3px solid var(--series-2); }
-.vocab-col.sent { border-left-color: var(--series-1); }
+.vocab-cols, .people-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.vocab-col, .people-col { min-width: 0; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); border-left: 3px solid var(--series-2); }
+.vocab-col.sent, .people-col.sent { border-left-color: var(--series-1); }
 .vocab-col-head { margin-bottom: 6px; color: var(--text-2); font-size: 12px; }
 .vocab-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .vocab-chip { padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
@@ -1146,3 +1146,15 @@ table.apps-table td.apps-cell { min-width: 110px; }
 #styleMarkers:not(:empty) { margin-top: 12px; }
 .style-table th[scope="col"] { text-align: right; }
 .style-table tr.style-total th, .style-table tr.style-total td { font-weight: 650; color: var(--text); border-bottom: 0; }
+
+/* Language patterns (spec 019) */
+.vocab-chip.static { cursor: default; }
+.vocab-chip.static:hover { border-color: var(--border); color: inherit; }
+.corrected-words:not(:empty) { margin-top: 10px; }
+.jokes-table th[scope="col"] { text-align: right; }
+.jokes-table th[scope="col"]:first-child { text-align: left; }
+.jokes-table td { white-space: nowrap; }
+.lang-head { margin: 12px 0 4px; font-size: 13px; }
+.lang-convos { margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.lang-convos li { padding: 4px 0; border-bottom: 1px solid var(--border); }
+.lang-convos li:last-child { border-bottom: 0; }
