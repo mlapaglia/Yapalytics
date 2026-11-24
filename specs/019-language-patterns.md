@@ -1,6 +1,6 @@
 # 019 Language patterns
 
-Status: Draft · Author: · PR:
+Status: Draft · PR: [#37](https://github.com/mlapaglia/Yapalytics/pull/37)
 
 ## Problem
 
