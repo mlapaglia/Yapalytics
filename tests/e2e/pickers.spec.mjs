@@ -161,7 +161,12 @@ test.describe('spec 012 searchable conversation pickers', () => {
     await control(page, 'contactSel').focus();
     await page.keyboard.type('alex');
     await expect(page.locator('#contactSel + .ts-wrapper .dropdown-input')).toHaveValue('alex');
-    await expect.poll(async () => (await rowValues(page, 'contactSel')).includes(IG_ALEX)).toBe(true);
+    // Alex is in the list before it filters too (refreshThrottle), so also wait for Pat to
+    // leave it: an ArrowDown on the unfiltered list can land on All conversations.
+    await expect.poll(async () => {
+      const values = await rowValues(page, 'contactSel');
+      return values.includes(IG_ALEX) && !values.includes(SMS_PAT);
+    }).toBe(true);
     await page.keyboard.press('ArrowDown');
     const active = await page.locator('#contactSel-ts-dropdown .option.active').getAttribute('data-value');
     expect(active).not.toBe('all');
