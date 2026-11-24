@@ -1,6 +1,6 @@
 # 026 Exporting stats as CSV
 
-Status: Draft · PR:
+Status: Draft · PR: [#34](https://github.com/mlapaglia/Yapalytics/pull/34)
 
 ## Problem
 
