@@ -34,6 +34,12 @@ function VIEW() {
     get phrase() { return View.phrase; },
 
     // What's shown
+    /** The loading screen's last snapshot (spec 016), months as [month index, count] pairs. */
+    get loadSnapshot() {
+      const s = LoadScreen.last;
+      return s && { ...s, months: [...s.months] };
+    },
+    get loadDraws() { return LoadScreen.draws; },
     get topRows() { return topConversations(Select.agg()); },
     get browserShown() { return Shown.msgs; },
     get browserMood() { return View.browser.mood; },

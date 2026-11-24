@@ -1,0 +1,259 @@
+/* specs/016-loading-screen.md in the browser. */
+import { test, expect, loadFiles, addFiles } from './fixtures.mjs';
+import { inApp } from './state.mjs';
+import { smsBackup } from '../helpers/sms.mjs';
+
+/**
+ * Records the loading screen while it runs: every step line, the names found and
+ * whether reading was still going, its text, sideways scroll, running animations and
+ * animation frames. Read it back with `recorded(page)`.
+ */
+async function record(page) {
+  await page.addInitScript(() => {
+    const rec = (window.__rec = { steps: [], stepWrites: 0, maxFound: 0, foundWhileReading: 0, texts: [], maxScroll: 0, anims: 0, demoMsgsAtStart: null, frames: 0, maxChip: 0, chipOverflow: 0 });
+    const tick = () => { rec.frames++; requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    document.addEventListener('DOMContentLoaded', () => {
+      const step = document.getElementById('loadStep');
+      const progress = document.getElementById('progress');
+      new MutationObserver((list) => {
+        rec.stepWrites += list.length;
+        const t = step.textContent;
+        rec.steps.push(t);
+        // eslint-disable-next-line no-undef
+        if (rec.demoMsgsAtStart === null && t.startsWith('Making up')) rec.demoMsgsAtStart = Data.msgs.length;
+      }).observe(step, { childList: true, characterData: true, subtree: true });
+      new MutationObserver(() => {
+        if (!progress.checkVisibility()) return; // hidden, or the dashboard has replaced it
+        const found = document.getElementById('loadFound').children.length;
+        rec.maxFound = Math.max(rec.maxFound, found);
+        const reading = [...document.querySelectorAll('#loadFiles li')].some((li) => li.dataset.state === 'reading');
+        if (found && reading) rec.foundWhileReading = Math.max(rec.foundWhileReading, found);
+        if (rec.texts.length < 2000) rec.texts.push(progress.innerText);
+        const root = document.documentElement;
+        rec.maxScroll = Math.max(rec.maxScroll, root.scrollWidth - root.clientWidth);
+        const box = document.getElementById('loadFound');
+        for (const li of box.children) {
+          const w = li.getBoundingClientRect().width;
+          rec.maxChip = Math.max(rec.maxChip, w);
+          rec.chipOverflow = Math.max(rec.chipOverflow, li.getBoundingClientRect().right - box.getBoundingClientRect().right);
+        }
+        rec.anims = Math.max(rec.anims, document.getAnimations().filter((a) => progress.contains(a.effect?.target)).length);
+      }).observe(progress, { childList: true, subtree: true, characterData: true, attributes: true });
+    });
+  });
+}
+const recorded = (page) => page.evaluate(() => window.__rec);
+
+async function loadDemoRecorded(page) {
+  await page.goto('/');
+  await page.click('#demoBtn');
+  await expect(page.locator('#dash')).toBeVisible({ timeout: 60_000 });
+}
+
+const sms = (n = 3, fileName) => smsBackup(Array.from({ length: n }, (_, i) => ({
+  address: `+1555000${String(i % 30).padStart(4, '0')}`,
+  name: `Friend ${i % 30}`,
+  at: new Date(Date.UTC(2023, 0, 1) + i * 3600e3).toISOString(),
+  sent: i % 2 === 0,
+  body: `message number ${i}`,
+})), fileName);
+const whatsApp = () => ({ name: 'WhatsApp Chat with Sam.txt', mimeType: 'text/plain', buffer: Buffer.from('1/2/24, 10:00 - Sam: hi\n1/2/24, 10:01 - Me: hey Sam\n2/3/24, 09:00 - Sam: see you\n') });
+
+test.describe('spec 016 loading screen', () => {
+  test('AC1: one row and one bar segment per file, with logos and sizes', async ({ page }) => {
+    const files = [sms(40), whatsApp()];
+    await loadFiles(page, files);
+    const rows = page.locator('#loadFiles li');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0).locator('use')).toHaveAttribute('href', '#logo-sms');
+    await expect(rows.nth(1).locator('use')).toHaveAttribute('href', '#logo-whatsapp');
+    await expect(rows.nth(0)).toContainText(files[0].name);
+    await expect(rows.nth(1)).toContainText('WhatsApp Chat with Sam.txt');
+    const grow = await page.locator('#loadSegs .load-seg').evaluateAll((els) => els.map((e) => Number(e.style.flexGrow)));
+    expect(grow).toEqual(files.map((f) => f.buffer.length));
+  });
+
+  test('AC2: the step line goes through each file, then sorting, owners and drawing', async ({ page }) => {
+    await record(page);
+    const files = [sms(40), whatsApp()];
+    await loadFiles(page, files);
+    const n = await inApp(page, (app) => app.msgs.length);
+    expect((await recorded(page)).steps).toEqual([
+      'Checking files',
+      `Reading ${files[0].name}`,
+      'Reading WhatsApp Chat with Sam.txt',
+      `Sorting ${n} messages`,
+      "Working out who's you",
+      'Drawing the dashboard',
+    ]);
+  });
+
+  test('AC3: the counts match what was loaded', async ({ page }) => {
+    await loadFiles(page, [sms(40), whatsApp()]);
+    const { snap, want } = await inApp(page, (app) => {
+      const keys = new Set([...app.msgs.map((m) => m.tk || m.k), ...app.calls.map((c) => c.tk || c.k)]);
+      return { snap: app.loadSnapshot, want: { messages: app.msgs.length, calls: app.calls.length, conversations: keys.size } };
+    });
+    expect({ messages: snap.counts.messages, calls: snap.counts.calls, conversations: snap.counts.conversations }).toEqual(want);
+    await expect(page.locator('#loadCounts [data-count="messages"] dd')).toHaveText(String(want.messages));
+  });
+
+  test('AC4: an overlapping export shows the duplicates it skipped', async ({ page }) => {
+    await loadFiles(page, sms(6, 'sms-1.xml'));
+    await addFiles(page, sms(9, 'sms-2.xml')); // the first 6 again, and 3 new
+    const snap = await inApp(page, (app) => app.loadSnapshot);
+    expect(snap.counts.dupes).toBe(6);
+    expect(snap.counts.messages).toBe(9);
+    await expect(page.locator('#loadCounts [data-count="dupes"]')).toBeAttached();
+    await expect(page.locator('#loadCounts [data-count="dupes"] dd')).toHaveText('6');
+  });
+
+  test('AC5: a WhatsApp-only load shows no Calls count', async ({ page }) => {
+    await loadFiles(page, whatsApp());
+    await expect(page.locator('#loadCounts [data-count="calls"]')).toHaveAttribute('hidden', '');
+    await expect(page.locator('#loadCounts [data-count="messages"]')).not.toHaveAttribute('hidden', '');
+  });
+
+  test('AC7: the timeline covers the months read, and names the first and last', async ({ page }) => {
+    await loadFiles(page, sms(40 * 24)); // an hour apart: Jan and Feb 2023
+    const { snap, months, caption } = await inApp(page, (app) => {
+      const months = new Map();
+      for (const m of app.msgs) months.set(m.mo, (months.get(m.mo) || 0) + 1);
+      const mos = [...months.keys()].sort((a, b) => a - b);
+      const label = (mo) => fmtDate.monthShort(new Date(Math.floor(mo / 12), mo % 12, 1));
+      return { snap: app.loadSnapshot, months: [...months].sort((a, b) => a[0] - b[0]), caption: `${label(mos[0])} – ${label(mos.at(-1))}` };
+    });
+    expect([...snap.months].sort((a, b) => a[0] - b[0])).toEqual(months);
+    expect(snap.first).toBe(months[0][0]);
+    expect(snap.last).toBe(months.at(-1)[0]);
+    await expect(page.locator('#loadRange')).toHaveText(caption);
+  });
+
+  test.describe('a file that fails', () => {
+    test.use({ failOnConsoleError: false }); // the parse error is logged
+
+    test('AC8: each file ends done with what it added, and a bad file ends failed', async ({ page }) => {
+      const good = sms(12);
+      await loadFiles(page, [good, { name: 'result.json', mimeType: 'application/json', buffer: Buffer.from('{oops') }]);
+      await expect(page.locator('#dashError')).toBeVisible();
+      const rows = page.locator('#loadFiles li');
+      await expect(rows.filter({ hasText: good.name })).toHaveAttribute('data-state', 'done');
+      await expect(rows.filter({ hasText: good.name })).toContainText('12 messages');
+      await expect(rows.filter({ hasText: 'result.json' })).toHaveAttribute('data-state', 'failed');
+      await expect(rows.filter({ hasText: 'result.json' })).toContainText("Couldn't read");
+    });
+  });
+
+  test.describe('with the demo', () => {
+    test.beforeEach(async ({ page }) => {
+      await record(page);
+    });
+
+    test('AC9: every step ticks off with a time, starting with Preparing the demo', async ({ page }) => {
+      await loadDemoRecorded(page);
+      const snap = await inApp(page, (app) => app.loadSnapshot);
+      expect(snap.steps.map((x) => x.id)).toEqual(['demo', 'check', 'read', 'merge', 'owners', 'draw']);
+      for (const x of snap.steps) {
+        expect(x.state, x.id).toBe('done');
+        expect(x.ms, x.id).toBeGreaterThanOrEqual(0);
+      }
+      await expect(page.locator('#loadSteps li[data-state="done"]')).toHaveCount(6);
+      await expect(page.locator('#loadSteps li').first()).toContainText('Preparing the demo');
+    });
+
+    test('AC10: the loading screen shows before the demo data exists', async ({ page }) => {
+      await loadDemoRecorded(page);
+      expect((await recorded(page)).demoMsgsAtStart).toBe(0);
+    });
+
+    test('AC11: no message text or sender names on the loading screen', async ({ page }) => {
+      await loadDemoRecorded(page);
+      const { texts } = await recorded(page);
+      expect(texts.length).toBeGreaterThan(0);
+      const { bodies, senders } = await inApp(page, (app) => {
+        const convo = new Set([...app.contacts.values()].flatMap((c) => [c.name, c.title, c.addr]).filter(Boolean));
+        return {
+          bodies: [...new Set(app.msgs.map((m) => m.b).filter((b) => b && b.length >= 12))],
+          senders: [...new Set(app.msgs.map((m) => m.sn).filter((n) => n && !convo.has(n) && ![...convo].some((c) => c.includes(n))))],
+        };
+      });
+      const all = texts.join('\n');
+      expect(bodies.filter((b) => all.includes(b))).toEqual([]);
+      expect(senders.filter((n) => all.includes(n))).toEqual([]);
+    });
+
+    test('AC12: the live region changes only when the step does', async ({ page }) => {
+      await loadDemoRecorded(page);
+      const { steps, stepWrites } = await recorded(page);
+      expect(stepWrites).toBe(steps.length);
+      for (let i = 1; i < steps.length; i++) expect(steps[i]).not.toBe(steps[i - 1]);
+      const jobs = (await inApp(page, (app) => app.loadSnapshot)).files.length;
+      expect(steps.length).toBeLessThanOrEqual(6 + jobs);
+      await expect(page.locator('#loadStep')).toHaveAttribute('aria-live', 'polite');
+    });
+
+    test('AC13: with reduced motion nothing on the loading screen animates', async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await loadDemoRecorded(page);
+      expect((await recorded(page)).anims).toBe(0);
+    });
+
+    for (const colorScheme of ['light', 'dark']) {
+      test(`AC14: no sideways scroll at 360px (${colorScheme})`, async ({ page }) => {
+        await page.emulateMedia({ colorScheme });
+        await page.setViewportSize({ width: 360, height: 800 });
+        await loadDemoRecorded(page);
+        const rec = await recorded(page);
+        expect(rec.texts.length).toBeGreaterThan(0);
+        expect(rec.maxScroll).toBeLessThanOrEqual(0);
+      });
+    }
+
+    test('AC15: the screen draws at most once per animation frame', async ({ page }) => {
+      await loadDemoRecorded(page);
+      const draws = await inApp(page, (app) => app.loadDraws);
+      const { frames } = await recorded(page);
+      expect(draws).toBeGreaterThan(0);
+      expect(draws).toBeLessThanOrEqual(frames);
+    });
+  });
+
+  test('AC16: SMS conversation names show while the file is still being read, 8 at most', async ({ page }) => {
+    await record(page);
+    await loadFiles(page, sms(60_000)); // batches of 5,000: names arrive with the first
+    const rec = await recorded(page);
+    expect(rec.foundWhileReading).toBeGreaterThan(0);
+    expect(rec.maxFound).toBeLessThanOrEqual(8);
+    const logos = await page.locator('#loadFound use').evaluateAll((els) => els.map((e) => e.getAttribute('href')));
+    expect(logos.length).toBe(8);
+    expect(new Set(logos)).toEqual(new Set(['#logo-sms']));
+  });
+
+  for (const [label, name] of [
+    ['with spaces', 'The Extremely Long Group Chat Name That Someone Thought Was Funny At The Time '.repeat(4)],
+    ['without spaces', 'x'.repeat(400)],
+  ]) {
+    test(`R15: a very long conversation name (${label}) is cut short, at 360px and on desktop`, async ({ page }) => {
+      await record(page);
+      for (const width of [360, 1280]) {
+        await page.setViewportSize({ width, height: 800 });
+        await loadFiles(page, smsBackup([{ address: '+15551234567', name, at: '2024-08-19T09:00:00Z', body: 'hi' }]));
+        const rec = await recorded(page);
+        expect(rec.maxChip, `chip width at ${width}px`).toBeGreaterThan(0);
+        expect(rec.maxChip, `chip width at ${width}px`).toBeLessThanOrEqual(240);
+        expect(rec.chipOverflow, `past the list's edge at ${width}px`).toBeLessThanOrEqual(0);
+        expect(rec.maxScroll, `sideways scroll at ${width}px`).toBeLessThanOrEqual(0);
+        await expect(page.locator('#loadFound li span')).toHaveAttribute('title', name);
+      }
+    });
+  }
+
+  test('AC17: a conversation name with markup shows as text', async ({ page }) => {
+    const name = '<img src=x onerror=alert(1)>';
+    page.on('dialog', () => { throw new Error('a dialog opened'); });
+    await loadFiles(page, smsBackup([{ address: '+15551234567', name, at: '2024-08-19T09:00:00Z', body: 'hi' }]));
+    await expect(page.locator('#loadFound li')).toHaveText([name]);
+    await expect(page.locator('#loadFound img')).toHaveCount(0);
+  });
+});

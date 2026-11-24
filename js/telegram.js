@@ -23,7 +23,7 @@
 function telegramParserWorker(self, lib) {
   'use strict';
 
-  const { analyzeText, stampTime, addReaction, listZip, readEntryText } = lib;
+  const { analyzeText, stampTime, addReaction, listZip, readEntryText, contactMap } = lib;
 
   const BATCH_SIZE = 5000;
   const ONE_ON_ONE = new Set(['personal_chat', 'bot_chat']);
@@ -57,7 +57,7 @@ function telegramParserWorker(self, lib) {
     return '';
   }
 
-  const contacts = new Map();
+  const contacts = contactMap();
   const counts = { telegram: 0, skipped: 0, skippedChats: 0, badDates: 0 };
   const ownerIds = new Set(); // from_id values that are you
   const namesById = new Map(); // from_id -> Map(display name -> messages)
@@ -65,7 +65,7 @@ function telegramParserWorker(self, lib) {
 
   function flush() {
     if (msgBatch.length) {
-      self.postMessage({ type: 'batch', msgs: msgBatch, calls: [] });
+      self.postMessage({ type: 'batch', msgs: msgBatch, calls: [], found: contacts.takeFresh() });
       msgBatch = [];
     }
   }

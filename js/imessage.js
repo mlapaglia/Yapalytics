@@ -27,7 +27,7 @@
 function iMessageParserWorker(self, lib) {
   'use strict';
 
-  const { analyzeText, stampTime, listZip, readEntryText } = lib;
+  const { analyzeText, stampTime, listZip, readEntryText, contactMap } = lib;
 
   const BATCH_SIZE = 5000;
   const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
@@ -132,13 +132,13 @@ function iMessageParserWorker(self, lib) {
     return { id: base, title: base, group: base.includes(', ') };
   }
 
-  const contacts = new Map();
+  const contacts = contactMap();
   const counts = { imessage: 0, skipped: 0, files: 0 };
   let msgBatch = [];
 
   function flush() {
     if (msgBatch.length) {
-      self.postMessage({ type: 'batch', msgs: msgBatch, calls: [] });
+      self.postMessage({ type: 'batch', msgs: msgBatch, calls: [], found: contacts.takeFresh() });
       msgBatch = [];
     }
   }

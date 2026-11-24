@@ -168,7 +168,28 @@ function messageLib(vader) {
     for (const n of names) if (n && !x.n.includes(n)) x.n.push(n);
   }
 
-  return { analyzeText, stampTime, swearFamily, explainMood, addReaction, TRAIT, T_REACTION };
+  /**
+   * A parser's conversations (key -> conversation) that also remembers which were added
+   * since takeFresh() last ran, so each batch can carry the conversations it found
+   * (spec 016 R15). Names are read when taken, so one set after creation is included.
+   */
+  function contactMap() {
+    const map = new Map();
+    let fresh = [];
+    const set = map.set;
+    map.set = function (key, c) {
+      if (!map.has(key)) fresh.push(c);
+      return set.call(map, key, c);
+    };
+    map.takeFresh = () => {
+      const found = fresh.map((c) => ({ key: c.key, name: c.name || c.title || c.addr || '', s: c.s || 0, group: !!c.group }));
+      fresh = [];
+      return found;
+    };
+    return map;
+  }
+
+  return { analyzeText, stampTime, swearFamily, explainMood, addReaction, contactMap, TRAIT, T_REACTION };
 }
 
 /*
@@ -202,7 +223,7 @@ function mergeReactions(a, b) {
 function smsParserWorker(self, lib) {
   'use strict';
 
-  const { analyzeText, stampTime } = lib;
+  const { analyzeText, stampTime, contactMap } = lib;
 
   const CHUNK_BYTES = 8 * 1024 * 1024;
   const BATCH_SIZE = 5000;
@@ -406,7 +427,7 @@ function smsParserWorker(self, lib) {
     return n;
   }
 
-  const contacts = new Map(); // key -> { key, name, addr, group, lastT }
+  const contacts = contactMap(); // key -> { key, name, addr, group, lastT }
 
   function noteContact(key, address, name, t) {
     let c = contacts.get(key);
@@ -432,7 +453,7 @@ function smsParserWorker(self, lib) {
 
   function flush() {
     if (msgBatch.length || callBatch.length) {
-      self.postMessage({ type: 'batch', msgs: msgBatch, calls: callBatch });
+      self.postMessage({ type: 'batch', msgs: msgBatch, calls: callBatch, found: contacts.takeFresh() });
       msgBatch = [];
       callBatch = [];
     }
@@ -581,7 +602,8 @@ function smsParserWorker(self, lib) {
 }
 
 /**
- * Run a parser worker over `payload`. Callbacks: onBatch(msgs, calls), onProgress(loaded, total).
+ * Run a parser worker over `payload`. Callbacks: onBatch(msgs, calls, found), onProgress(loaded, total).
+ * `found` lists the conversations first seen in that batch (spec 016 R15).
  * Resolves with the worker's final { type:'done', contacts, counts } message.
  */
 function runParserWorker(workerFn, payload, { onBatch, onProgress }) {
@@ -592,7 +614,7 @@ function runParserWorker(workerFn, payload, { onBatch, onProgress }) {
     const worker = new Worker(url);
     worker.onmessage = (e) => {
       const d = e.data;
-      if (d.type === 'batch') onBatch(d.msgs, d.calls);
+      if (d.type === 'batch') onBatch(d.msgs, d.calls, d.found || []);
       else if (d.type === 'progress') onProgress(d.loaded, d.total);
       else if (d.type === 'done' || d.type === 'error') {
         worker.terminate();

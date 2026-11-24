@@ -21,7 +21,7 @@
 function whatsAppParserWorker(self, lib) {
   'use strict';
 
-  const { analyzeText, stampTime, listZip, readEntryText } = lib;
+  const { analyzeText, stampTime, listZip, readEntryText, contactMap } = lib;
 
   const BATCH_SIZE = 5000;
 
@@ -147,13 +147,13 @@ function whatsAppParserWorker(self, lib) {
     return out;
   }
 
-  const contacts = new Map();
+  const contacts = contactMap();
   const counts = { whatsapp: 0, skipped: 0, badDates: 0 };
   let msgBatch = [];
 
   function flush() {
     if (msgBatch.length) {
-      self.postMessage({ type: 'batch', msgs: msgBatch, calls: [] });
+      self.postMessage({ type: 'batch', msgs: msgBatch, calls: [], found: contacts.takeFresh() });
       msgBatch = [];
     }
   }
