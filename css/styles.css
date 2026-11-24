@@ -1141,3 +1141,12 @@ table.apps-table td.apps-cell { min-width: 110px; }
   .app-split-row { grid-template-columns: 72px minmax(0, 1fr); }
   .app-split-legend { grid-column: 2; }
 }
+
+/* Daily rhythm (spec 020) */
+.rhythm-list:not(:empty) { margin-top: 10px; }
+.rhythm-head { font-size: 13px; font-weight: 600; margin: 4px 0 4px; }
+.rhythm-rows { max-height: none; }
+.rhythm-rows li { align-items: center; cursor: default; }
+.rhythm-rows li:hover { background: none; }
+.rhythm-rows li .btn { flex: none; }
+.rhythm-foot { font-size: 12.5px; margin: 8px 0 0; }

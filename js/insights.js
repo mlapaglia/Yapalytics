@@ -26,7 +26,7 @@ function peakOf([r, s]) {
  * The most notable findings in a selection, most interesting first (at most one of each
  * kind). `single`: the selection is one conversation, so sentences talk about "here".
  */
-function buildHighlights(msgs, A, { labelFor = (k) => k, senderLabel = (x) => x, single = false, limit = HIGHLIGHT_LIMIT, crossApp = null } = {}) {
+function buildHighlights(msgs, A, { labelFor = (k) => k, senderLabel = (x) => x, single = false, limit = HIGHLIGHT_LIMIT, crossApp = null, rhythm = null, unusual = null } = {}) {
   if (!msgs.length) return [];
   const out = [];
   const add = (kind, score, icon, parts) => out.push({ kind, score, icon, parts });
@@ -169,6 +169,7 @@ function buildHighlights(msgs, A, { labelFor = (k) => k, senderLabel = (x) => x,
   }
 
   moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, total });
+  rhythmHighlights(A, { add, person, single, rhythm, unusual });
 
   // How a linked person moves between apps (spec 007 R5): crossAppHighlight's pick
   if (crossApp) out.push(crossApp);
@@ -419,6 +420,49 @@ function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, to
         ? ['You send ', x, ` as many love-you messages${LOVE_EXAMPLES} as `, person(solo.k), ' here.']
         : [person(solo.k), ' sends ', x, ` as many love-you messages${LOVE_EXAMPLES} as you here.`]);
     }
+  }
+}
+
+/**
+ * Spec 020: a change in when you sign off, time away, and a day far busier than normal
+ * with someone. `rhythm` is Select.rhythm()'s { days, away }, `unusual` unusualDays().
+ */
+function rhythmHighlights(A, { add, person, single, rhythm, unusual }) {
+  // AC7: signing off later or earlier than the year before
+  if (rhythm && !single && rhythm.days.size) {
+    const counted = [...rhythm.days].filter(([, v]) => v.n >= RHYTHM_MIN_MSGS);
+    const end = Math.max(...rhythm.days.keys());
+    const recent = counted.filter(([d]) => d > end - 91).map(([, v]) => v.last);
+    const before = counted.filter(([d]) => d <= end - 91 && d > end - 91 - 365).map(([, v]) => v.last);
+    if (recent.length >= 20 && before.length >= 20) {
+      const now = median(recent), then = median(before);
+      const diff = now - then;
+      if (Math.abs(diff) >= 45) {
+        const later = diff > 0;
+        add('bedtime', Math.min(45, 30 + (Math.abs(diff) / 60) * 10), '🌙', [
+          "You've been signing off ", { b: fmtDuration(Math.abs(diff) * 60e3) }, later ? ' later' : ' earlier',
+          ' in the last 3 months than in the year before: around ', { b: rhythmClock(now) }, later ? ', up from ' : ', down from ', rhythmClock(then), '.',
+        ]);
+      }
+    }
+  }
+
+  // AC18: time away, the biggest shift (the latest on a tie)
+  if (rhythm && !single && rhythm.away.length) {
+    const size = (x) => Math.abs(x.shift);
+    const st = rhythm.away.reduce((best, x) => (size(x) > size(best) || (size(x) === size(best) && x.to > best.to) ? x : best));
+    const [a, b] = [dayToTs(st.from), dayToTs(st.to)];
+    const from = new Date(a).getFullYear() === new Date(b).getFullYear() ? fmtDate.dayOfMonth(a) : fmtDate.day(a);
+    add('away', 38, '🧳', ['From ', from, ' to ', fmtDate.day(b), ' your messages ran about ', { b: shiftText(st.shift) }, ' than usual. Away somewhere?']);
+  }
+
+  // AC17: the biggest spike with one conversation, unless it's the busiest day anyway
+  const spike = unusual?.find((x) => x.kind === 'busy');
+  if (spike && spike.d !== A.busiestDay?.d) {
+    const parts = [{ b: fmtNum(spike.n) }, ' messages, ', { b: timesText(spike.n / Math.max(spike.usual, 1)) }, ' a normal day.'];
+    add('spike', Math.min(40, 26 + spike.score), '📣', single
+      ? [fmtDate.weekday(dayToTs(spike.d)), ' was a big day here: ', ...parts]
+      : [fmtDate.weekday(dayToTs(spike.d)), ' was a big day with ', person(spike.k), ': ', ...parts]);
   }
 }
 

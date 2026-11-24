@@ -74,7 +74,7 @@ function cache() {
 }
 
 const Select = {
-  caches: { base: cache(), range: cache(), calls: cache(), agg: cache(), content: cache(), cross: cache(), docFreq: cache() },
+  caches: { base: cache(), range: cache(), calls: cache(), agg: cache(), content: cache(), cross: cache(), docFreq: cache(), rhythm: cache(), unusual: cache() },
 
   baseDeps() {
     const { contact, source, groups } = View.filter;
@@ -113,6 +113,19 @@ const Select = {
   /** aggregateCrossApp over range() (spec 007). */
   cross() {
     return this.caches.cross.get([...this.rangeDeps(), View.appsGap], () => aggregateCrossApp(this.range(), View.appsGap));
+  },
+
+  /** Your day, by rhythm day, with the schedule and time away worked out from it (spec 020). */
+  rhythm() {
+    return this.caches.rhythm.get(this.rangeDeps(), () => {
+      const days = yourDays(this.range(), utcApps());
+      return { days, schedule: sleepSchedule(days), away: awayStretches(days) };
+    });
+  },
+
+  /** Days far busier or quieter than normal for a conversation (spec 020). */
+  unusual() {
+    return this.caches.unusual.get(this.rangeDeps(), () => unusualDays(this.range()));
   },
 
   /** How many conversations in the picked app use each word (for "What you talk about"). */

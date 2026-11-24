@@ -348,6 +348,15 @@
         <header><div><h2>Night owl</h2><p class="sub" id="nightNote">Share of messages sent or received between midnight and 5am</p></div></header>
         <div class="chart" id="c-night"></div>
       </article>
+      <article class="card wide" id="rhythmCard">
+        <header><div><h2>When your day starts and ends</h2><p class="sub" id="rhythmNote"></p><p class="sub" id="rhythmBasis"></p></div></header>
+        <div class="chart" id="c-rhythm"></div>
+        <div id="awayList" class="rhythm-list"></div>
+      </article>
+      <article class="card wide" id="unusualCard">
+        <header><div><h2>Unusual days</h2><p class="sub">Days far busier or quieter than normal for a conversation</p></div></header>
+        <div id="unusualDays" class="rhythm-list"></div>
+      </article>
       </div>
     </section>
 
@@ -760,6 +769,7 @@
   <script src="js/demo.js"></script>
   <script src="js/load-stats.js"></script>
   <script src="js/analysis.js"></script>
+  <script src="js/rhythm.js"></script>
   <script src="js/insights.js"></script>
   <script src="js/crossapp.js"></script>
   <script src="js/select.js"></script>

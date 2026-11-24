@@ -68,16 +68,35 @@ message text: only times, directions and conversations.
 - **R6** For each counted day, using only your messages from UTC apps, with at least 8
   of them that day: the day's **centre** is the circular mean of the messages' clock
   times on a 24-hour circle.
-- **R7** A day's **baseline** is the circular median of the centres of the counted days
-  from 8 to 35 days before it and from 8 to 35 days after it (the surrounding weeks,
-  leaving a week each side out). It needs at least 10 such days; otherwise the day isn't
-  judged. A day's **shift** is its centre minus its baseline, wrapped into −12…+12
-  hours.
-- **R8** An **away stretch** is a run of at least 3 judged days, where no two judged days
-  in a row are more than 3 rhythm days apart, that all shift by 3 hours or more in the
-  same direction. Its shift is the median shift of its days, rounded to the nearest hour.
-  Runs longer than 42 days aren't reported: a move or a new job is a lasting change, and
-  the Your day chart shows those.
+- **R7** A day's **baseline** comes from the centres of the days 8 to 35 days before it
+  (*before*) and 8 to 35 days after it (*after*): the surrounding weeks, leaving a week
+  each side out. A side counts with at least 4 days. The day is judged only when those
+  weeks show one usual clock:
+  - With both sides, they need at least 10 days together, and the circular medians of
+    the two sides must be within 2 hours of each other. The baseline is the circular
+    median of both. Around a move or a long trip the sides differ, and the day says
+    nothing about being away.
+  - With one side only (the start or end of the history, or weeks of silence), it needs
+    at least 10 days, 75% of them within 2 hours of its circular median (a steady
+    routine), and that median within 2 hours of the circular median of every centre in
+    the selection. Without the last check, the last weeks of a history that ends soon
+    after a long trip would be judged against the trip and read as "earlier".
+
+  A day's **shift** is its centre minus its baseline, wrapped into −12…+12 hours. Its
+  **spread** is 1.4826 × the median distance from the baseline of the baseline days less
+  than 3 hours from it (a robust standard deviation that a trip inside the window
+  doesn't widen).
+- **R8** An **away stretch** starts as a run of at least 3 judged days, where no two
+  judged days in a row are more than 3 rhythm days apart, that all shift in the same
+  direction by at least 3 hours and at least 3 × their spread. The spread rule keeps
+  people whose days vary a lot (the demo: message times drawn at random) from showing
+  trips that aren't there. The run then grows over the days with a centre next to it (at
+  most 3 rhythm days apart) that are still that far off the run's baseline the same way:
+  the first and last weeks of a trip of a month or so can't be judged on their own,
+  because the weeks on one side are partly away. Overlapping runs merge. Its shift is the
+  median shift of its days against the run's baseline, rounded to the nearest hour.
+  Stretches longer than 42 days aren't reported: a move or a new job is a lasting change,
+  and the Your day chart shows those.
 - **R9** The card lists the away stretches under the chart, newest first, at most 5, and
   shades each one on the chart. Each reads "Mar 3 – Mar 12, 2024: your messages ran
   about **6 hours later** than usual." (or "earlier"), with a **Read those days →**
@@ -95,18 +114,24 @@ message text: only times, directions and conversations.
 - **R11** For each conversation in the selection with at least 200 messages (at most the
   25 busiest), take its messages per local day (`rec.d`) from its first to its last day,
   with days without messages counted as 0. A day is judged against the 56 days before it,
-  and only once there are 28 of them. The **usual** count is their median `m`; the
-  spread is `s = max(1.4826 × MAD, √m, 1)`, where MAD is their median absolute deviation.
-- **R12** A day is **busy** when it has at least 30 messages, at least 3 × max(m, 1), and
-  `(count − m) / s ≥ 5`. A day is **quiet** when `m ≥ 15`, the count is at most 15% of
-  `m`, and it isn't part of a run of 3 or more days without messages (long silences are
-  for `reunion` and Drifted apart). The score is `|count − m| / s`.
+  and only once there are 28 of them. For a set of counts, the **usual** count is their
+  median `m` and the spread is `s = max(1.4826 × MAD, √m, 1)`, where MAD is their median
+  absolute deviation.
+- **R12** A day is **busy** when it has at least 30 messages and, against the window's
+  days *with messages* (at least 10 of them), at least 3 × max(m, 1) and
+  `(count − m) / s ≥ 5`; its score is `(count − m) / s` and its usual count that `m`. A
+  conversation that's silent most days but long when it happens would otherwise make
+  every ordinary chat a spike: on the demo, all 37 busy days had a usual count of 0.
+  A day is **quiet** when, against all the window's days, `m ≥ 15`, the count is at most
+  15% of `m`, and it isn't part of a run of 3 or more days without messages (long
+  silences are for `reunion` and Drifted apart); its score is `(m − count) / s`.
 - **R13** The Activity tab gets a card, **Unusual days**, listing the 10 highest-scoring
   days, at most 2 for any one conversation, newest first. A busy day reads "Sat, Mar 4,
   2023 · Alex · **212** messages, **14×** a normal day (usually about 15)". A quiet day
   reads "Tue, Jun 6, 2023 · Mom · only **2** messages (usually about 41)". The
   conversation is left out when one is picked. Each row has a **Read that day →** button
-  that calls `readDay(dayStart, { contact: k, clearMood: true })`.
+  that calls `readDay(dayStart, { contact: k, clearMood: true })`, or with `contact: null`
+  when a conversation is already picked, so a linked person spanning apps stays picked.
 - **R14** With none, the card says "Nothing out of the ordinary in this selection." With
   no conversation of 200+ messages, it says "Unusual days need a conversation with at
   least 200 messages."
@@ -122,8 +147,8 @@ message text: only times, directions and conversations.
 | `spike` | 📣 | The highest-scoring busy unusual day, when it isn't the selection's busiest day (`busiestDay` already says that one) | "Sat, Mar 4, 2023 was a big day with Alex: **212** messages, **14×** a normal day." / "Sat, Mar 4, 2023 was a big day here: **212** messages, **14×** a normal day." |
 
 - **R16** Scores: `bedtime` 30 + 10 per hour of change (at most 45), `away` 38, `spike`
-  32 + 2 × the day's score (at most 48). Names are profile links, as in the other
-  highlights.
+  26 + the day's score (at most 40, like `busiestDay`; 32 + 2 × the score put a day of 38
+  messages second on the demo). Names are profile links, as in the other highlights.
 
 ## Clocks
 
@@ -142,6 +167,9 @@ Every time on the dashboard is the browser's local time of a stored instant
   zone at sending or at export (Open questions), so these apps are left out of time away
   (R10). They do count towards Your day and Unusual days. A constant offset moves the
   Your day lines but not their changes over time, and unusual days use whole days.
+- **Telegram** uses `date_unixtime`, a real instant. Exports without it fall back to
+  `date`, a clock time with no zone (`js/telegram.js`), which behaves like WhatsApp. The
+  registry can't tell those apart, so Telegram counts as a UTC app.
 
 This spec doesn't change how any app is stamped. The Hour of day, Weekly rhythm and
 Night owl charts already work this way.
@@ -157,8 +185,8 @@ which already exists. Nothing is stored.
 
 **UI.** Two cards on the Activity tab after Night owl, both `card wide`:
 
-- `#rhythmCard`: title "When your day starts and ends", `#rhythmNote` under it (R3, R4),
-  chart `c-rhythm`, then `#awayList` (R9, R10).
+- `#rhythmCard`: title "When your day starts and ends", `#rhythmNote` (R3) and
+  `#rhythmBasis` (R4) under it, chart `c-rhythm`, then `#awayList` (R9, R10).
 - `#unusualCard`: title "Unusual days", sub "Days far busier or quieter than normal for
   a conversation", list `#unusualDays` (R13, R14).
 
@@ -167,18 +195,20 @@ Both appear in "Jump to…" because they're `article.card`s in the section (`Tab
 **Data.** A new file, `js/rhythm.js`, of pure functions over time-sorted message
 records, loaded after `js/analysis.js` and before `js/insights.js` in `index.html`:
 
-- `RHYTHM_DAY_START = 4`, `rhythmDayOf(r)`, `clockMinutes(r)`.
-- `yourDays(msgs)`: Map of rhythm day to `{ n, first, last, utc: [clock minutes] }` for
-  your messages.
-- `sleepSchedule(days)`: `{ counted, buckets: [{ start (rhythm day), first, last, n }],
-  unit: 'week' | 'month', usual: { first, last }, weekday, weekend }` (R1–R4).
+- `RHYTHM_DAY_START = 4`, `rhythmDayOf(r)`, `clockMinutes(r)`, `rhythmClock(min)`.
+- `yourDays(msgs, utcApps)`: Map of rhythm day to `{ n, first, last, utc: [clock
+  minutes] }` for your messages.
+- `sleepSchedule(days)`: `{ counted, buckets: [{ start (ms), first, last, n }], unit:
+  'week' | 'month', usual: { first, last }, weekday, weekend }` (R1–R4), and
+  `rhythmNoteText(schedule)` (R3).
 - `awayStretches(days)`: `[{ from, to (rhythm days), shift (hours, signed), days }]` (R6–R8).
 - `unusualDays(msgs, { minMessages = 200, top = 25 })`: `[{ d, k, n, usual, kind: 'busy' |
-  'quiet', score }]` before the per-conversation cap and the limit of 10 (R11, R12).
+  'quiet', score }]`, best first, and `unusualList(days)`: the per-conversation cap and the
+  limit of 10, newest first (R11–R13).
 
 `js/sources.js` gets a new registry field, `clock: 'utc' | 'wall'`, set to `'wall'` for
-WhatsApp and iMessage. `yourDays` takes the set of UTC app ids so it doesn't read the
-registry itself, which keeps it testable.
+WhatsApp and iMessage, and `utcApps()`, the set of UTC app ids. `yourDays` takes that set
+so it doesn't read the registry itself, which keeps it testable.
 
 **Caching.** `Select.rhythm()` caches `{ days, schedule, away }` and `Select.unusual()`
 caches `unusualDays`, both keyed on `rangeDeps()` (`js/select.js`), like `agg()`.
@@ -196,9 +226,11 @@ caches `unusualDays`, both keyed on `rangeDeps()` (`js/select.js`), like `agg()`
   `js/panels/overview.js` passes `Select.rhythm()` and `Select.unusual()`. The highlights
   panel needs no new topics: both depend on the selection.
 
-**Cost.** Unusual days scan at most 25 conversations' daily counts with a 56-day window,
-which is fast enough to cache and redo per selection. It's only worked out when the
-Activity or Overview tab draws.
+**Cost.** Unusual days scan at most 25 conversations' daily counts with a 56-day window.
+Time away compares each day with the days within 35 days of it. On the demo (29,520
+messages, 779 counted days): `yourDays` 1 ms, `awayStretches` 11 ms, `unusualDays` 38 ms;
+on the demo ×10 (295,200 messages) `yourDays` 8 ms and `unusualDays` 54 ms. Both are
+cached per selection and only worked out when the Activity or Overview tab draws.
 
 ## Acceptance criteria
 
@@ -244,6 +276,14 @@ Activity or Overview tab draws.
 - **AC19** In the browser, with a generated SMS file holding the AC8 history loaded, the
   Activity tab shows both cards, the chart with one shaded stretch, and both appear in
   "Jump to…".
+- **AC20** A 30-day trip is one stretch over all 30 days, though its first and last
+  weeks can't be judged on their own.
+- **AC21** A 7-day trip in the first or last weeks of the history is found. A 50-day trip
+  that ends 20 days before the history does gives none (not a stretch "earlier" after it).
+- **AC22** A year of days whose messages fall at random hours (the demo's weights) gives
+  no stretch.
+- **AC23** In a conversation that talks every third day, about 40 messages each time, an
+  ordinary day isn't busy; a day of 200 is, with usual 40.
 
 ## Open questions
 
@@ -251,8 +291,13 @@ Activity or Overview tab draws.
   in the phone's zone when exported? If it's the zone when exported, WhatsApp behaves
   like iMessage and could join time away whenever its offset from the browser is 0.
   Check against an export made after a trip.
-- The thresholds (5 messages a day, 3-hour shift, 42 days, z ≥ 5, 200 messages) are first
-  guesses. Tune them on a few real histories, and change them here.
+- The thresholds (5 messages a day, 3-hour shift and 3× spread, 2 hours for agreeing
+  sides, 75% steady, 42 days, z ≥ 5, 200 messages, 10 active days) are first guesses,
+  checked only on the demo and synthetic histories. Tune them on a few real histories,
+  and change them here. On synthetic histories, trips are found with days varying by
+  up to ±1.5 hours; at ±2 hours a 30-day trip is missed (a 7-day one is still found).
+- A trip in the first or last weeks of a history whose usual clock changed (after a
+  move) isn't found: a one-sided baseline must match the clock of the whole selection.
 - Should Your day use only 1-on-1 conversations? A busy group chat can get your first
   message of the day without saying much about you. For now groups count, and the group
   chats filter can leave them out.

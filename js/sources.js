@@ -21,6 +21,8 @@
  *   metaFormat    Meta's download format: a thread file on its own could be either app.
  *   shares        its messages can be shared posts (spec 004).
  *   nameRank      which app's name a linked person goes by first (lower first, spec 005 R5).
+ *   clock         'utc': the export gives each message a real instant. 'wall': a clock time
+ *                 with no zone, read as the browser's local time (spec 020: left out of time away).
  *   badDatesError shown when nothing loaded because the export's dates couldn't be read.
  *   exportOf(c)   which export a conversation came from, when an app has two (spec 009 R12).
  *   parse(files, callbacks)   runs its parser (see runParserWorker).
@@ -105,7 +107,7 @@ function fileProbe(file) {
 const Sources = {
   list: [
     {
-      id: 0, kind: 'sms', name: 'SMS', logo: 'sms', mark: '', exportName: '',
+      id: 0, kind: 'sms', name: 'SMS', logo: 'sms', mark: '', exportName: '', clock: 'utc',
       senderNames: false, defaultOwner: null, addrIds: true,
       jobs: 'each', readTogether: false, archives: true, metaFormat: false, shares: false, nameRank: 0,
       parse: (files, cb) => parseBackupFile(files[0], cb),
@@ -113,7 +115,7 @@ const Sources = {
       detect: { file: (p) => !isZip(p.file) },
     },
     {
-      id: 1, kind: 'gchat', name: 'Google Chat', logo: 'googlechat', mark: '💬', exportName: 'Google Takeout',
+      id: 1, kind: 'gchat', name: 'Google Chat', logo: 'googlechat', mark: '💬', exportName: 'Google Takeout', clock: 'utc',
       senderNames: false, defaultOwner: null, addrIds: true,
       jobs: 'together', readTogether: true, archives: true, metaFormat: false, shares: false, nameRank: 3,
       badDatesError: 'The Google Chat dates are in a language this app can\'t read yet. Set your Google account language to English, export again, and retry.',
@@ -121,7 +123,7 @@ const Sources = {
       detect: { zip: (p) => p.has(/(?:^|\/)Google Chat\//) },
     },
     {
-      id: 2, kind: 'whatsapp', name: 'WhatsApp', logo: 'whatsapp', mark: '🟢', exportName: 'WhatsApp',
+      id: 2, kind: 'whatsapp', name: 'WhatsApp', logo: 'whatsapp', mark: '🟢', exportName: 'WhatsApp', clock: 'wall',
       senderNames: true, defaultOwner: null, addrIds: false,
       jobs: 'together', readTogether: true, archives: false, metaFormat: false, shares: false, nameRank: 2,
       parse: (files, cb) => parseWhatsAppFiles(files, cb),
@@ -132,7 +134,7 @@ const Sources = {
       },
     },
     {
-      id: 3, kind: 'imessage', name: 'iMessage', logo: 'imessage', mark: '🔵', exportName: 'iMessage',
+      id: 3, kind: 'imessage', name: 'iMessage', logo: 'imessage', mark: '🔵', exportName: 'iMessage', clock: 'wall',
       // imessage-exporter calls you "Me" unless the export used --custom-name / --use-caller-id.
       senderNames: true, defaultOwner: 'Me', addrIds: false,
       jobs: 'together', readTogether: false, archives: false, metaFormat: false, shares: false, nameRank: 1,
@@ -146,7 +148,7 @@ const Sources = {
       },
     },
     {
-      id: 4, kind: 'telegram', name: 'Telegram', logo: 'telegram', mark: '✈️', exportName: 'Telegram',
+      id: 4, kind: 'telegram', name: 'Telegram', logo: 'telegram', mark: '✈️', exportName: 'Telegram', clock: 'utc',
       senderNames: true, defaultOwner: null, addrIds: false,
       jobs: 'together', readTogether: false, archives: true, metaFormat: false, shares: false, nameRank: 4,
       parse: (files, cb) => parseTelegramFiles(files, cb),
@@ -163,7 +165,7 @@ const Sources = {
       },
     },
     {
-      id: 5, kind: 'instagram', name: 'Instagram', logo: 'instagram', mark: '📸', exportName: 'Instagram',
+      id: 5, kind: 'instagram', name: 'Instagram', logo: 'instagram', mark: '📸', exportName: 'Instagram', clock: 'utc',
       senderNames: true, defaultOwner: null, addrIds: false,
       jobs: 'together', readTogether: true, archives: true, metaFormat: true, shares: true, nameRank: 5,
       parse: (files, cb) => parseInstagramFiles(files, cb),
@@ -183,7 +185,7 @@ const Sources = {
       },
     },
     {
-      id: 6, kind: 'messenger', name: 'Messenger', logo: 'messenger', mark: '⚡', exportName: 'Messenger',
+      id: 6, kind: 'messenger', name: 'Messenger', logo: 'messenger', mark: '⚡', exportName: 'Messenger', clock: 'utc',
       senderNames: true, defaultOwner: null, addrIds: false,
       jobs: 'together', readTogether: true, archives: true, metaFormat: true, shares: true, nameRank: 6,
       parse: (files, cb) => parseMessengerFiles(files, cb),
@@ -231,6 +233,9 @@ const hasOwner = (s) => !!Sources.byId(s)?.senderNames;
 /** The name an app's export calls you by when it wasn't customized. */
 const isDefaultOwner = (s, name) => name != null && Sources.byId(s)?.defaultOwner === name;
 /** An app's name on screen. */
+/** App ids whose exports give real instants (spec 020). */
+const utcApps = () => new Set(Sources.list.filter((x) => x.clock === 'utc').map((x) => x.id));
+
 const sourceName = (s) => Sources.byId(s)?.name ?? String(s);
 /** { id: name } for every app, for code that takes a lookup (charts, highlights). */
 const sourceNames = () => Object.fromEntries(Sources.list.map((s) => [s.id, s.name]));
