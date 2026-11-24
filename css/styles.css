@@ -1141,3 +1141,8 @@ table.apps-table td.apps-cell { min-width: 110px; }
   .app-split-row { grid-template-columns: 72px minmax(0, 1fr); }
   .app-split-legend { grid-column: 2; }
 }
+
+/* Style match markers (spec 017) */
+#styleMarkers:not(:empty) { margin-top: 12px; }
+.style-table th[scope="col"] { text-align: right; }
+.style-table tr.style-total th, .style-table tr.style-total td { font-weight: 650; color: var(--text); border-bottom: 0; }

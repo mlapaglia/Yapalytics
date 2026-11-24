@@ -169,6 +169,7 @@ function buildHighlights(msgs, A, { labelFor = (k) => k, senderLabel = (x) => x,
   }
 
   moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, total });
+  dynamicsHighlights(A, { add, person, single, rows, oneOnOne });
 
   // How a linked person moves between apps (spec 007 R5): crossAppHighlight's pick
   if (crossApp) out.push(crossApp);
@@ -419,6 +420,78 @@ function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, to
         ? ['You send ', x, ` as many love-you messages${LOVE_EXAMPLES} as `, person(solo.k), ' here.']
         : [person(solo.k), ' sends ', x, ` as many love-you messages${LOVE_EXAMPLES} as you here.`]);
     }
+  }
+}
+
+/** Spec 017: how two people talk. Last word, no reply, questions that got a reply, and style match. */
+function dynamicsHighlights(A, { add, person, single, rows, oneOnOne }) {
+  const pairs = single ? rows.filter((r) => !r.group && r.n >= 50) : oneOnOne;
+  const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+  // AC7: who has the last word
+  let last = null;
+  for (const r of pairs) {
+    const [them, you] = r.bc.lastWord;
+    const n = them + you;
+    if (n < 30) continue;
+    const share = Math.max(them, you) / n;
+    if (share >= 0.7 && (!last || share > last.share)) last = { k: r.k, share, you: you > them };
+  }
+  if (last) {
+    const pct = { b: pctText(last.share) };
+    const where = single ? ' of conversations here.' : null;
+    add('lastWord', 26 + (last.share - 0.5) * 40, '🎤', last.you
+      ? ['You get the last word in ', pct, ...(where ? [where] : [' of your conversations with ', person(last.k), '.'])]
+      : [person(last.k), ' gets the last word in ', pct, where || ' of your conversations.']);
+  }
+
+  // AC8: who writes and hears nothing back
+  let none = null;
+  for (const r of pairs) {
+    const [them, you] = r.bc.noReply;
+    const { ratio, second } = leanOf(them, you);
+    if (Math.max(them, you) >= 15 && ratio >= 3 && (!none || ratio > none.ratio)) none = { k: r.k, ratio, you: second, hi: Math.max(them, you), lo: Math.min(them, you) };
+  }
+  if (none) {
+    const p = person(none.k);
+    const within = ` and heard nothing back within ${fmtGapWords(A.gap)}.`;
+    const other = none.lo === 0 ? ' It never went the other way.' : none.lo === 1 ? [' It went the other way ', { b: 'once' }, '.'] : [' It went the other way ', { b: fmtNum(none.lo) }, ' times.'];
+    add('noReply', 26 + Math.min(10, Math.log2(none.ratio) * 4), '📭', [
+      { b: fmtNum(none.hi) }, ...(none.you ? [' times you messaged ', p] : [' times ', p, ' messaged you']), within, other,
+    ].flat());
+  }
+
+  // AC9: whose questions get a reply
+  let ask = null;
+  for (const r of pairs) {
+    const { qAsked, qReplied } = r.bc;
+    if (qAsked[0] < 30 || qAsked[1] < 30) continue;
+    const them = qReplied[0] / qAsked[0], you = qReplied[1] / qAsked[1];
+    // The threshold is on the exact difference (a hair of slack for float error); rounding is for the score only.
+    const diff = Math.abs(you - them);
+    if (diff >= 0.25 - 1e-9 && (!ask || diff > ask.diff)) ask = { k: r.k, them, you, diff, points: Math.round(diff * 100) };
+  }
+  if (ask) {
+    const p = person(ask.k);
+    add('questionReplies', 24 + ask.points / 4, '💭', ask.you > ask.them
+      ? [{ b: pctText(ask.you) }, ' of your questions get a reply from ', p, ', but only ', { b: pctText(ask.them) }, ' of theirs get one from you.']
+      : [{ b: pctText(ask.them) }, ' of ', p, "'s questions get a reply from you, but only ", { b: pctText(ask.you) }, ' of yours get one from them.']);
+  }
+
+  // AC10: writing more alike than before
+  let like = null;
+  for (const r of pairs) {
+    const series = styleSeries(r.bc.style);
+    if (series.length < 6 || series[series.length - 1][0] - series[0][0] < 11) continue;
+    const from = Math.round(mean(series.slice(0, 3).map((x) => x[1])));
+    const to = Math.round(mean(series.slice(-3).map((x) => x[1])));
+    if (to - from >= 15 && (!like || to - from > like.to - like.from)) like = { k: r.k, from, to };
+  }
+  if (like) {
+    const up = [' style match up from ', { b: String(like.from) }, ' to ', { b: String(like.to) }, '.'];
+    add('converge', 28 + Math.min(12, (like.to - like.from) / 3), '🪞', single
+      ? ['You write more alike here than you used to:', ...up]
+      : ['You and ', person(like.k), ' write more alike than you used to:', ...up]);
   }
 }
 
