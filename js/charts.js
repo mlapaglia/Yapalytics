@@ -623,6 +623,42 @@ function behaviorOption(ui, A) {
   return opt;
 }
 
+// ------------------------------------------------------------------ comparing two periods (spec 021)
+
+/** Colours of the two periods: the earlier one muted, the date range in a series colour. */
+const comparePeriodColors = (ui) => [ui.muted, ui.series[2]];
+const sharePct = (x) => Math.round(x * 1000) / 10;
+
+function compareTooltip(ps, head) {
+  return String(html`${tipHead(head)}${ps.map((p) => tipRow(p.color, p.seriesName, `${p.value}%`))}`);
+}
+
+/** Each period's share of its messages by hour: `a` and `b` are 24 shares (0–1), `labels` the two periods. */
+function compareHourOption(ui, a, b, labels) {
+  const [ca, cb] = comparePeriodColors(ui);
+  const opt = baseOption(ui);
+  opt.xAxis = catAxis(ui, HOUR_LABELS, { boundaryGap: false });
+  opt.yAxis = valAxis(ui, { axisLabel: { color: ui.muted, fontSize: 11, formatter: '{value}%' } });
+  opt.tooltip = tooltipBase(ui, 'axis', 'line');
+  opt.tooltip.formatter = (ps) => compareTooltip(ps, hourText(ps[0].dataIndex));
+  opt.series = [
+    line(labels[0], a.map(sharePct), ca, { lineStyle: { width: 2, color: ca, type: 'dashed' } }),
+    line(labels[1], b.map(sharePct), cb, { areaStyle: { color: cb, opacity: 0.12 } }),
+  ];
+  return opt;
+}
+
+/** Each period's share of its messages by day of the week, as paired bars. */
+function compareDowOption(ui, a, b, labels) {
+  const [ca, cb] = comparePeriodColors(ui);
+  const opt = baseOption(ui);
+  opt.xAxis = catAxis(ui, DOW_LABELS);
+  opt.yAxis = valAxis(ui, { axisLabel: { color: ui.muted, fontSize: 11, formatter: '{value}%' } });
+  opt.tooltip.formatter = (ps) => compareTooltip(ps, ps[0].axisValueLabel);
+  opt.series = [bar(labels[0], a.map(sharePct), ca, ui), bar(labels[1], b.map(sharePct), cb, ui)];
+  return opt;
+}
+
 // ------------------------------------------------------------------ call charts
 
 function callTrendOption(ui, C) {

@@ -26,16 +26,21 @@ in my life this quarter, and who went quiet?"
 ## Definitions
 
 - **This period (B)** is the dashboard's date range (`View.filter.from` to
-  `View.filter.to`). An open end is the first or last message of the selection at any
-  date (`Select.base()`).
+  `View.filter.to`). An open end is the last message loaded, as for the presets and the
+  scope line (`dataBounds` in `js/ui/filters.js`).
 - **The other period (A)** comes from the **compare with** choice:
   - **The period before** (the default): the same number of days as B, ending the day
     before B starts.
   - **A year earlier**: B's dates one calendar year back. Feb 29 becomes Feb 28.
   - **Custom**: two dates you pick.
-- **A period's days** are its local days that fall between the first and last message of
-  `Select.base()`. Per-day numbers divide by these, so a period that starts before your
-  history isn't watered down by days you have no messages for.
+- **A period's days** are its local days that fall between the selection's first message
+  at any date (`Select.base()`) and the last message loaded. Per-day numbers divide by
+  these, so a period that starts before your history isn't watered down by days you have
+  no messages for. The end is the last message loaded, not the selection's last: when one
+  conversation went quiet before the end of the range, its quiet days are real and count.
+  (Building showed this: ending at the conversation's own last message made "the last 90
+  days" 85 days long for a conversation quiet for 5 days, and its per-day numbers too
+  high.)
 
 ## Requirements
 
@@ -44,10 +49,12 @@ in my life this quarter, and who went quiet?"
   review.
 - **R2** Its header names both periods: "Mar 1 – May 31, 2026 compared with Nov 29, 2025
   – Feb 28, 2026 · 92 days each". When the periods have different numbers of days, it
-  gives both and adds "Changes compare messages per day."
+  gives both and adds "Changes compare messages per day." With no date range picked it
+  names B and says "your whole history here".
 - **R3** A **Compare with** control offers The period before, A year earlier and Custom.
   Custom shows two date inputs for A, limited to the data's bounds like the filter's
-  dates (`syncRangeUi` in `js/ui/filters.js`).
+  dates (`syncRangeUi` in `js/ui/filters.js`). Picking Custom starts them at the period
+  it replaces, so nothing changes until a date does.
 - **R4** With no date range picked (the **All** preset), B is your whole history and has
   nothing before it, so the tab shows three buttons instead of the comparison: **Last 90
   days vs the 90 before**, **Last 365 days vs the 365 before**, and **This year so far vs
@@ -71,7 +78,7 @@ in my life this quarter, and who went quiet?"
 | You start | your share of conversation starts | points |
 | Avg length, sent | characters per message (reactions left out) | percent |
 | Avg length, received | the same | percent |
-| Emoji | per 100 messages | percent |
+| Emoji per 100 messages | emoji ÷ messages × 100 | percent |
 | Attachments per day | photos, videos, GIFs, audio and files ÷ period days | percent |
 | Night owl | share of messages from midnight to 5 am | points |
 
@@ -82,16 +89,23 @@ in my life this quarter, and who went quiet?"
   (points) or 10% of A's median (times) reads "about the same". When A is 0 and B isn't,
   it reads "new". Changes have an ▲ or ▼ and no colour that calls them good or bad.
 - **R9** A row shows "–" for a side, and no change, when that side is too thin: fewer
-  than 20 messages for shares and lengths, fewer than 10 replies for reply times, fewer
-  than 8 conversation starts for You start.
+  than 20 messages for You sent, Emoji and Night owl, fewer than 20 messages with text on
+  that side for the lengths, fewer than 10 replies for reply times, fewer than 8
+  conversation starts for You start. Active days, Conversations and the per-day rows
+  always show: they're counts of days and conversations, not shares of a few messages.
 - **R10** With **All conversations** picked, a **People** card lists the 10 conversations
   with the most messages in B: messages in A, messages in B and the change, by the R8
   rules. Under it, **New** lists up to 5 conversations with no messages in A and at least
   20 in B, and **Went quiet** lists up to 5 with at least 20 in A and none in B, busiest
-  first. Names link to the profile (`personLink`).
+  first. Names link to the profile (`personLink`) and carry the app mark the People tab
+  uses (`labelFor`), so a linked person and an unlinked conversation with the same name
+  can be told apart.
 - **R11** A **When** card overlays the two periods' hour-of-day profiles: each period's
   share of its messages in each hour, as two lines. Next to it, day of week the same way,
   as paired bars. Shares, not counts, so periods of different lengths compare.
+- **R13** Tables and chart legends call the periods **Earlier** and **Date range**. On
+  wide screens each table's column head has the period's dates under it; on a phone the
+  dates are only in the header line, so the table fits at 390px.
 - **R12** The rest of the dashboard is unchanged and shows B, as it does now. Year over
   year stays on the Activity tab and still lines up the calendar years in B.
 
