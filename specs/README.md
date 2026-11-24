@@ -50,3 +50,4 @@ see, changes what data leaves the browser, or takes more than a day to build.
 | [013 Picking which sender is you, in a dialog](013-you-dialog.md) | Approved: built |
 | [014 Restructuring the code: safety, speed and room to grow](014-architecture-refactor.md) | Draft: built, awaiting review |
 | [015 Settings dialog](015-settings-dialog.md) | Approved: built |
+| [016 A livelier loading screen](016-loading-screen.md) | Approved: built |

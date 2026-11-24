@@ -87,10 +87,15 @@ function createDataset() {
 
     /**
      * Add a parser batch, leaving out what's already loaded. `attBase` moves the batch's
-     * attachment indexes (into its job's files) into `archives`.
+     * attachment indexes (into its job's files) into `archives`. Returns where the kept
+     * messages and calls start in `msgs` and `calls`, and how many were duplicates
+     * (spec 016 R4).
      */
     addBatch(msgs, calls, attBase = 0) {
       const rebase = (att) => { if (attBase) for (const a of att) if (a.z != null) a.z += attBase; };
+      const msgFrom = D.msgs.length;
+      const callFrom = D.calls.length;
+      let dupes = 0;
       for (const m of msgs) {
         // Apps that name senders get `o` in rederive, so key them by sender.
         const key = hashKey(`${m.t}|${hasOwner(m.s) ? m.sn : m.o}|${m.k}|${m.l}|${m.m}`);
@@ -104,6 +109,7 @@ function createDataset() {
             seen.att = m.att;
             seen.mb = m.mb;
           }
+          dupes++;
           continue;
         }
         // Reactions sent as texts (tapbacks, "😂 to “…”") aren't messages. Reactions
@@ -119,6 +125,7 @@ function createDataset() {
         seenCalls.add(key);
         D.calls.push(c);
       }
+      return { msgFrom, callFrom, dupes };
     },
 
     /** Merge a parser's conversations into what's loaded: newest name, every member. */

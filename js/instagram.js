@@ -38,7 +38,7 @@
 function metaParserWorker(self, lib) {
   'use strict';
 
-  const { analyzeText, stampTime, addReaction, listZip, readEntryText, T_REACTION } = lib;
+  const { analyzeText, stampTime, addReaction, listZip, readEntryText, T_REACTION, contactMap } = lib;
 
   const APPS = {
     instagram: {
@@ -119,7 +119,7 @@ function metaParserWorker(self, lib) {
     return NOTICE_RE.test(rest) ? rest : '';
   }
 
-  const contacts = new Map();
+  const contacts = contactMap();
   const counts = { instagram: 0, messenger: 0, skipped: 0, skippedChats: 0, reactions: 0 };
   const skippedThreads = new Set();
   const senders = new Set();
@@ -129,7 +129,7 @@ function metaParserWorker(self, lib) {
 
   function flush() {
     if (msgBatch.length) {
-      self.postMessage({ type: 'batch', msgs: msgBatch, calls: [] });
+      self.postMessage({ type: 'batch', msgs: msgBatch, calls: [], found: contacts.takeFresh() });
       msgBatch = [];
     }
   }

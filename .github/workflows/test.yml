@@ -16,7 +16,9 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The browser tests take 9-14 minutes here (the same commit varies by a third
+    # between runners), against about 1 minute on a laptop.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 

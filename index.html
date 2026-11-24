@@ -200,8 +200,25 @@
       </div>
     </div>
     <div id="progress" class="progress" hidden>
-      <div class="track"><div id="progressBar"></div></div>
-      <p id="progressText">Starting…</p>
+      <p class="load-step"><span class="load-spin" aria-hidden="true"></span><span id="loadStep" aria-live="polite">Starting…</span></p>
+      <div class="load-bar">
+        <div class="load-segs" id="loadSegs"></div>
+        <span class="load-pct" id="loadPct">0%</span>
+      </div>
+      <dl class="load-counts" id="loadCounts"></dl>
+      <p class="load-speed" id="loadSpeed"></p>
+      <figure class="load-timeline">
+        <canvas id="loadTimeline" aria-hidden="true"></canvas>
+        <figcaption id="loadRange"></figcaption>
+      </figure>
+      <section class="load-found-wrap" aria-label="Conversations found">
+        <h3 class="load-h">Conversations found</h3>
+        <ul class="load-found" id="loadFound"></ul>
+      </section>
+      <div class="load-lists">
+        <ul class="load-files" id="loadFiles" aria-label="Files"></ul>
+        <ol class="load-steps" id="loadSteps" aria-label="Steps"></ol>
+      </div>
     </div>
   </section>
 
@@ -741,6 +758,7 @@
   <script src="js/telegram.js"></script>
   <script src="js/instagram.js"></script>
   <script src="js/demo.js"></script>
+  <script src="js/load-stats.js"></script>
   <script src="js/analysis.js"></script>
   <script src="js/insights.js"></script>
   <script src="js/crossapp.js"></script>
@@ -757,6 +775,7 @@
   <script src="js/ui/common.js"></script>
   <script src="js/ui/pickers.js"></script>
   <script src="js/ui/filters.js"></script>
+  <script src="js/ui/load-screen.js"></script>
   <script src="js/ui/loader.js"></script>
   <script src="js/ui/files-dialog.js"></script>
   <script src="js/ui/owner-dialog.js"></script>

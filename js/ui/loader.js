@@ -1,6 +1,7 @@
 /*
  * Reading export files into Data: the landing page's picker and demo, drag and drop,
- * the progress bar, and what follows a load (owners, links, the dashboard).
+ * reporting to the loading screen (load-screen.js, spec 016), and what follows a load
+ * (owners, links, the dashboard).
  */
 
 let fileSeq = 0;
@@ -19,39 +20,69 @@ function queueFileOp(op) {
   Files.busy++;
   updateFilesButton();
   fileOps = fileOps.then(op).catch((err) => console.error(err)).finally(() => {
+    LoadScreen.stop();
     Files.busy--;
     updateFilesButton();
   });
   return fileOps;
 }
 
-/** Load files from the landing page, a drop or the demo: they join Files.loaded, checked. */
+/** Load files from the landing page or a drop: they join Files.loaded, checked. */
 function loadFiles(fileList) {
   const picked = [...fileList]; // a drop's file list is emptied once the event is over
+  return queueFileOp(() => loadPicked(picked));
+}
+
+/** Load the demo, showing the loading screen while its files are made (spec 016 R10). */
+function loadDemo() {
   return queueFileOp(async () => {
-    const files = picked.filter((f, i, all) =>
-      f.size > 0 && !Files.loaded.some((e) => sameFile(e, f)) && all.findIndex((g) => sameFile(g, f)) === i);
-    if (!files.length) return;
-    showProgress();
-    let entries;
-    try {
-      const kinds = await Promise.all(files.map(detectFile));
-      entries = files.map((f, i) => fileEntry(f, kinds[i]));
-    } catch (err) {
-      console.error(err);
-      showLoadError('Could not read that file: ' + err.message);
-      return;
-    }
-    await applyFiles([...Files.loaded, ...entries]);
+    showProgress({ demo: true });
+    LoadScreen.step('demo');
+    await nextFrame();
+    await loadPicked(buildDemoFiles());
   });
 }
 
-function showProgress() {
+async function loadPicked(picked) {
+  const files = picked.filter((f, i, all) =>
+    f.size > 0 && !Files.loaded.some((e) => sameFile(e, f)) && all.findIndex((g) => sameFile(g, f)) === i);
+  if (!files.length) {
+    if (LoadScreen.active) hideProgress();
+    return;
+  }
+  showProgress();
+  LoadScreen.step('check');
+  let entries;
+  try {
+    const kinds = await Promise.all(files.map(detectFile));
+    entries = files.map((f, i) => fileEntry(f, kinds[i]));
+  } catch (err) {
+    console.error(err);
+    showLoadError('Could not read that file: ' + err.message);
+    return;
+  }
+  await applyFiles([...Files.loaded, ...entries]);
+}
+
+/**
+ * Show the loading screen (spec 016). `demo` and `check` say which steps the load has;
+ * a load already showing it keeps its steps.
+ */
+function showProgress({ demo = false, check = true } = {}) {
   $('#dashError').hidden = true;
   $('#landing').hidden = false;
   $('#drop').hidden = true;
   $('#progress').hidden = false;
   $('#loadError').hidden = true;
+  LoadScreen.start({ demo, check });
+}
+
+/** Back to what was showing before a load that turned out to have nothing new. */
+function hideProgress() {
+  LoadScreen.stop();
+  $('#progress').hidden = true;
+  $('#drop').hidden = false;
+  if (Data.msgs.length || Data.calls.length) $('#landing').hidden = true;
 }
 
 /**
@@ -62,16 +93,13 @@ function showProgress() {
  * caller reads the remaining files again (see applyFiles).
  */
 async function readFiles(entries) {
-  const bar = $('#progressBar');
-  const text = $('#progressText');
-
   let badDates = ''; // an app's message when its dates couldn't be read
   let job = null;
+  const jobs = [];
 
   try {
     // One job per file or per app (Sources: jobs). Attachments point at their file by
     // index into the job's files (att.z); attBase moves that into Data.archives.
-    const jobs = [];
     for (const src of Sources.list) {
       const files = entries.filter((e) => e.kind === src.kind).map((e) => e.file);
       if (!files.length) continue;
@@ -82,22 +110,23 @@ async function readFiles(entries) {
       }
     }
 
+    LoadScreen.beginRead(entries);
     for (let i = 0; i < jobs.length; i++) {
       job = jobs[i];
-      const label = job.files.length > 1 ? `${job.files.length} files` : job.files[0].name;
+      const label = job.files.length > 1 ? `${job.files.length} ${job.src.name} files` : job.files[0].name;
+      LoadScreen.step('read', label);
+      LoadScreen.startJob(i, job.files);
       const done = await job.parse({
-        onBatch: (msgs, calls) => Data.addBatch(msgs, calls, job.attBase),
-        onProgress(loaded, total) {
-          const pct = ((i + loaded / total) / jobs.length) * 100;
-          bar.style.width = pct.toFixed(1) + '%';
-          text.textContent = `Reading ${label} (${i + 1}/${jobs.length}) · ${fmtBytes(loaded)} of ${fmtBytes(total)} · ${fmtNum(Data.msgs.length)} messages, ${fmtNum(Data.calls.length)} calls`;
-        },
+        onBatch: (msgs, calls, found) => LoadScreen.batch(i, Data.addBatch(msgs, calls, job.attBase), found),
+        onProgress: (loaded, total) => LoadScreen.progress(i, loaded, total),
       });
+      LoadScreen.endJob(i, false);
       Data.addContacts(done.contacts);
       if (job.src.badDatesError && done.counts.badDates) badDates = job.src.badDatesError;
     }
   } catch (err) {
     console.error(err);
+    if (job) LoadScreen.endJob(jobs.indexOf(job), true);
     return { error: 'Could not read that file: ' + err.message, failed: job ? job.files : entries.map((e) => e.file) };
   }
 
@@ -110,19 +139,29 @@ async function readFiles(entries) {
   return null;
 }
 
-/** After files are read: sort, work out owners and links, keep the filters that still apply, and show the dashboard. */
-function finishLoad() {
+/**
+ * After files are read: sort, work out owners and links, keep the filters that still
+ * apply, and show the dashboard. The loading screen draws between the steps (spec 016 R9).
+ */
+async function finishLoad() {
+  LoadScreen.step('merge', fmtNum(Data.msgs.length));
+  await nextFrame();
   Data.finish();
   $('#igPreviewsLabel').hidden = !Data.msgs.some((m) => m.sh && instagramEmbedUrl(m.sh.u));
+  LoadScreen.step('owners');
+  await nextFrame();
   Data.guessOwners(Prefs.owners);
   rederive();
   // Files were left out or removed (spec 006 R10): an app or conversation that's gone goes back to All.
   const f = View.filter;
   if (f.source !== 'all' && !Data.loadedSources().has(f.source)) f.source = 'all';
   if (f.contact !== 'all' && (!Data.contacts.has(f.contact) || (f.source !== 'all' && !Data.keySources(f.contact).includes(f.source)))) f.contact = 'all';
+  LoadScreen.step('draw');
+  await nextFrame();
   $('#landing').hidden = true;
   $('#dash').hidden = false;
-  Panels.invalidate(['*']);
+  Panels.invalidate(['*']); // draws the open tab now
+  LoadScreen.stop(); // after it, so the step's time is the drawing's
 }
 
 /**
@@ -188,8 +227,8 @@ function initLoader() {
     loadFiles(e.target.files);
     e.target.value = '';
   });
-  $('#demoBtn').addEventListener('click', () => loadFiles(buildDemoFiles()));
-  $$('[data-demo]').forEach((b) => { b.addEventListener('click', () => loadFiles(buildDemoFiles())); });
+  $('#demoBtn').addEventListener('click', () => loadDemo());
+  $$('[data-demo]').forEach((b) => { b.addEventListener('click', () => loadDemo()); });
 
   // Drag & drop anywhere on the page
   let dragDepth = 0;

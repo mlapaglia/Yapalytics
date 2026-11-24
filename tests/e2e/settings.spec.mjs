@@ -90,7 +90,9 @@ test.describe('spec 015 settings dialog', () => {
     test('AC6: the picked gap is used again after a reload', async ({ page }) => {
       await pickGap(page, '3h');
       expect(await page.evaluate(() => localStorage.getItem('yapa-convo-gap'))).toBe(String(3 * HOUR));
-      await loadDemo(page); // goes to the page again
+      // Going to the page again. A small backup, not the demo again: two demo loads take
+      // over 20 s on CI, close to the test timeout.
+      await loadFiles(page, smsOnly());
       expect(await inApp(page, (app) => app.convoGap)).toBe(3 * HOUR);
       await openTab(page, 'sec-replies');
       await expect(page.locator('#replyNote')).toHaveText('How quickly each side answers (within 3 hours)');
@@ -177,13 +179,17 @@ test.describe('spec 015 settings dialog', () => {
     });
   });
 
-  test('AC7: an unusable saved gap falls back to 6 hours', async ({ page }) => {
-    for (const saved of ['abc', '0', '7200000']) {
+  // One test per value, each with a small backup: three demo loads in one test ran past
+  // the 30 s test timeout on CI.
+  for (const saved of ['abc', '0', '7200000']) {
+    test(`AC7: an unusable saved gap (${saved}) falls back to 6 hours`, async ({ page }) => {
       await page.addInitScript((v) => localStorage.setItem('yapa-convo-gap', v), saved);
-      await loadDemo(page);
-      expect(await inApp(page, (app) => app.convoGap), saved).toBe(6 * HOUR);
-    }
-  });
+      await loadFiles(page, smsOnly());
+      expect(await inApp(page, (app) => app.convoGap)).toBe(6 * HOUR);
+      await openSettings(page);
+      await expect(page.locator('#gapSeg button.on')).toHaveText('6h');
+    });
+  }
 
   test('AC8: with storage unavailable, picking a gap still applies it', async ({ page }) => {
     await page.addInitScript(() => {

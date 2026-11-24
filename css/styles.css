@@ -248,10 +248,94 @@ code { font-size: 0.92em; background: var(--surface-2); padding: 1px 5px; border
 .logo { display: inline-block; flex: none; color: var(--accent); }
 .source.tips .source-icon { background: var(--surface); }
 
-.progress { width: min(560px, 100%); text-align: center; }
-.progress .track { height: 8px; background: var(--grid); border-radius: 999px; overflow: hidden; }
-.progress .track div { height: 100%; width: 0; background: var(--accent); border-radius: 999px; transition: width 0.2s; }
-.progress p { color: var(--text-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+/* ------------------------------------------------------------------ loading screen (spec 016) */
+.progress {
+  width: min(720px, 100%);
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-variant-numeric: tabular-nums;
+  display: grid;
+  /* Neither this grid's column nor the landing grid's grows to fit a long unbroken name:
+     the name is cut short instead. */
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  gap: 16px;
+}
+.load-step { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 17px; font-weight: 600; min-width: 0; }
+.load-step > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.load-spin {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--grid);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: load-spin 0.8s linear infinite;
+}
+@keyframes load-spin { to { transform: rotate(360deg); } }
+.load-bar { display: flex; align-items: center; gap: 12px; }
+.load-segs { flex: 1; display: flex; gap: 2px; height: 10px; min-width: 0; border-radius: 999px; overflow: hidden; background: var(--grid); }
+.load-seg { flex: 1 1 0; min-width: 4px; background: color-mix(in srgb, var(--app, var(--accent)) 22%, var(--grid)); }
+.load-fill { height: 100%; width: 0; background: var(--app, var(--accent)); transition: width 0.25s ease-out; }
+.load-pct { min-width: 3.5em; text-align: right; font-size: 15px; font-weight: 650; }
+.load-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 8px; margin: 0; }
+.load-count { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
+.load-count dt { color: var(--muted); font-size: 11.5px; }
+.load-count dd { margin: 2px 0 0; font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
+.load-speed { margin: 0; color: var(--text-2); font-size: 13px; }
+.load-timeline { margin: 0; }
+.load-timeline canvas { display: block; width: 100%; height: 56px; }
+.load-timeline figcaption { margin-top: 4px; color: var(--muted); font-size: 12px; text-align: center; }
+.load-h { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.load-found { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; min-height: 26px; }
+.load-found li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* min-width: 0 lets a long name shrink: a flex item's automatic minimum is its whole
+     text, and a minimum beats max-width. The name then ends in "…". */
+  min-width: 0;
+  max-width: min(240px, 100%);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 12.5px;
+}
+.load-found li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.load-found li .logo { width: 14px; height: 14px; }
+/* Older names fade as newer ones arrive (R15). */
+.load-found li:nth-child(n + 5) { opacity: 0.7; }
+.load-found li:nth-child(n + 7) { opacity: 0.45; }
+.load-lists { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+.load-files, .load-steps { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.load-files { max-height: calc(6 * 51px); overflow-y: auto; } /* 6 rows of 2 lines, then it scrolls (R13) */
+.load-file { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 2px 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.load-file .logo { width: 16px; height: 16px; }
+.load-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.load-file-size { color: var(--muted); font-size: 12px; }
+.load-file-state { grid-column: 2 / -1; color: var(--muted); font-size: 12px; }
+.load-file[data-state="reading"] .load-file-state { color: var(--accent); }
+.load-file[data-state="done"] .load-file-state::before { content: "✓ "; color: var(--series-3); }
+.load-file[data-state="failed"] .load-file-state { color: var(--error); }
+.load-steps li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; color: var(--muted); }
+.load-steps li::before { content: "○"; width: 1.2em; flex: none; }
+.load-step-label { flex: 1; }
+.load-steps li[data-state="now"] { color: var(--text); font-weight: 600; }
+.load-steps li[data-state="now"]::before { content: "●"; color: var(--accent); animation: load-pulse 1s ease-in-out infinite alternate; }
+.load-steps li[data-state="done"] { color: var(--text-2); }
+.load-steps li[data-state="done"]::before { content: "✓"; color: var(--series-3); }
+@keyframes load-pulse { from { opacity: 0.35; } }
+@media (max-width: 560px) {
+  .progress { padding: 16px; }
+  .load-lists { grid-template-columns: minmax(0, 1fr); }
+  .load-count dd { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .load-spin, .load-steps li::before { animation: none !important; }
+  .load-fill { transition: none; }
+}
 
 .drop-overlay {
   position: fixed;

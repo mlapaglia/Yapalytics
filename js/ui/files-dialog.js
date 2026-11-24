@@ -102,7 +102,7 @@ async function applyFiles(draft) {
   let read = plan.read;
   let error = '';
   while (read.length) {
-    showProgress();
+    showProgress({ check: false }); // a load from the landing page already started it, with Checking files
     const failure = await readFiles(read);
     if (!failure) break;
     error = failure.error;
@@ -118,7 +118,7 @@ async function applyFiles(draft) {
     return;
   }
   Files.loaded = next;
-  finishLoad();
+  await finishLoad();
   if (error) showLoadError(error);
 }
 
