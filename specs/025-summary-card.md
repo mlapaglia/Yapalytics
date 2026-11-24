@@ -1,6 +1,6 @@
 # 025 Summary image
 
-Status: Draft · PR:
+Status: Draft · PR: [#33](https://github.com/mlapaglia/Yapalytics/pull/33)
 
 ## Problem
 
