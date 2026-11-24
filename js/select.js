@@ -10,7 +10,7 @@
 /** What's picked. Changing it doesn't redraw anything by itself. */
 const View = {
   filter: { contact: 'all', source: 'all', groups: true, from: null, to: null },
-  convoGap: CONVO_GAP, // silence that ends a conversation (picked on the Conversation length card)
+  convoGap: CONVO_GAP, // silence that ends a conversation (picked in Settings and saved in Prefs, spec 015)
   appsGap: APPS_GAP, // the same, for the Across apps tab only (spec 007 R7)
   gran: 'auto', // timeline bars: auto / day / week / month
   moodScorer: 'vader', // 'vader' | 'ai' (spec 001): which scores the mood chart and pills use

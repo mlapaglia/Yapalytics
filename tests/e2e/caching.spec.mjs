@@ -69,7 +69,7 @@ test.describe('spec 014 settings', () => {
     await expect(page.locator('#igPreviewsChk')).toBeChecked();
     // Pat and Sam are one person; the Alex suggestion stays dismissed.
     expect(await page.locator('#contactSel option').allTextContents()).toContain('🔗 Pat Lee (3)');
-    await expect(page.locator('#peopleBtn')).toHaveText('🔗 Link people');
+    await expect(page.locator('#peopleBtn')).toHaveText('🔗 Link people…');
     await expect(page.locator('#aiBackendSeg button[data-backend="ollama"]')).toHaveClass(/on/);
     await expect(page.locator('#aiOllamaUrl')).toHaveValue('http://127.0.0.1:9');
     await expect(page.locator('#aiOllamaModel')).toHaveValue('llama3.2');

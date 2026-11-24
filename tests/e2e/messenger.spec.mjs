@@ -2,7 +2,7 @@
  * specs/009-messenger-import.md in the browser: Facebook's export, Messenger's encrypted
  * chats download, and how they sit next to the other apps.
  */
-import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab, ownerPicker } from './fixtures.mjs';
+import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab, ownerPicker, openLinkPeople, closeLinkPeople } from './fixtures.mjs';
 import { inApp } from './state.mjs';
 import { zippedExport as instagramExport } from '../helpers/instagram.mjs';
 import { resultJson, singleChatExport } from '../helpers/telegram.mjs';
@@ -145,11 +145,11 @@ test.describe('spec 009 Messenger', () => {
 
   test('AC11: the same friend on Instagram and in both Messenger exports is suggested as one person', async ({ page }) => {
     await loadFiles(page, [instagramExport(), facebookExport(), encryptedExport()]);
-    await page.click('#peopleBtn');
+    await openLinkPeople(page);
     const row = page.locator('#peopleSuggest li', { hasText: 'Alex Rivera' });
     await expect(row.locator('.person-chip')).toHaveText([/Messenger · 4/, /Messenger · 7/, /Instagram · 5/]);
     await row.locator('[data-accept]').click();
-    await page.locator('#peopleDlg .profile-close').click();
+    await closeLinkPeople(page);
     const person = await inApp(page, (app) => app.personOf.get('ig:alexrivera_1111'));
     expect(person).toBe(await inApp(page, (app) => app.personOf.get('fb:e2ee:Alex Rivera_6')));
     await page.selectOption('#contactSel', person);
@@ -181,13 +181,13 @@ test.describe('spec 009 Messenger', () => {
   test('AC17: the demo has Messenger, links Noor across apps, and shows switches between them', async ({ page }) => {
     await loadDemo(page);
     await expect(page.locator('#sourceSeg button[data-source="6"]')).toBeVisible();
-    await page.click('#peopleBtn');
+    await openLinkPeople(page);
     const row = page.locator('#peopleSuggest li', { hasText: 'Noor Haddad' });
     await expect(row.locator('.person-chip')).toHaveCount(3);
     await expect(row).toContainText('Instagram');
     await expect(row).toContainText('Messenger');
     await row.locator('[data-accept]').click();
-    await page.locator('#peopleDlg .profile-close').click();
+    await closeLinkPeople(page);
     await openTab(page, 'sec-apps');
     await scrollTo(page, '#c-routes');
     await expect.poll(async () => JSON.stringify((await chartOption(page, 'c-routes')) ?? {})).toMatch(/Instagram → Messenger|Messenger → Instagram/);

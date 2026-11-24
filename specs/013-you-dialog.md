@@ -44,6 +44,12 @@ more rows, for a setting you usually check once.
 - **R8** Specs 004 and 009 that say "the filter bar shows **You on …**" are updated to
   point here.
 
+> **Moved by [spec 015](015-settings-dialog.md).** There's no 👤 Which one is you?
+> button or dialog any more. The rows (R3–R6) are a **Which one is you?** section in
+> the Settings dialog, shown under the same condition as the button was (R2). The
+> guessed count (R9) is on the section's heading and is added into the ⚙️ Settings
+> button's count, whose tooltip names the apps the same way. R7 applies to Settings.
+
 ## Privacy
 
 Nothing changes in where data goes. The dialog lists sender names already loaded. No

@@ -105,7 +105,9 @@ loading files and after every change in the People dialog.
 
 **UI.** A `🔗 Link people` button next to the conversation picker. It shows the number of
 suggestions (`🔗 Link people (2)`) and is hidden when fewer than two 1-on-1 conversations are
-loaded. It opens a dialog with:
+loaded. ([Spec 015](015-settings-dialog.md) moved it: the button, `🔗 Link people… (2)`, is
+in the Settings dialog's Linked people section, which hides under the same condition, and
+the suggestion count is added into the ⚙️ Settings button's count.) It opens a dialog with:
 
 1. Suggestions: each shows its conversations (app mark, name, message count), why
    ("Same name", "Same phone number", "Same email"), and **Link** / **Dismiss**.

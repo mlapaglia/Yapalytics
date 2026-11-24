@@ -170,7 +170,7 @@ function showLoadError(msg) {
 
 /**
  * Work out owners, links and what hangs off them again (Data.rederive, spec 014 R6), then
- * bring the filter and the "Which one is you?" button and dialog in line.
+ * bring the filter and Settings' "Which one is you?" section in line.
  */
 function rederive() {
   Data.rederive({ owners: Prefs.owners, people: Prefs.people });
@@ -179,7 +179,7 @@ function rederive() {
   else if (sel.startsWith('p:') && !Data.contacts.has(sel)) View.filter.contact = 'all';
   const sources = Object.keys(Prefs.owners).map(Number).filter((s) => Data.ownerChoices(s).length);
   renderOwnerDialog(sources);
-  updateOwnerButton(sources);
+  updateOwnerSection(sources);
 }
 
 function initLoader() {

@@ -1,4 +1,4 @@
-import { test, expect, loadFiles } from './fixtures.mjs';
+import { test, expect, loadFiles, openSettings } from './fixtures.mjs';
 import { inApp } from './state.mjs';
 
 /*
@@ -101,11 +101,10 @@ test.describe('spec 014 escaping', () => {
     await expect(page.locator('#messages')).toContainText(SENDER);
 
     // Which one is you: the sender list.
-    await page.click('#ownerBtn');
+    await openSettings(page);
     await page.locator('#ownerList li[data-app="WhatsApp"] .ts-control').click();
     await expect(page.locator('#ownerList li[data-app="WhatsApp"] .ts-dropdown')).toContainText(SENDER);
     await page.keyboard.press('Escape');
-    await page.locator('#ownerDlg .profile-close').click();
 
     // People dialog: link the friend and Bob by hand, then check the linked chips.
     await page.click('#peopleBtn');

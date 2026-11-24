@@ -1,4 +1,4 @@
-/* "Which one is you?" (spec 013): picking your sender name in apps whose exports don't say. */
+/* "Which one is you?" (spec 013): picking your sender name in apps whose exports don't say. Its rows are in Settings (spec 015 R8). */
 
 const OWNER_ORIGIN_TEXT = { export: 'From your export profile', guess: 'Guessed: check this', picked: 'Picked by you' };
 
@@ -44,22 +44,15 @@ function renderOwnerDialog(sources) {
   }
 }
 
-/** Shown when an app has senders to pick; counts the apps whose owner is only a guess (R2, R9). */
-function updateOwnerButton(sources) {
-  const btn = $('#ownerBtn');
-  const guessed = sources.filter((s) => Data.ownerOrigin(s, Prefs.owners[s]) === 'guess');
-  btn.hidden = !sources.length;
-  btn.textContent = guessed.length ? `👤 Which one is you? (${guessed.length})` : '👤 Which one is you?';
-  btn.title = guessed.length
-    ? `Check ${andList(guessed.map((s) => sourceName(s)))}: who's you was guessed`
-    : "Pick which sender is you in apps whose exports don't say";
-}
+/** Apps whose owner is only a guess, for the Settings button's count (spec 013 R9, spec 015 R2). */
+let ownerGuessed = [];
 
-function initOwners() {
-  const dlg = $('#ownerDlg');
-  $('#ownerBtn').addEventListener('click', () => { if (!dlg.open) dlg.showModal(); });
-  dlg.querySelector('.profile-close').addEventListener('click', () => dlg.close());
-  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // the backdrop
+/** Shown when an app has senders to pick; counts the apps whose owner is only a guess (spec 013 R2, R9; spec 015 R8). */
+function updateOwnerSection(sources) {
+  ownerGuessed = sources.filter((s) => Data.ownerOrigin(s, Prefs.owners[s]) === 'guess');
+  $('#ownerSection').hidden = !sources.length;
+  $('#ownerHead').textContent = ownerGuessed.length ? `Which one is you? (${ownerGuessed.length})` : 'Which one is you?';
+  updateSettingsButton();
 }
 
 function setOwner(source, name) {

@@ -5,7 +5,7 @@
  * Keys and formats are the ones earlier versions wrote (R13).
  */
 
-const STORE_KEYS = { theme: 'ms-theme', igPreviews: 'ms-ig-previews', people: 'ms-people', ai: 'yapa-ai' };
+const STORE_KEYS = { theme: 'ms-theme', igPreviews: 'ms-ig-previews', people: 'ms-people', ai: 'yapa-ai', convoGap: 'yapa-convo-gap' };
 
 const Store = {
   /** The saved string, or null. */
@@ -31,10 +31,11 @@ const Store = {
   },
 };
 
-/** What the person chose that outlasts a load: theme, previews, who's you, linked people. */
+/** What the person chose that outlasts a load: theme, previews, conversation gap, who's you, linked people. */
 const Prefs = {
   theme: 'auto', // 'auto' | 'light' | 'dark'
   igPreviews: false, // load Instagram's embeds of shared posts (spec 004, opt-in)
+  convoGap: null, // silence that ends a conversation, ms (spec 015 R6); set by load(), as CONVO_GAPS loads later
   // Your sender name per app whose records carry sender names (Sources: senderNames);
   // `auto` is false once picked by hand. Not saved: it belongs to the files loaded.
   owners: Object.fromEntries(Sources.list.filter((s) => s.senderNames).map((s) => [s.id, { name: '', auto: true }])),
@@ -44,6 +45,8 @@ const Prefs = {
   load() {
     Prefs.theme = Store.get(STORE_KEYS.theme) || 'auto';
     Prefs.igPreviews = Store.get(STORE_KEYS.igPreviews) === '1';
+    const gap = Number(Store.get(STORE_KEYS.convoGap));
+    Prefs.convoGap = CONVO_GAPS.includes(gap) ? gap : CONVO_GAP;
     Prefs.loadPeople();
   },
 
@@ -56,6 +59,12 @@ const Prefs = {
   saveIgPreviews(on) {
     Prefs.igPreviews = on;
     Store.set(STORE_KEYS.igPreviews, on ? '1' : null);
+  },
+
+  /** The default (6 hours) deletes the setting, so a later default change reaches everyone who never picked one. */
+  saveConvoGap(ms) {
+    Prefs.convoGap = ms;
+    Store.set(STORE_KEYS.convoGap, ms === CONVO_GAP ? null : String(ms));
   },
 
   // ---------------------------------------------------------------- linked people (spec 005)
