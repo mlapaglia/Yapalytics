@@ -51,3 +51,4 @@ see, changes what data leaves the browser, or takes more than a day to build.
 | [014 Restructuring the code: safety, speed and room to grow](014-architecture-refactor.md) | Draft: built, awaiting review |
 | [015 Settings dialog](015-settings-dialog.md) | Approved: built |
 | [016 A livelier loading screen](016-loading-screen.md) | Approved: built |
+| [021 Comparing two periods](021-period-comparison.md) | Draft: building |
