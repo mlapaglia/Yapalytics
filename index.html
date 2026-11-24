@@ -253,7 +253,7 @@
       </div>
       <button class="btn small" type="button" id="filesBtn" title="See the loaded files, add more, or leave some out">📁 Files</button>
     </div>
-    <p class="scope"><span id="scope"></span> <button class="btn small ghost scope-btn" id="profileBtn" type="button" hidden>View profile</button></p>
+    <p class="scope"><span id="scope"></span> <button class="btn small ghost scope-btn" id="profileBtn" type="button" hidden>View profile</button> <button class="btn small ghost scope-btn" id="exportBtn" type="button" title="Download the numbers behind the dashboard as CSV files">Export stats</button></p>
 
     <nav class="tabs" id="dashTabs" aria-label="Dashboard sections">
       <div class="tab-list" id="tabList" role="tablist"></div>
@@ -743,6 +743,21 @@
     </footer>
   </dialog>
 
+  <dialog id="exportDlg" class="profile export-dlg" aria-labelledby="exportTitle">
+    <button class="btn ghost icon profile-close" type="button" aria-label="Close">✕</button>
+    <header class="people-head">
+      <h2 id="exportTitle">Export stats</h2>
+      <p class="sub" id="exportScope"></p>
+    </header>
+    <p class="sub export-note">The numbers behind the dashboard for this selection, as CSV files for a spreadsheet: counts, dates, reply times, emoji and app names. No message text. The files contain names, and phone numbers where there's no name. They stay on this device unless you send them somewhere.</p>
+    <label class="check"><input type="checkbox" id="exportAnon"> Replace names with Conversation 1, 2, …</label>
+    <ul class="export-list" id="exportList"></ul>
+    <footer class="people-foot">
+      <span class="sub" id="exportCount"></span>
+      <button class="btn small primary" type="button" id="exportAll">Download all (.zip)</button>
+    </footer>
+  </dialog>
+
   <div class="drop-overlay" aria-hidden="true"><div>Drop backup files to load them</div></div>
 
   <script src="js/vendor/vader.js"></script>
@@ -772,6 +787,7 @@
   <script src="js/files.js"></script>
   <script src="js/dataset.js"></script>
   <script src="js/panels.js"></script>
+  <script src="js/export.js"></script>
   <script src="js/ui/common.js"></script>
   <script src="js/ui/pickers.js"></script>
   <script src="js/ui/filters.js"></script>
@@ -781,6 +797,7 @@
   <script src="js/ui/owner-dialog.js"></script>
   <script src="js/ui/people-dialog.js"></script>
   <script src="js/ui/settings-dialog.js"></script>
+  <script src="js/ui/export-dialog.js"></script>
   <script src="js/ui/profile.js"></script>
   <script src="js/ui/theme.js"></script>
   <script src="js/panels/layout.js"></script>

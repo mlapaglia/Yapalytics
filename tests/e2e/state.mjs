@@ -45,6 +45,8 @@ function VIEW() {
     get browserMood() { return View.browser.mood; },
     get phraseMsgs() { return Select.range(); },
     get vocab() { return Select.content(); },
+    /** The Export dialog's files as it would save them (spec 026): [{ file, csv }]. */
+    get exportFiles() { return ExportDlg.tables.map((t) => ({ file: t.file, csv: toCsv(t.header, t.rows) })); },
 
     /** Messages matching the filters and the date range. */
     selection: () => Select.range(),

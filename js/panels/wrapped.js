@@ -147,12 +147,7 @@ function renderWrapped(ui, base) {
 
 function saveWrapped() {
   $('#wrapCanvas').toBlob((blob) => {
-    if (!blob) return;
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `Yapalytics-${View.wrapYear}.png`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    if (blob) saveBlob(blob, `Yapalytics-${View.wrapYear}.png`);
   }, 'image/png');
 }
 
