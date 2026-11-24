@@ -1,4 +1,4 @@
-import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab, addFiles, ownerPicker } from './fixtures.mjs';
+import { test, expect, loadFiles, loadDemo, scrollTo, chartOption, openTab, addFiles, ownerPicker, closeSettings } from './fixtures.mjs';
 import { inApp } from './state.mjs';
 import { igMessage, looseThread, splitExport, threadOf, zippedExport, zippedHtmlExport } from '../helpers/instagram.mjs';
 
@@ -204,7 +204,7 @@ test.describe('spec 004 reactions on messages', () => {
 
     const picker = await ownerPicker(page, 'Instagram');
     await picker.selectOption('Alex Rivera');
-    await page.locator('#ownerDlg .profile-close').click(); // it stays open after a pick (spec 013 R5)
+    await closeSettings(page); // it stays open after a pick (spec 013 R5)
     await openTab(page, 'sec-messages');
     await expect(page.locator('#messages .bubble', { hasText: 'café later?' }).locator('.rx', { hasText: '❤️' })).toHaveAttribute('title', '❤️ You, Jamie Park');
     expect((await instagramCounts(page)).n).toBe(before.n);

@@ -1,4 +1,4 @@
-import { test, expect, loadFiles, openTab, scrollTo } from './fixtures.mjs';
+import { test, expect, loadFiles, openTab, scrollTo, openLinkPeople, closeLinkPeople } from './fixtures.mjs';
 import { inApp } from './state.mjs';
 import { zippedExport } from '../helpers/instagram.mjs';
 import { callLog, smsBackup } from '../helpers/sms.mjs';
@@ -21,10 +21,7 @@ const SMS_PAT = '59876543';
 const options = (page) => page.locator('#contactSel option').allTextContents();
 const dialog = (page) => page.locator('#peopleDlg');
 
-async function openDialog(page) {
-  await page.click('#peopleBtn');
-  await expect(dialog(page)).toHaveAttribute('open', '');
-}
+const openDialog = openLinkPeople; // from Settings (spec 015 R9)
 
 async function linkByHand(page, a, b) {
   await openDialog(page);
@@ -41,7 +38,7 @@ test.describe('spec 005 linked people', () => {
   });
 
   test('AC1: an exact match is suggested, and nothing merges by itself', async ({ page }) => {
-    await expect(page.locator('#peopleBtn')).toHaveText('🔗 Link people (1)');
+    await expect(page.locator('#peopleBtn')).toHaveText('🔗 Link people… (1)');
     const opts = await options(page);
     expect(opts.some((o) => o.startsWith('Alex Rivera (3)'))).toBe(true);
     expect(opts.some((o) => o.startsWith('📸 Alex Rivera (5)'))).toBe(true);
@@ -57,12 +54,12 @@ test.describe('spec 005 linked people', () => {
     await openDialog(page);
     await page.click('#peopleSuggest [data-accept="0"]');
     await expect(page.locator('#peopleSuggest li')).toHaveCount(0);
-    await expect(page.locator('#peopleBtn')).toHaveText('🔗 Link people');
+    await expect(page.locator('#peopleBtn')).toHaveText('🔗 Link people…');
     const opts = await options(page);
     expect(opts.filter((o) => o.includes('Alex Rivera'))).toEqual(['🔗 Alex Rivera (8)']);
     const key = await personKey(page, IG_ALEX);
     expect(key).toBe(await personKey(page, SMS_ALEX));
-    await page.locator('#peopleDlg .profile-close').click();
+    await closeLinkPeople(page);
     await scrollTo(page, '#leaderTable');
     await expect(page.locator(`#leaderTable tbody tr[data-key="${key}"]`)).toHaveCount(1);
     await expect(page.locator(`#leaderTable tbody tr[data-key="${IG_ALEX}"], #leaderTable tbody tr[data-key="${SMS_ALEX}"]`)).toHaveCount(0);
@@ -81,7 +78,7 @@ test.describe('spec 005 linked people', () => {
     const key = await personKey(page, IG_SAM);
     expect(key).toBeTruthy();
     expect(await options(page)).toContain('🔗 Pat Lee (3)');
-    await page.locator('#peopleDlg .profile-close').click();
+    await closeLinkPeople(page);
     await inApp(page, (app, k) => app.openProfile(k), key);
     await expect(page.locator('.profile-head .sub').first()).toContainText('1-on-1 on SMS and Instagram');
     await expect(page.locator('.profile-linked')).toContainText('Sam Patel (Instagram)');
@@ -122,16 +119,16 @@ test.describe('spec 005 linked people', () => {
   test('AC9: a dismissed suggestion stays dismissed after a reload', async ({ page }) => {
     await openDialog(page);
     await page.click('#peopleSuggest [data-dismiss="0"]');
-    await expect(page.locator('#peopleBtn')).toHaveText('🔗 Link people');
+    await expect(page.locator('#peopleBtn')).toHaveText('🔗 Link people…');
     await loadFiles(page, files());
-    await expect(page.locator('#peopleBtn')).toHaveText('🔗 Link people');
+    await expect(page.locator('#peopleBtn')).toHaveText('🔗 Link people…');
     expect((await options(page)).some((o) => o.startsWith('🔗'))).toBe(false);
   });
 
   test('AC10: the app filter counts and shows only that app', async ({ page }) => {
     await openDialog(page);
     await page.click('#peopleSuggest [data-accept="0"]');
-    await page.locator('#peopleDlg .profile-close').click();
+    await closeLinkPeople(page);
     await page.click('#sourceSeg [data-source="5"]');
     expect(await options(page)).toContain('🔗 Alex Rivera (5)');
     const key = await personKey(page, IG_ALEX);
@@ -143,7 +140,7 @@ test.describe('spec 005 linked people', () => {
   test('AC11: a linked person\'s messages name their app', async ({ page }) => {
     await openDialog(page);
     await page.click('#peopleSuggest [data-accept="0"]');
-    await page.locator('#peopleDlg .profile-close').click();
+    await closeLinkPeople(page);
     await openTab(page, 'sec-messages');
     const who = page.locator('#messages .who');
     await expect(who.filter({ hasText: 'From 🔗 Alex Rivera · SMS' }).first()).toBeVisible();
@@ -175,7 +172,7 @@ test.describe('spec 005 linked people', () => {
   test('AC15: forgetting links in one tab forgets them in another', async ({ page, context }) => {
     await openDialog(page);
     await page.click('#peopleSuggest [data-accept="0"]');
-    await page.locator('#peopleDlg .profile-close').click();
+    await closeLinkPeople(page);
     const other = await context.newPage();
     await loadFiles(other, files());
     expect(await options(other)).toContain('🔗 Alex Rivera (8)');
@@ -193,7 +190,7 @@ test.describe('spec 005 linked people', () => {
   test('AC16: adding a conversation to an analyzed person clears its AI report', async ({ page }) => {
     await openDialog(page);
     await page.click('#peopleSuggest [data-accept="0"]');
-    await page.locator('#peopleDlg .profile-close').click();
+    await closeLinkPeople(page);
     const key = await personKey(page, IG_ALEX);
     await page.selectOption('#contactSel', key);
     await openTab(page, 'sec-ai');
@@ -202,7 +199,7 @@ test.describe('spec 005 linked people', () => {
     await expect(page.locator('#aiReport')).toBeVisible();
     await linkByHand(page, SMS_PAT, IG_ALEX);
     expect(await personKey(page, SMS_PAT)).toBe(key); // same person key, one more conversation
-    await page.locator('#peopleDlg .profile-close').click();
+    await closeLinkPeople(page);
     await expect(page.locator('#aiReport')).toBeHidden();
     expect(await page.evaluate(() => AiAnalysis.report)).toBeNull();
   });

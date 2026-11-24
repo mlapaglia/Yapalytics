@@ -1,4 +1,4 @@
-import { test, expect, loadFiles, openTab } from './fixtures.mjs';
+import { test, expect, loadFiles, openTab, openLinkPeople, closeLinkPeople } from './fixtures.mjs';
 import { inApp } from './state.mjs';
 import { igMessage, threadOf } from '../helpers/instagram.mjs';
 import { smsBackup } from '../helpers/sms.mjs';
@@ -37,11 +37,11 @@ async function load(page, extraSms = []) {
 
 async function linkAlex(page) {
   const igKey = await inApp(page, (app) => [...app.contacts.values()].find((c) => c.s === 5 && !c.group).key);
-  await page.click('#peopleBtn');
+  await openLinkPeople(page);
   await page.selectOption('#peopleA', SMS_ALEX);
   await page.selectOption('#peopleB', igKey);
   await page.click('#peopleLink');
-  await page.locator('#peopleDlg .profile-close').click();
+  await closeLinkPeople(page);
   await expect.poll(() => inApp(page, (app) => app.personOf.size)).toBe(2);
 }
 

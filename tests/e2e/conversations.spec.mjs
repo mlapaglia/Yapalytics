@@ -1,4 +1,4 @@
-import { test, expect, loadDemo, scrollTo, chartOption, openTab } from './fixtures.mjs';
+import { test, expect, loadDemo, scrollTo, chartOption, openTab, openSettings, closeSettings } from './fixtures.mjs';
 import { inApp } from './state.mjs';
 
 const GAPS = [
@@ -23,6 +23,14 @@ const stats = (page) => inApp(page, (app) => {
   };
 });
 
+/** Picks a gap in Settings (spec 015) and closes it, so the charts behind are in view again. */
+async function pickGap(page, label) {
+  await openSettings(page);
+  await page.click(`#gapSeg button:text-is("${label}")`);
+  await expect(page.locator('#gapSeg button.on')).toHaveText(label);
+  await closeSettings(page);
+}
+
 test.describe('conversation cutoff', () => {
   test.beforeEach(async ({ page }) => {
     await loadDemo(page);
@@ -37,8 +45,7 @@ test.describe('conversation cutoff', () => {
 
   for (const gap of GAPS) {
     test(`${gap.label}: every chart and label follows it`, async ({ page }) => {
-      await page.click(`#gapSeg button:text-is("${gap.label}")`);
-      await expect(page.locator('#gapSeg button.on')).toHaveText(gap.label);
+      await pickGap(page, gap.label);
       await expect(page.locator('#sessionNote')).toContainText(`A conversation ends after ${gap.words} of quiet`);
       await expect(page.locator('#replyNote')).toHaveText(`How quickly each side answers (within ${gap.words})`);
       await expect(page.locator('#habitsNote')).toContainText(`Conversation starters (after ${gap.label} of quiet)`);
@@ -60,8 +67,7 @@ test.describe('conversation cutoff', () => {
   test('a longer cutoff means fewer, longer conversations', async ({ page }) => {
     const counts = [];
     for (const gap of GAPS) {
-      await page.click(`#gapSeg button:text-is("${gap.label}")`);
-      await expect(page.locator('#gapSeg button.on')).toHaveText(gap.label);
+      await pickGap(page, gap.label);
       counts.push((await stats(page)).sessions);
     }
     for (let i = 1; i < counts.length; i++) expect(counts[i]).toBeLessThanOrEqual(counts[i - 1]);
@@ -69,7 +75,7 @@ test.describe('conversation cutoff', () => {
   });
 
   test('the cutoff survives other filter changes', async ({ page }) => {
-    await page.click('#gapSeg button:text-is("24h")');
+    await pickGap(page, '24h');
     const key = await page.locator('#contactSel option').nth(1).getAttribute('value');
     await page.selectOption('#contactSel', key);
     await expect(page.locator('#gapSeg button.on')).toHaveText('24h');

@@ -1,10 +1,10 @@
-import { test, expect, loadDemo, loadFiles } from './fixtures.mjs';
+import { test, expect, loadDemo, loadFiles, openSettings } from './fixtures.mjs';
 import { inApp } from './state.mjs';
 import { smsBackup } from '../helpers/sms.mjs';
 
 // The demo's WhatsApp owner is guessed; Telegram, Instagram and Messenger name you in
-// their export profiles.
-const dialog = (page) => page.locator('#ownerDlg');
+// their export profiles. The rows are in Settings (spec 015 R8).
+const dialog = (page) => page.locator('#settingsDlg');
 const row = (page, app) => page.locator(`#ownerList li[data-app="${app}"]`);
 const control = (page, app) => row(page, app).locator('.ts-control');
 const SOURCE = { WhatsApp: 2, Instagram: 5 };
@@ -19,10 +19,7 @@ const counts = (page, s) => inApp(page, (app, s) => {
 const others = (page, app) => row(page, app).locator('select option').evaluateAll((els) =>
   els.filter((e) => !e.selected).map((e) => e.value));
 
-async function openDialog(page) {
-  await page.click('#ownerBtn');
-  await expect(dialog(page)).toHaveAttribute('open', '');
-}
+const openDialog = openSettings;
 
 async function pickOwner(page, app, name) {
   await control(page, app).click();
@@ -36,11 +33,12 @@ test.describe('spec 013 which one is you', () => {
     await loadDemo(page);
   });
 
-  test('AC1: the filter bar has no You on dropdowns, and shows the button', async ({ page }) => {
+  test('AC1: the filter bar has no You on dropdowns, and Settings has the section', async ({ page }) => {
     await expect(page.locator('.filters')).not.toContainText('You on');
     await expect(page.locator('#ownerFields')).toHaveCount(0);
-    await expect(page.locator('#ownerBtn')).toBeVisible();
-    await expect(page.locator('#ownerBtn')).toContainText('Which one is you?');
+    await openDialog(page);
+    await expect(page.locator('#ownerSection')).toBeVisible();
+    await expect(page.locator('#ownerHead')).toContainText('Which one is you?');
   });
 
   test('AC3: the dialog lists each app with its logo and current owner', async ({ page }) => {
@@ -117,19 +115,21 @@ test.describe('spec 013 which one is you', () => {
     await expect(dialog(page)).not.toHaveAttribute('open', '');
   });
 
-  test('AC8: the button counts apps whose owner is a guess', async ({ page }) => {
-    const btn = page.locator('#ownerBtn');
-    await expect(btn).toHaveText('👤 Which one is you? (1)');
-    await expect(btn).toHaveAttribute('title', "Check WhatsApp: who's you was guessed");
+  test('AC8: the section and the Settings button count apps whose owner is a guess', async ({ page }) => {
+    const head = page.locator('#ownerHead');
+    const btn = page.locator('#settingsBtn');
+    await expect(head).toHaveText('Which one is you? (1)');
+    await expect(btn).toHaveAttribute('title', /Check WhatsApp: who's you was guessed/);
     await openDialog(page);
     const [name] = await others(page, 'WhatsApp');
     await pickOwner(page, 'WhatsApp', name);
-    await expect(btn).toHaveText('👤 Which one is you?');
-    await expect(btn).toHaveAttribute('title', "Pick which sender is you in apps whose exports don't say");
+    await expect(head).toHaveText('Which one is you?');
+    await expect(btn).not.toHaveAttribute('title', /who's you was guessed/);
   });
 });
 
-test('spec 013 AC2: with only an SMS backup, the button is hidden', async ({ page }) => {
+test('spec 013 AC2: with only an SMS backup, Settings has no Which one is you? section', async ({ page }) => {
   await loadFiles(page, smsBackup([{ address: '+15559876543', name: 'Pat Lee', at: '2024-08-19T10:00:00Z', body: 'hi' }]));
-  await expect(page.locator('#ownerBtn')).toBeHidden();
+  await openSettings(page);
+  await expect(page.locator('#ownerSection')).toBeHidden();
 });

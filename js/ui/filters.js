@@ -39,7 +39,7 @@ function populateContacts() {
     b.hidden = b.dataset.source !== 'all' && !present.has(+b.dataset.source);
     b.classList.toggle('on', b.dataset.source === String(source));
   });
-  updatePeopleButton();
+  updateLinkSection();
   updateFilesButton();
 }
 

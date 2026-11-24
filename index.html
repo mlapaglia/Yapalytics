@@ -216,12 +216,10 @@
         <label for="contactSel">Conversation</label>
         <select id="contactSel"></select>
       </div>
-      <button class="btn people-btn" type="button" id="peopleBtn" hidden>🔗 Link people</button>
-      <button class="btn people-btn" type="button" id="ownerBtn" hidden>👤 Which one is you?</button>
+      <button class="btn people-btn" type="button" id="settingsBtn" title="Conversation gap, group chats, who's you and linked people">⚙️ Settings</button>
       <div class="seg" id="sourceSeg" role="group" aria-label="Message source" hidden>
         <!-- One button per app, from the registry (js/sources.js). -->
       </div>
-      <label class="check"><input type="checkbox" id="groupsChk" checked> Include group chats</label>
       <div class="field">
         <span>Date range</span>
         <div class="dates">
@@ -393,7 +391,7 @@
         <div class="chart" id="c-share"></div>
       </article>
       <article class="card">
-        <header><div><h2>Reply speed</h2><p class="sub" id="replyNote"></p></div></header>
+        <header><div><h2>Reply speed</h2><p class="sub"><span id="replyNote"></span> <button class="btn small ghost note-btn" type="button" data-settings>Change</button></p></div></header>
         <div class="chart" id="c-reply"></div>
       </article>
       <article class="card">
@@ -401,14 +399,11 @@
         <div class="chart" id="c-replyhour"></div>
       </article>
       <article class="card">
-        <header>
-          <div><h2>Conversation length</h2><p class="sub" id="sessionNote"></p></div>
-          <div class="seg" id="gapSeg" role="group" aria-label="A conversation ends after this much quiet"></div>
-        </header>
+        <header><div><h2>Conversation length</h2><p class="sub"><span id="sessionNote"></span> <button class="btn small ghost note-btn" type="button" data-settings>Change</button></p></div></header>
         <div class="chart" id="c-sessions"></div>
       </article>
       <article class="card">
-        <header><div><h2>Texting habits</h2><p class="sub" id="habitsNote"></p></div></header>
+        <header><div><h2>Texting habits</h2><p class="sub"><span id="habitsNote"></span> <button class="btn small ghost note-btn" type="button" data-settings>Change</button></p></div></header>
         <div class="chart" id="c-behavior"></div>
       </article>
       </div>
@@ -684,13 +679,33 @@
     </footer>
   </dialog>
 
-  <dialog id="ownerDlg" class="profile people-dlg" aria-labelledby="ownerTitle">
+  <dialog id="settingsDlg" class="profile people-dlg settings-dlg" aria-labelledby="settingsTitle">
     <button class="btn ghost icon profile-close" type="button" aria-label="Close">✕</button>
     <header class="people-head">
-      <h2 id="ownerTitle">Which one is you?</h2>
-      <p class="sub">These exports don't say which sender is you. Pick yourself so sent and received are right.</p>
+      <h2 id="settingsTitle">Settings</h2>
+      <p class="sub">How the dashboard counts what's loaded.</p>
     </header>
-    <ul class="owner-list" id="ownerList"></ul>
+    <section>
+      <h3 class="profile-h">Conversations</h3>
+      <p class="sub">A conversation ends after this much quiet. It decides reply times, conversation starters, double texts and conversation lengths on every tab except Across apps, which picks its own.</p>
+      <div class="seg" id="gapSeg" role="group" aria-label="A conversation ends after this much quiet"></div>
+    </section>
+    <section>
+      <h3 class="profile-h">Group chats</h3>
+      <label class="check"><input type="checkbox" id="groupsChk" checked> Include group chats</label>
+    </section>
+    <section id="ownerSection" hidden>
+      <h3 class="profile-h" id="ownerHead">Which one is you?</h3>
+      <p class="sub">These exports don't say which sender is you. Pick yourself so sent and received are right.</p>
+      <ul class="owner-list" id="ownerList"></ul>
+    </section>
+    <section id="linkSection" hidden>
+      <h3 class="profile-h">Linked people</h3>
+      <div class="settings-row">
+        <p class="sub" id="linkSummary"></p>
+        <button class="btn small" type="button" id="peopleBtn">🔗 Link people…</button>
+      </div>
+    </section>
   </dialog>
 
   <dialog id="filesDlg" class="profile files-dlg" aria-labelledby="filesTitle">
@@ -746,6 +761,7 @@
   <script src="js/ui/files-dialog.js"></script>
   <script src="js/ui/owner-dialog.js"></script>
   <script src="js/ui/people-dialog.js"></script>
+  <script src="js/ui/settings-dialog.js"></script>
   <script src="js/ui/profile.js"></script>
   <script src="js/ui/theme.js"></script>
   <script src="js/panels/layout.js"></script>

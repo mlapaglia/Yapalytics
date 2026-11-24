@@ -47,8 +47,8 @@ test.describe('Telegram', () => {
 
   test('a single group export leaves the owner to pick', async ({ page }) => {
     await loadFiles(page, resultJson(singleGroupExport()));
-    await expect(page.locator('#ownerBtn')).toBeVisible();
     await expect(await ownerPicker(page, 'Telegram')).toHaveCount(1);
+    await expect(page.locator('#ownerSection')).toBeVisible();
     expect((await telegramCounts(page)).n).toBe(2);
   });
 

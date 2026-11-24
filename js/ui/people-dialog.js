@@ -16,13 +16,17 @@ function computeSuggestions() {
   });
 }
 
-function updatePeopleButton() {
+/** Settings' Linked people section (spec 015 R9): shown when there's something to link, with what's linked and suggested. */
+function updateLinkSection() {
   computeSuggestions();
-  const btn = $('#peopleBtn');
   const n = PeopleDlg.suggestions.length;
-  btn.hidden = PeopleDlg.linkable.length < 2;
-  btn.textContent = n ? `🔗 Link people (${n})` : '🔗 Link people';
-  btn.title = n ? `${n} possible link${n === 1 ? '' : 's'} between conversations with the same person` : "Tie one person's conversations on different apps together";
+  const linked = [...Data.contacts.values()].filter((c) => c.person).length;
+  $('#linkSection').hidden = PeopleDlg.linkable.length < 2;
+  const parts = [linked ? `${fmtNum(linked)} ${linked === 1 ? 'person' : 'people'} linked across apps` : 'No one linked yet'];
+  if (n) parts.push(`${fmtNum(n)} possible link${n === 1 ? '' : 's'} to check`);
+  $('#linkSummary').textContent = parts.join(' · ');
+  $('#peopleBtn').textContent = n ? `🔗 Link people… (${n})` : '🔗 Link people…';
+  updateSettingsButton();
   if ($('#peopleDlg').open) renderPeopleDialog();
 }
 

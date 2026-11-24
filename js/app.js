@@ -14,8 +14,8 @@ function init() {
   initTheme();
   initLoader();
   initFilters();
-  initOwners();
   initPeople();
+  initSettings();
   initFiles();
   initProfile();
   Panels.init();

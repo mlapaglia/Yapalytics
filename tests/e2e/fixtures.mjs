@@ -71,12 +71,37 @@ export async function addFiles(page, files) {
   await expect(page.locator('#dash')).toBeVisible();
 }
 
+/** Opens the Settings dialog (spec 015) if it isn't open. */
+export async function openSettings(page) {
+  if (!(await page.locator('#settingsDlg').evaluate((d) => d.open))) await page.click('#settingsBtn');
+  await expect(page.locator('#settingsDlg')).toHaveAttribute('open', '');
+}
+
+/** Closes the Settings dialog (spec 015) with its ✕. */
+export async function closeSettings(page) {
+  await page.locator('#settingsDlg .profile-close').click();
+  await expect(page.locator('#settingsDlg')).not.toHaveAttribute('open', '');
+}
+
+/** Opens the Link people dialog (spec 005) from Settings (spec 015 R9). */
+export async function openLinkPeople(page) {
+  await openSettings(page);
+  await page.click('#peopleBtn');
+  await expect(page.locator('#peopleDlg')).toHaveAttribute('open', '');
+}
+
+/** Closes the Link people dialog, and Settings under it if it's open, so the dashboard takes clicks again. */
+export async function closeLinkPeople(page) {
+  await page.locator('#peopleDlg .profile-close').click();
+  if (await page.locator('#settingsDlg').evaluate((d) => d.open)) await closeSettings(page);
+}
+
 /**
- * The owner picker for an app ('Telegram', 'Instagram'…) in the Which one is you? dialog
- * (spec 013), opening the dialog if needed. A <select>: Tom Select keeps it in step.
+ * The owner picker for an app ('Telegram', 'Instagram'…) in Settings' Which one is you?
+ * section (spec 013, spec 015 R8), opening Settings if needed. A <select>: Tom Select keeps it in step.
  */
 export async function ownerPicker(page, app) {
-  if (!(await page.locator('#ownerDlg').evaluate((d) => d.open))) await page.click('#ownerBtn');
+  await openSettings(page);
   return page.locator(`#ownerList li[data-app="${app}"] select`);
 }
 

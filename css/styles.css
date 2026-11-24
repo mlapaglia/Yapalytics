@@ -865,6 +865,15 @@ table.leader .muted { color: var(--muted); }
 .people-pick select, .people-pick .ts-wrapper { flex: 1 1 200px; width: auto; min-width: 0; }
 .people-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border); }
 
+/* ------------------------------------------------------------------ settings (spec 015) */
+.settings-dlg section > .sub { margin: 0 0 10px; }
+.settings-dlg .seg { flex-wrap: wrap; }
+.settings-dlg .owner-list { margin-top: 12px; }
+.settings-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.settings-row .sub { margin: 0; }
+/* "Change" after a card's note that names a setting. */
+.note-btn { padding: 0 6px; font-size: inherit; color: var(--accent); vertical-align: baseline; }
+
 /* ------------------------------------------------------------------ loaded files (spec 006) */
 .files-dlg { width: min(640px, calc(100vw - 32px)); }
 /* Only the list scrolls, so Apply stays in view however many files there are. */

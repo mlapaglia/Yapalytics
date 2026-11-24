@@ -1,4 +1,4 @@
-import { test, expect, loadFiles, TOM_SELECT_URL } from './fixtures.mjs';
+import { test, expect, loadFiles, TOM_SELECT_URL, openLinkPeople, closeLinkPeople } from './fixtures.mjs';
 import { inApp } from './state.mjs';
 import { zippedExport } from '../helpers/instagram.mjs';
 import { smsBackup } from '../helpers/sms.mjs';
@@ -39,11 +39,11 @@ async function pick(page, id, text, value) {
 const groupKey = (page) => inApp(page, (app) => [...app.contacts.values()].find((c) => c.group && c.s === 5)?.key);
 
 async function linkByHand(page, a, b) {
-  await page.click('#peopleBtn');
+  await openLinkPeople(page);
   await pick(page, 'peopleA', 'pat', a);
   await pick(page, 'peopleB', 'sam', b);
   await page.click('#peopleLink');
-  await page.locator('#peopleDlg .profile-close').click();
+  await closeLinkPeople(page);
 }
 
 test.describe('spec 012 searchable conversation pickers', () => {
@@ -80,7 +80,7 @@ test.describe('spec 012 searchable conversation pickers', () => {
   });
 
   test('AC5: the Link by hand pickers search and link', async ({ page }) => {
-    await page.click('#peopleBtn');
+    await openLinkPeople(page);
     await search(page, 'peopleA', 'pat lee');
     await expect.poll(() => rowValues(page, 'peopleA')).toEqual([SMS_PAT]);
     await row(page, 'peopleA', SMS_PAT).click();
@@ -122,7 +122,7 @@ test.describe('spec 012 searchable conversation pickers', () => {
   });
 
   test('AC10: the Link by hand rows show the app logo', async ({ page }) => {
-    await page.click('#peopleBtn');
+    await openLinkPeople(page);
     await expect(control(page, 'peopleA').locator('.items-placeholder')).toHaveAttribute('placeholder', 'Choose a conversation…');
     await search(page, 'peopleA', 'alex');
     await expect(row(page, 'peopleA', IG_ALEX).locator('use')).toHaveAttribute('href', '#logo-instagram');
@@ -141,7 +141,7 @@ test.describe('spec 012 searchable conversation pickers', () => {
     // The focusable control, not the hidden <select> (which keeps its own name).
     await expect(control(page, 'contactSel')).toHaveAttribute('role', 'combobox');
     await expect(control(page, 'contactSel')).toHaveAccessibleName('Conversation');
-    await page.click('#peopleBtn');
+    await openLinkPeople(page);
     await expect(control(page, 'peopleA')).toHaveAccessibleName('Conversation to link');
     await expect(control(page, 'peopleB')).toHaveAccessibleName('Conversation with the same person');
   });
