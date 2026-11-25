@@ -532,6 +532,24 @@
         <div class="chart" id="c-vocab"></div>
         <div class="vocab-words" id="vocabWords" aria-live="polite"></div>
       </article>
+      <article class="card wide" id="phrasesCard">
+        <header><div><h2>Signature phrases</h2><p class="sub" id="phrasesNote">Phrases each person uses far more than everyone else here</p></div></header>
+        <div id="phrasesBox"></div>
+      </article>
+      <article class="card wide" id="jokesCard">
+        <header><div><h2>Inside jokes</h2><p class="sub" id="jokesNote">Words and phrases both sides keep using that hardly come up anywhere else</p></div></header>
+        <div id="jokesBox"></div>
+      </article>
+      <article class="card" id="correctionsCard">
+        <header><div><h2>Corrections</h2><p class="sub" id="correctionsNote">Messages like “*there” that fix a typo, per 1,000 messages</p></div></header>
+        <div class="chart" id="c-corrections"></div>
+        <div class="corrected-words" id="correctedWords"></div>
+      </article>
+      <article class="card" id="languagesCard">
+        <header><div><h2>Languages</h2><p class="sub" id="languagesNote">Messages by the language they’re in</p></div></header>
+        <div class="chart" id="c-languages"></div>
+        <div id="langConvos"></div>
+      </article>
       <article class="card">
         <header><div><h2>Message length</h2><p class="sub">Share of messages by length (reactions excluded)</p></div></header>
         <div class="chart" id="c-length"></div>
@@ -560,6 +578,10 @@
       <article class="card wide">
         <header><div><h2>Swearing</h2><p class="sub" id="swearNote">Swear words per 1,000 messages</p></div></header>
         <div class="chart" id="c-swear"></div>
+      </article>
+      <article class="card wide" id="politeCard">
+        <header><div><h2>Thanks &amp; sorry</h2><p class="sub" id="politeNote">Share of messages that say thanks or sorry</p></div></header>
+        <div class="chart" id="c-polite"></div>
       </article>
       <article class="card">
         <header><div><h2>Top emoji</h2><p class="sub">Most-used emoji, sent and received</p></div></header>
@@ -863,6 +885,7 @@
   <script src="js/analysis.js"></script>
   <script src="js/compare.js"></script>
   <script src="js/rhythm.js"></script>
+  <script src="js/patterns.js"></script>
   <script src="js/insights.js"></script>
   <script src="js/crossapp.js"></script>
   <script src="js/select.js"></script>

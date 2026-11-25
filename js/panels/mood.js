@@ -26,6 +26,18 @@ const MOOD_ON = {
   },
 };
 
+/** Thanks & sorry (spec 019 R13): share of messages per month, and each side's overall share. */
+function renderPolite(ui, C) {
+  const { thanks, sorry } = C.politeTotal;
+  const n = C.swearTotal.n; // messages with text
+  const pct = (w, o) => (n[o] ? `${(w[o] / n[o] * 100).toFixed(1)}%` : '–');
+  const any = thanks[0] + thanks[1] + sorry[0] + sorry[1];
+  $('#politeNote').textContent = any
+    ? `Share of messages that say thanks or sorry, per month. You say thanks in ${pct(thanks, 1)} of your messages; they do in ${pct(thanks, 0)}. You say sorry in ${pct(sorry, 1)}; they do in ${pct(sorry, 0)}.`
+    : 'Share of messages that say thanks or sorry';
+  Charts.set('c-polite', any ? politeOption(ui, C) : emptyOption(ui, n[0] + n[1] ? 'No thanks or sorry in this selection' : 'No messages with words in this selection'));
+}
+
 Panels.register({
   id: 'mood',
   tab: 'sec-mood',
@@ -46,6 +58,7 @@ Panels.register({
       ? `Swear words per 1,000 messages. You: ${fmtNum(st.w[1])} (${per1k(1)} per 1,000) · Them: ${fmtNum(st.w[0])} (${per1k(0)} per 1,000) · Most used: ${topSwears.join(', ')}`
       : 'Swear words per 1,000 messages';
     Charts.set('c-swear', st.w[0] + st.w[1] ? swearOption(ui, C) : emptyOption(ui, 'No swearing in this selection 😇'));
+    renderPolite(ui, C);
     const em = emojiOption(ui, ctx.agg());
     Charts.set('c-emoji', em.empty ? emptyOption(ui, 'No emoji in this selection') : em.opt);
     Charts.set('c-emojitrend', C.emojiTotals.size ? emojiTrendOption(ui, C) : emptyOption(ui, 'No emoji in this selection'));

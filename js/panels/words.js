@@ -135,7 +135,7 @@ Panels.register({
   topics: ['data', 'selection', 'theme'],
   render(ctx) {
     if (ctx.all) return;
-    const rows = ctx.none ? [] : distinctiveWords(ctx.msgs(), Select.docFreq());
+    const rows = ctx.none ? [] : distinctiveWords(ctx.msgs(), Select.docFreq(), 25, Select.terms(View.filter.contact));
     $('#distinctNote').textContent = `Words that set ${labelFor(View.filter.contact)} apart from your other conversations`;
     Charts.set('c-distinct', rows.length ? distinctiveOption(ctx.ui, rows) : emptyOption(ctx.ui, 'Not enough words to compare yet'));
   },
@@ -161,6 +161,144 @@ Panels.register({
       clearTimeout(phraseTimer);
       phraseTimer = setTimeout(() => View.set({ phrase: e.target.value }), 250);
     });
+  },
+});
+
+// ------------------------------------------------------------------ language patterns (spec 019)
+
+/** A phrase or joke chip that tracks it in the Word tracker; `k` also picks that conversation. */
+const trackChip = (term, n, k = null) => html`<button type="button" class="vocab-chip" data-word="${term}"${k ? html` data-k="${k}"` : ''} title="Track “${term}” in the Word tracker">${term}${n ? html` <span class="muted">${fmtNum(n)}</span>` : ''}</button>`;
+
+/** Track a chip's phrase (R5, R9): for a joke from All conversations, in its conversation. */
+function trackChipClick(e) {
+  const b = e.target.closest('[data-word]');
+  if (!b) return;
+  if (b.dataset.k) {
+    setPickerValue($('#contactSel'), b.dataset.k);
+    View.set({ filter: { contact: b.dataset.k } });
+  }
+  trackPhrase(b.dataset.word);
+  $('#phraseCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+/** A phrases column's name: you, a conversation (a link to its profile) or a group member. */
+function phrasePerson(P, id) {
+  if (id === 'You') return 'You';
+  return P.mode === 'group' ? html`${senderLabel(id)}` : personLink(id);
+}
+
+Panels.register({
+  id: 'phrases',
+  tab: 'sec-content',
+  topics: ['data', 'selection', 'theme'],
+  render(ctx) {
+    const box = $('#phrasesBox');
+    if (ctx.none) {
+      box.innerHTML = html`<p class="muted">No messages in this selection</p>`;
+      return;
+    }
+    const C = ctx.content();
+    const sig = signaturePhrases(C.phrases);
+    $('#phrasesNote').textContent = `Phrases each person uses far more than everyone else here, ${PHRASE_MIN_USES}+ times on ${PHRASE_MIN_DAYS}+ days. Click one to track it.`;
+    box.innerHTML = html`<div class="people-cols">${sig.map(({ id, phrases }) => html`<div class="people-col ${id === 'You' ? 'sent' : 'recv'}">
+      <div class="vocab-col-head"><b>${phrasePerson(C.phrases, id)}</b></div>
+      <div class="vocab-chips">${phrases.length ? phrases.map((p) => trackChip(p.term, p.n)) : html`<span class="muted">Nothing stands out</span>`}</div>
+    </div>`)}</div>`;
+  },
+  init() {
+    $('#phrasesBox').addEventListener('click', trackChipClick);
+  },
+});
+
+/** Who used a joke first, and when. */
+const jokeFirst = (j) => `${j.first.o ? 'You' : momentSender(j.first)} · ${fmtDate.day(j.first.t)}`;
+
+Panels.register({
+  id: 'jokes',
+  tab: 'sec-content',
+  topics: ['data', 'selection', 'theme'],
+  render(ctx) {
+    const box = $('#jokesBox');
+    const none = (text) => (box.innerHTML = html`<p class="muted">${text}</p>`);
+    if (ctx.none) return none('No messages in this selection');
+    const df = Select.docFreq();
+    if (!ctx.all) {
+      const jokes = insideJokes(Select.terms(View.filter.contact), df);
+      $('#jokesNote').textContent = `Words and phrases used ${JOKE_MIN_USES}+ times by both sides, on ${JOKE_MIN_DAYS}+ days over 2+ weeks, that hardly come up in your other conversations. Click one to track it.`;
+      if (!jokes.length) return none('No inside jokes here yet');
+      box.innerHTML = html`<div class="table-wrap"><table class="vs jokes-table">
+        <thead><tr><th scope="col">Joke</th><th scope="col">Uses</th><th scope="col">First</th><th scope="col">Last used</th></tr></thead>
+        <tbody>${jokes.map((j) => html`<tr><th scope="row">${trackChip(j.term)}</th><td>${fmtNum(j.n)}</td><td>${jokeFirst(j)}</td><td>${fmtDate.day(j.last)}</td></tr>`)}</tbody>
+      </table></div>`;
+      return;
+    }
+    $('#jokesNote').textContent = 'The top inside joke of each of your busiest conversations: used by both sides over weeks, and hardly anywhere else. Click one to track it there.';
+    const rows = [...ctx.agg().byContact.entries()]
+      .map(([k, bc]) => ({ k, n: bc.n[0] + bc.n[1] }))
+      .filter((x) => x.n >= 200)
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 8)
+      .map(({ k }) => ({ k, joke: insideJokes(Select.terms(k), df, 1)[0] }))
+      .filter((x) => x.joke);
+    if (!rows.length) return none('No inside jokes found in your busiest conversations');
+    box.innerHTML = html`<div class="table-wrap"><table class="vs jokes-table">
+      <thead><tr><th scope="col">Conversation</th><th scope="col">Joke</th><th scope="col">Uses</th><th scope="col">Last used</th></tr></thead>
+      <tbody>${rows.map(({ k, joke }) => html`<tr><th scope="row">${personLink(k)}</th><td>${trackChip(joke.term, 0, k)}</td><td>${fmtNum(joke.n)}</td><td>${fmtDate.day(joke.last)}</td></tr>`)}</tbody>
+    </table></div>`;
+  },
+  init() {
+    $('#jokesBox').addEventListener('click', trackChipClick);
+  },
+});
+
+Panels.register({
+  id: 'corrections',
+  tab: 'sec-content',
+  topics: ['data', 'selection', 'theme'],
+  render(ctx) {
+    const { ui } = ctx;
+    const C = ctx.content();
+    const t = C.correctionsTotal;
+    const box = $('#correctedWords');
+    if (ctx.none || !(t[0] + t[1])) {
+      Charts.set('c-corrections', emptyOption(ui, ctx.none ? 'No messages in this selection' : 'No corrections (*word) in this selection'));
+      box.innerHTML = '';
+      $('#correctionsNote').textContent = 'Messages like “*there” that fix a typo, per 1,000 messages';
+      return;
+    }
+    $('#correctionsNote').textContent = `Messages like “*there” that fix a typo in the same person’s message just before, per 1,000 messages. You: ${fmtNum(t[1])} · Them: ${fmtNum(t[0])}`;
+    Charts.set('c-corrections', correctionsOption(ui, C));
+    const top = (o) => [...C.correctedWords[o]].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 5);
+    const col = (o, who) => html`<div class="people-col ${o ? 'sent' : 'recv'}"><div class="vocab-col-head"><b>${who}</b> · most corrected</div>
+      <div class="vocab-chips">${top(o).length ? top(o).map(([w, n]) => html`<span class="vocab-chip static">${w} <span class="muted">${fmtNum(n)}</span></span>`) : html`<span class="muted">None</span>`}</div></div>`;
+    box.innerHTML = html`<div class="people-cols">${col(1, 'You')}${col(0, 'Them')}</div>`;
+  },
+});
+
+Panels.register({
+  id: 'languages',
+  tab: 'sec-content',
+  topics: ['data', 'selection', 'theme'],
+  render(ctx) {
+    const { ui } = ctx;
+    const C = ctx.content();
+    const L = languageSummary(C);
+    const list = $('#langConvos');
+    list.innerHTML = '';
+    const unclear = C.langNone[0] + C.langNone[1];
+    $('#languagesNote').textContent = L.total
+      ? `Messages by the language they’re in, worked out in this browser from common words and alphabets. ${fmtNum(unclear)} were too short or unclear to tell.`
+      : 'Messages by the language they’re in';
+    if (ctx.none || !L.total) {
+      Charts.set('c-languages', emptyOption(ui, ctx.none ? 'No messages in this selection' : 'No messages long enough to tell their language'));
+      return;
+    }
+    if (L.single) Charts.set('c-languages', emptyOption(ui, `Everything here is in ${languageName(L.rows[0].code)}, as far as Yapalytics can tell`));
+    else Charts.set('c-languages', languagesOption(ui, L.rows));
+    if (!ctx.all) return;
+    const convos = otherLanguageConversations(C, L.main);
+    if (!convos.length) return;
+    list.innerHTML = html`<p class="lang-head"><b>Conversations in other languages</b></p><ul class="lang-convos">${convos.map((x) => html`<li>${personLink(x.k)} <span class="muted">${x.langs.slice(0, 3).map(([code, n]) => `${languageName(code)} ${pctText(n / x.n)}`).join(' · ')}</span></li>`)}</ul>`;
   },
 });
 

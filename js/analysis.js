@@ -573,18 +573,26 @@ const URL_HOST_RE = /(?:https?:\/\/|\bwww\.)([^\s/?#:<>"')\]]+)/gi;
 const DOMAIN_ALIASES = { 'youtu.be': 'youtube.com', 'x.com': 'twitter.com', 'vm.tiktok.com': 'tiktok.com', 'instagr.am': 'instagram.com', 'amzn.to': 'amazon.com', 'a.co': 'amazon.com', 'goo.gl': 'google.com', 'maps.app.goo.gl': 'google.com' };
 
 /**
- * Lowercased word tokens of a message body, at least 2 characters and not just digits.
+ * Every lowercased word of a message body, in order: single letters and numbers too.
  * Curly / modifier apostrophes (I’ve, Iʼm) become ' so contractions stay one word.
  */
-function tokensOf(body) {
+function wordsOf(body) {
   const m = body.toLowerCase().replace(/[‘’ʼ]/g, "'").match(TOKEN_RE);
   if (!m) return [];
   const out = [];
   for (let tk of m) {
     tk = tk.replace(/^'+|'+$/g, '');
-    if (tk.length >= 2 && !/^\d+$/.test(tk)) out.push(tk);
+    if (tk) out.push(tk);
   }
   return out;
+}
+
+/** A word that counts as a token: at least 2 characters and not just digits. */
+const isToken = (w) => w.length >= 2 && !/^\d+$/.test(w);
+
+/** Lowercased word tokens of a message body: its words without single letters and numbers. */
+function tokensOf(body) {
+  return wordsOf(body).filter(isToken);
 }
 
 function domainOf(host) {
@@ -599,11 +607,13 @@ let swearFamilyOf = null; // messageLib().swearFamily, created on first use
 /**
  * Second pass for the text-heavy views: the most used words, emoji per month, shared
  * link domains, vocabulary (unique words) per month, mood (positive / negative share) per
- * month, scored by `scorer` ('vader' or 'ai'), and swearing. It's the only pass over the
+ * month, scored by `scorer` ('vader' or 'ai'), and swearing; and (spec 019) signature
+ * phrases, corrections, thanks and sorry, and languages. It's the only pass over the
  * dashboard's selection that splits message text into words (spec 014 R10): once per
- * message, and a message with a link once more without its links, for the vocabulary.
+ * message, and a message with a link once more without its links. `phrases: false`
+ * skips counting phrases (Year in review shows none); `phraseCap` bounds each phrase counter.
  */
-function aggregateContent(msgs, scorer = 'vader') {
+function aggregateContent(msgs, scorer = 'vader', { phrases = true, phraseCap = PHRASE_CAP } = {}) {
   const C = {
     wordFreq: new Map(), // word -> [r, s], filler words left out
     emojiMonths: new Map(), // mo -> Map(emoji -> n)
@@ -618,9 +628,27 @@ function aggregateContent(msgs, scorer = 'vader') {
     swear: new Map(), // mo -> { w: [r, s] swear words, n: [r, s] messages }
     swearTotal: { w: [0, 0], n: [0, 0] },
     swearWords: new Map(), // family -> [r, s]
+    // Spec 019. phrases: { mode, people, who: Map(person -> counter of [uses, last day, days]),
+    //   all: counter of uses } (phraseCounter, patterns.js), or null with phrases: false
+    phrases: null,
+    corrections: new Map(), // mo -> [r, s]
+    correctionsTotal: [0, 0],
+    correctedWords: [new Map(), new Map()], // word -> corrections, per side
+    polite: new Map(), // mo -> { thanks: [r, s], sorry: [r, s] } messages
+    politeTotal: { thanks: [0, 0], sorry: [0, 0] },
+    lang: new Map(), // language code -> [r, s] messages
+    langNone: [0, 0], // messages with text but no language (too short, unclear)
+    langByContact: new Map(), // k -> Map(code -> messages)
   };
   swearFamilyOf = swearFamilyOf || messageLib().swearFamily;
   const vocabCounts = new Map(); // mo -> [Map(word -> uses) received, sent]
+  let who = null;
+  if (phrases) {
+    const pw = phraseWho(msgs);
+    who = pw.who;
+    C.phrases = { mode: pw.mode, people: pw.people, who: new Map(pw.people.map((id) => [id, phraseCounter(phraseCap)])), all: phraseCounter(phraseCap) };
+  }
+  const lastBy = new Map(); // conversation + sender -> { t, words } of their previous message (corrections)
   for (const r of msgs) {
     const o = r.o;
     if (r.e) {
@@ -641,7 +669,11 @@ function aggregateContent(msgs, scorer = 'vader') {
         v[o]++;
       }
     }
-    const tokens = tokensOf(r.b);
+    const words = wordsOf(r.b);
+    const tokens = words.filter(isToken);
+    // Words only: leave out the pieces of links.
+    const text = r.f & T_LINK ? r.b.replace(URL_RE, ' ') : r.b;
+    const plain = r.f & T_LINK ? wordsOf(text) : words;
     for (const tk of tokens) {
       if (STOPWORDS.has(tk)) continue;
       let wf = C.wordFreq.get(tk);
@@ -650,8 +682,7 @@ function aggregateContent(msgs, scorer = 'vader') {
     }
     let vc = vocabCounts.get(r.mo);
     if (!vc) vocabCounts.set(r.mo, (vc = [new Map(), new Map()]));
-    // Words only: leave out the pieces of links.
-    for (const tk of r.f & T_LINK ? tokensOf(r.b.replace(URL_RE, ' ')) : tokens) vc[o].set(tk, (vc[o].get(tk) || 0) + 1);
+    for (const tk of r.f & T_LINK ? plain.filter(isToken) : tokens) vc[o].set(tk, (vc[o].get(tk) || 0) + 1);
     const sign = moodSign(r, scorer);
     if (sign != null) {
       let md = C.mood.get(r.mo);
@@ -676,6 +707,7 @@ function aggregateContent(msgs, scorer = 'vader') {
         v[o]++;
       }
     }
+    countPatterns(C, r, text, plain, who, lastBy);
   }
   // Month by month, each side's words that it hadn't used earlier in the selection.
   const seen = [new Set(), new Set()];
@@ -750,20 +782,12 @@ function buildDocFreq(msgs) {
 /**
  * Words that set one conversation apart: frequency here times log(conversations /
  * conversations using the word). Filler words and words used fewer than 3 times are skipped.
+ * `terms` is the conversation's conversationTerms (patterns.js), shared with inside jokes (spec 019 R19).
  */
-function distinctiveWords(msgs, { df, docs }, limit = 25) {
-  const tf = new Map();
-  for (const r of msgs) {
-    if (!r.b || r.f & T_REACTION) continue;
-    for (const tk of tokensOf(r.b)) {
-      if (tk.length < 3 || STOPWORDS.has(tk)) continue;
-      let v = tf.get(tk);
-      if (!v) tf.set(tk, (v = [0, 0]));
-      v[r.o]++;
-    }
-  }
+function distinctiveWords(msgs, { df, docs }, limit = 25, terms = conversationTerms(msgs)) {
   const rows = [];
-  for (const [w, v] of tf) {
+  for (const [w, { n: v }] of terms.words) {
+    if (w.length < 3 || STOPWORDS.has(w)) continue;
     const n = v[0] + v[1];
     if (n < 3) continue;
     const idf = Math.log(docs / (df.get(w) || 1));

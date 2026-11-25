@@ -1139,6 +1139,61 @@ function swearOption(ui, C) {
   return opt;
 }
 
+// ------------------------------------------------------------------ language patterns (spec 019)
+
+/** Monthly lines of a rate per side: `get(mo, o)` gives [value or null, count, base]; `fmt` the value. */
+function rateLinesOption(ui, C, series, fmt) {
+  const keys = [...C.swear.keys()].sort((a, b) => a - b); // months with text, the rates' base
+  const opt = baseOption(ui, { boxZoom: true });
+  opt.xAxis = timeAxis(ui);
+  opt.yAxis = valAxis(ui, { min: 0 });
+  opt.tooltip = tooltipBase(ui, 'axis', 'line');
+  opt.tooltip.formatter = (ps) => {
+    const rows = ps.map((p) => {
+      const [, v, w, n] = p.value;
+      return tipRow(p.color, p.seriesName, html`<span><b>${v == null ? '–' : fmt(v)}</b> <span style="color:#888">(${fmtNum(w)} in ${fmtNum(n)})</span></span>`);
+    });
+    return String(html`${tipHead(fmtDate.month(ps[0].value[0]))}${rows}`);
+  };
+  opt.series = series.map(({ name, color, get }) => line(name, keys.map((mo) => [monthToTs(mo), ...get(mo)]), color, { connectNulls: true }));
+  opt.dataZoom = [insideZoom({ xAxisIndex: 0 })];
+  return opt;
+}
+
+/** Corrections per 1,000 messages with text, per month and side. */
+function correctionsOption(ui, C) {
+  const get = (o) => (mo) => {
+    const w = C.corrections.get(mo)?.[o] || 0, n = C.swear.get(mo).n[o];
+    return [n ? Math.round((w / n) * 10000) / 10 : null, w, n];
+  };
+  return rateLinesOption(ui, C, [{ name: 'You', color: ui.sent, get: get(1) }, { name: 'Them', color: ui.recv, get: get(0) }], (v) => `${v} per 1,000`);
+}
+
+/** Share of messages with text that say thanks, and sorry, per month and side. */
+function politeOption(ui, C) {
+  const get = (kind, o) => (mo) => {
+    const w = C.polite.get(mo)?.[kind][o] || 0, n = C.swear.get(mo).n[o];
+    return [n ? Math.round((w / n) * 1000) / 10 : null, w, n];
+  };
+  const opt = rateLinesOption(ui, C, [
+    { name: 'You: thanks', color: ui.sent, get: get('thanks', 1) },
+    { name: 'Them: thanks', color: ui.recv, get: get('thanks', 0) },
+    { name: 'You: sorry', color: ui.series[2], get: get('sorry', 1) },
+    { name: 'Them: sorry', color: ui.series[3], get: get('sorry', 0) },
+  ], (v) => `${v}%`);
+  opt.yAxis.axisLabel.formatter = '{value}%';
+  return opt;
+}
+
+/** Messages per language, you and them. `rows` from languageSummary, most used first. */
+function languagesOption(ui, rows) {
+  const top = rows.slice(0, 8);
+  const opt = sentRecvStack(ui, top.map((x) => languageName(x.code)), top.map((x) => x.s), top.map((x) => x.r), { horizontal: true });
+  opt.series[0].name = 'You';
+  opt.series[1].name = 'Them';
+  return opt;
+}
+
 function platformMixOption(ui, A, names) {
   const months = [...A.sourceMonths.keys()].sort((a, b) => a - b);
   const present = Object.keys(names).map(Number).filter((s) => months.some((mo) => A.sourceMonths.get(mo)[s]));

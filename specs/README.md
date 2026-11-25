@@ -52,6 +52,7 @@ see, changes what data leaves the browser, or takes more than a day to build.
 | [015 Settings dialog](015-settings-dialog.md) | Approved: built |
 | [016 A livelier loading screen](016-loading-screen.md) | Approved: built |
 | [017 How two people talk](017-conversation-dynamics.md) | Approved: built |
+| [019 Language patterns](019-language-patterns.md) | Draft: built, awaiting review |
 | [020 Daily rhythm: your day, time away and unusual days](020-daily-rhythm.md) | Draft: built, awaiting review |
 | [021 Comparing two periods](021-period-comparison.md) | Draft: built, awaiting review |
 | [025 Summary image](025-summary-card.md) | Draft: built, awaiting review |
