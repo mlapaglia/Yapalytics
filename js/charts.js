@@ -623,6 +623,73 @@ function behaviorOption(ui, A) {
   return opt;
 }
 
+// ------------------------------------------------------------------ how two people talk (spec 017)
+
+/** How settled 1-on-1 conversations ended: last word or no reply, per side. */
+function endingsOption(ui, A) {
+  const { last, none } = A.endings;
+  const opt = splitOption(ui, A);
+  const total = last[0] + last[1] + none[0] + none[1];
+  opt.title.text = fmtNum(total);
+  opt.title.subtext = 'conversations';
+  opt.tooltip.formatter = (p) => String(html`${dot(p.color)}<b>${p.name}</b><br>${fmtNum(p.value)} conversations (${p.percent}%)`);
+  opt.series[0].label.formatter = '{d}%';
+  opt.series[0].percentPrecision = 0;
+  opt.series[0].data = [
+    { name: 'You had the last word', value: last[1], itemStyle: { color: ui.sent } },
+    { name: 'They had the last word', value: last[0], itemStyle: { color: ui.recv } },
+    { name: 'You got no reply', value: none[1], itemStyle: { color: ui.series[2] } },
+    { name: 'They got no reply', value: none[0], itemStyle: { color: ui.series[3] } },
+  ];
+  return opt;
+}
+
+/** Each side's questions, split into those that got a reply from the other side and those that didn't. */
+function questionRepliesOption(ui, A) {
+  const { asked, replied } = A.questionReplies;
+  const rows = [1, 0]; // yours, then theirs
+  const opt = baseOption(ui);
+  opt.yAxis = catAxis(ui, ['Your questions', 'Their questions'], { inverse: true });
+  opt.xAxis = valAxis(ui);
+  opt.tooltip.formatter = (ps) => {
+    const o = rows[ps[0].dataIndex];
+    return String(html`${tipHead(ps[0].axisValueLabel)}${ps.map((p) => tipRow(p.color, p.seriesName, fmtNum(p.value)))}${tipNote(`${shareText(replied[o], asked[o])} got a reply`)}`);
+  };
+  const got = bar('Got a reply', rows.map((o) => replied[o]), ui.series[2], ui, { stack: 'q', horizontal: true, rounded: false });
+  const no = bar('No reply', rows.map((o) => asked[o] - replied[o]), ui.axis, ui, { stack: 'q', horizontal: true });
+  no.label = { show: true, position: 'right', color: ui.text2, fontSize: 12, formatter: (p) => `${shareText(replied[rows[p.dataIndex]], asked[rows[p.dataIndex]])} replied` };
+  opt.series = [got, no];
+  opt.series.forEach((x) => (x.barMaxWidth = 22));
+  opt.grid.right = 80;
+  return opt;
+}
+
+/** Messages per turn, for each side. */
+function turnsOption(ui, A) {
+  const opt = baseOption(ui, { boxZoom: true });
+  opt.grid.bottom = 18;
+  opt.xAxis = catAxis(ui, TURN_BINS.map((b) => b.label), { name: 'messages in a row', nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: ui.muted, fontSize: 11 } });
+  opt.yAxis = valAxis(ui);
+  opt.tooltip.formatter = (ps) => String(html`${tipHead(`${ps[0].axisValueLabel} in a row`)}${ps.map((p) => tipRow(p.color, p.seriesName, `${fmtNum(p.value)} turns`))}`);
+  opt.series = [bar('You', A.turnHist[1], ui.sent, ui), bar('Them', A.turnHist[0], ui.recv, ui)];
+  return opt;
+}
+
+/** Style match per counted month: `lines` = [{ name, data: [[mo, match]] }]. */
+function styleOption(ui, lines) {
+  const opt = baseOption(ui, { boxZoom: true });
+  if (lines.length < 2) delete opt.legend;
+  else opt.legend.type = 'scroll';
+  opt.grid.top = lines.length < 2 ? 16 : 36;
+  opt.xAxis = timeAxis(ui);
+  opt.yAxis = valAxis(ui, { min: 0, max: 100 });
+  opt.tooltip = tooltipBase(ui, 'axis', 'line');
+  opt.tooltip.formatter = (ps) => String(html`${tipHead(fmtDate.month(ps[0].value[0]))}${ps.map((p) => tipRow(p.color, p.seriesName, `${p.value[1]} / 100`))}`);
+  opt.series = lines.map((l, i) => line(truncate(l.name, 22), l.data.map(([mo, m]) => [monthToTs(mo), m]), ui.series[i % ui.series.length], { showSymbol: true, symbolSize: 5, connectNulls: false }));
+  opt.dataZoom = [insideZoom({ xAxisIndex: 0 })];
+  return opt;
+}
+
 // ------------------------------------------------------------------ call charts
 
 function callTrendOption(ui, C) {

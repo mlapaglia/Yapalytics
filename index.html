@@ -262,6 +262,7 @@
 
     <section class="dash-section" id="sec-glance" data-slug="overview" data-tab="Overview">
       <h2 class="section-title">Overview</h2>
+      <div class="glance-bar"><button class="btn small" id="summaryBtn" type="button" title="One picture of these numbers to save or post. Names are hidden unless you show them.">📸 Summary image</button></div>
       <div class="kpis" id="kpis" aria-label="Summary"></div>
       <div class="grid">
       <article class="card" id="highlightsCard">
@@ -422,6 +423,23 @@
       <article class="card">
         <header><div><h2>Texting habits</h2><p class="sub"><span id="habitsNote"></span> <button class="btn small ghost note-btn" type="button" data-settings>Change</button></p></div></header>
         <div class="chart" id="c-behavior"></div>
+      </article>
+      <article class="card" id="endingsCard">
+        <header><div><h2>How conversations end</h2><p class="sub"><span id="endingsNote"></span> <button class="btn small ghost note-btn" type="button" data-settings>Change</button></p></div></header>
+        <div class="chart" id="c-endings"></div>
+      </article>
+      <article class="card" id="questionRepliesCard">
+        <header><div><h2>Questions that got a reply</h2><p class="sub">Questions answered by the other side before the conversation ended (1-on-1 only)</p></div></header>
+        <div class="chart" id="c-questions"></div>
+      </article>
+      <article class="card" id="turnsCard">
+        <header><div><h2>Turn-taking</h2><p class="sub" id="turnsNote"></p></div></header>
+        <div class="chart" id="c-turns"></div>
+      </article>
+      <article class="card wide" id="styleCard">
+        <header><div><h2>Style match</h2><p class="sub" id="styleNote"></p></div></header>
+        <div class="chart" id="c-style"></div>
+        <div id="styleMarkers"></div>
       </article>
       </div>
     </section>
@@ -673,6 +691,19 @@
     <div id="profileBottom"></div>
   </dialog>
 
+  <dialog id="summaryDlg" class="profile summary-dlg" aria-labelledby="summaryTitle">
+    <button class="btn ghost icon profile-close" type="button" aria-label="Close">✕</button>
+    <header class="people-head">
+      <h2 id="summaryTitle">Summary image</h2>
+      <p class="sub">The numbers for what's picked on the dashboard. No message text, and people are numbered unless you show their names. It's made and saved on this device.</p>
+    </header>
+    <div class="wrapped"><canvas id="summaryCanvas" width="1080" height="1350" aria-label="Summary image preview"></canvas></div>
+    <div class="profile-actions summary-actions">
+      <label class="check"><input type="checkbox" id="summaryNames"> Show names</label>
+      <button class="btn" id="summarySave" type="button">Save PNG</button>
+    </div>
+  </dialog>
+
   <dialog id="peopleDlg" class="profile people-dlg" aria-labelledby="peopleTitle">
     <button class="btn ghost icon profile-close" type="button" aria-label="Close">✕</button>
     <header class="people-head">
@@ -799,6 +830,7 @@
   <script src="js/ui/settings-dialog.js"></script>
   <script src="js/ui/export-dialog.js"></script>
   <script src="js/ui/profile.js"></script>
+  <script src="js/ui/summary-dialog.js"></script>
   <script src="js/ui/theme.js"></script>
   <script src="js/panels/layout.js"></script>
   <script src="js/panels/overview.js"></script>

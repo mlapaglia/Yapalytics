@@ -1142,6 +1142,18 @@ table.apps-table td.apps-cell { min-width: 110px; }
   .app-split-legend { grid-column: 2; }
 }
 
+/* Style match markers (spec 017) */
+#styleMarkers:not(:empty) { margin-top: 12px; }
+.style-table th[scope="col"] { text-align: right; }
+.style-table tr.style-total th, .style-table tr.style-total td { font-weight: 650; color: var(--text); border-bottom: 0; }
+
+/* Summary image (spec 025) */
+.glance-bar { display: flex; justify-content: flex-end; margin: 0 0 10px; }
+.summary-dlg { width: min(560px, calc(100vw - 32px)); }
+.summary-dlg .wrapped canvas { width: min(360px, 100%); }
+.summary-actions { align-items: center; justify-content: space-between; margin-top: 16px; }
+.summary-actions .check { padding-bottom: 0; }
+
 /* Export stats (spec 026) */
 .export-dlg { width: min(640px, calc(100vw - 32px)); }
 /* Only the list scrolls, so Download all stays in view. */
