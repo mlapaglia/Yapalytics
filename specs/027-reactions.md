@@ -71,15 +71,20 @@ messages.
   | `Removed X from` | X, as a removal |
 
   A custom name like `:party_blob:` is kept as the "emoji", as spec 004 does for Google
-  Chat.
+  Chat. An emoji with a text-style default (`❤`, `‼`) counts as its emoji-style form
+  (`❤️`, `‼️`), so Instagram's ❤ and a tapback's ❤️ are one emoji. Instagram's
+  `Liked a message` and `Reacted 😂 to your message` texts name no message; that reaction
+  is also on the message itself, so the text stays only in the loading screen's total.
 - **R3** Apps that store reactions on the message also keep each person's reaction
   time when the export has one: Instagram and Messenger `reactions[].timestamp`
   (seconds), Telegram `recent[].date`. Google Chat exports give no time. Everything
   else about these reactions is as spec 004 R6, R7, R9 and R10 say.
 - **R4** iMessage tapbacks (`Tapbacks:` followed by indented `Loved by Alex` lines) are
   read as reactions on the message above them, named "You" when the name is the
-  iMessage owner. They have no time. Thread replies, which are indented the same way,
-  are still skipped.
+  iMessage owner. imessage-exporter writes `Loved`, `Liked`, `Disliked`, `Laughed`,
+  `Emphasized` and `Questioned`, and an emoji tapback as `😂 by Alex`; `Laughed at` is
+  read too. They have no time. Thread replies, which are indented the same way, are
+  still skipped.
 
 ### Matching reaction texts to their target
 
@@ -128,9 +133,9 @@ messages.
 
 ### New cards
 
-These go on the Mood & emoji tab after Top emoji, under a "Reactions" heading, and in
-Jump to…. With no reactions in the selection each card says "No reactions in this
-selection".
+These go on the Mood & emoji tab after Emoji over time, the first one titled
+"Reactions", and in Jump to…. With no reactions in the selection each card says "No
+reactions in this selection".
 
 - **R12** **Reactions**: how many reactions you gave and got, and the top 10 reaction
   emoji as sent and received bars. The note says how many reaction texts couldn't be
@@ -142,16 +147,18 @@ selection".
   give reaction times. A median shows only when that side has at least 10 timed
   reactions.
 - **R14** **How you react**: for each side, the share of reactions that are
-  own-message reactions, and the share that are reactions instead of a reply, as two
-  paired bars.
+  own-message reactions ("Own messages"), and the share that are reactions instead of a
+  reply, as two paired bars. Only a reaction with a time and a known reactor can be
+  told to be instead of a reply; the share is of those.
 - **R15** **Who reacts the most**: per conversation, reactions they gave and you gave,
   each per 100 messages from the other side, for the top 10 by reactions. Group chats
-  are one row each. A row needs at least 50 messages from the other side. Clicking a
-  row opens that conversation's profile.
+  are one row each. A row needs at least 50 messages from each side. Clicking a row
+  opens that conversation's profile.
 - **R16** **Most-reacted messages**: the 5 messages with the most reactions, each with
-  its sender, date, reaction chips and a **Read →** button that opens that day in
-  Messages (as Unusual days does). The text shows only in this card, which is on the
-  page like the message list.
+  its sender, where it was (as the word tracker says it: "to Alex", "in" a group), date,
+  reaction chips and a **Read →** button that opens that day in Messages (as Unusual
+  days does). A message with no text shows its kind of file. The text shows only in
+  this card, which is on the page like the message list.
 
 ### Highlights
 
@@ -161,13 +168,15 @@ selection".
   - "You react in a median of 45 seconds, Alex in 3 hours": both medians from R13, at
     least 4× apart.
   - "You've reacted to your own messages 37 times": at least 10.
-  - "40% of Alex's reactions are instead of a reply": at least 30%, with at least 30
-    reactions.
+  - "40% of your reactions are instead of a reply", or of the reactions you get, for
+    the side where it's higher: at least 30%, with at least 30 reactions R14 could
+    judge.
 
 ### Export
 
 - **R18** The Export dialog (spec 026) gets `reactions.csv`: per emoji, the counts
-  reacted by you and by them, and `reaction-times.csv`: the R13 bins per side. Neither
+  reacted by you and by them, and `reaction_times.csv`: the R13 bins per side, named
+  like `reply_times.csv`. Both are there only when the selection has reactions. Neither
   has message text.
 
 ## Privacy
@@ -225,10 +234,14 @@ Most-reacted messages are HTML tables like the leaderboard.
 Reactions checkbox in Top emoji. Highlights go in a `reactionHighlights` function in
 `js/insights.js`.
 
-**Demo.** The demo's SMS reaction texts quote messages sent shortly before them in the
-same thread, so they match. One reacts to a photo, one is a removal, and one quotes a
-message that isn't there. Instagram reactions keep their timestamps. iMessage tapbacks
-use the real `<Verb> by <name>` lines.
+**Demo.** The demo's SMS reaction texts quote the other side's latest message in the
+conversation (or your own when they haven't written yet), so they match, keeping the
+shape of the line picked: hidden characters, a quote cut short. `Loved an image` matches
+when a photo came in the 24 hours before. Only SMS and iMessage get reaction texts; the
+other apps store reactions on the message, as their exports do. Instagram reactions
+keep their timestamps, Telegram reactions name who reacted and when, Google Chat
+reactions are from someone other than the sender, and iMessage tapbacks use the real
+`<Verb> by <name>` lines. None of this draws extra random numbers.
 
 ## Acceptance criteria
 
@@ -280,16 +293,17 @@ Each one is checked by at least one test that names it.
 - **AC16** Each R17 highlight fires at its threshold and not just below it.
 - **AC17** With the demo loaded, the Mood & emoji tab shows the five reaction cards,
   each with data, and they're in Jump to….
-- **AC18** `reactions.csv` and `reaction-times.csv` match the cards' numbers and
+- **AC18** `reactions.csv` and `reaction_times.csv` match the cards' numbers and
   contain no message text.
 
 ## Open questions
 
-- iOS 18 emoji tapbacks in imessage-exporter: are they `😂 by Alex` lines? Check
-  against its source while building R4.
-- Do real Messenger exports carry `reactions[].timestamp`, and real Telegram exports
-  `recent[].date`? The demo has neither. R3 uses them only when present.
+None left.
 
 Settled in review: reactions count in every emoji statistic (R11a), and a reaction text
 matches only within the 24 hours before it (R5, R6), so a common reply like `ok` can't
 match an old message.
+
+Settled while building: imessage-exporter writes emoji tapbacks as `😂 by Alex` (R4).
+Messenger and Instagram reaction timestamps and Telegram `recent[].date` are used when
+present (R3); the Messenger demo has none.

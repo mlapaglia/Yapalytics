@@ -584,12 +584,35 @@
         <div class="chart" id="c-polite"></div>
       </article>
       <article class="card">
-        <header><div><h2>Top emoji</h2><p class="sub">Most-used emoji, sent and received</p></div></header>
+        <header>
+          <div><h2>Top emoji</h2><p class="sub" id="emojiNote">Typed and reacted, sent and received</p></div>
+          <label class="check" title="Count emoji reactions as well as emoji typed in messages"><input type="checkbox" id="emojiRxChk" checked> Reactions</label>
+        </header>
         <div class="chart tall" id="c-emoji"></div>
       </article>
       <article class="card">
-        <header><div><h2>Emoji over time</h2><p class="sub">Your top emoji, per month</p></div></header>
+        <header><div><h2>Emoji over time</h2><p class="sub">Your top emoji, typed and reacted, per month</p></div></header>
         <div class="chart tall" id="c-emojitrend"></div>
+      </article>
+      <article class="card" id="reactionsCard">
+        <header><div><h2>Reactions</h2><p class="sub" id="reactionsNote">Reactions you gave and got</p></div></header>
+        <div class="chart tall" id="c-reactions"></div>
+      </article>
+      <article class="card" id="reactTimeCard">
+        <header><div><h2>Time to react</h2><p class="sub" id="reactTimeNote">How long after a message someone reacted to it</p></div></header>
+        <div class="chart" id="c-reacttime"></div>
+      </article>
+      <article class="card" id="reactHowCard">
+        <header><div><h2>How you react</h2><p class="sub" id="reactHowNote">Reactions on your own messages, and reactions with nothing else sent after them in the conversation</p></div></header>
+        <div class="chart" id="c-reacthow"></div>
+      </article>
+      <article class="card" id="reactWhoCard">
+        <header><div><h2>Who reacts the most</h2><p class="sub" id="reactWhoNote">Reactions per 100 messages from the other side. Click a row for that conversation’s profile.</p></div></header>
+        <div id="reactWho"></div>
+      </article>
+      <article class="card wide" id="reactTopCard">
+        <header><div><h2>Most-reacted messages</h2><p class="sub">The messages with the most reactions in this selection</p></div></header>
+        <div id="reactTop"></div>
       </article>
       </div>
     </section>
@@ -883,6 +906,7 @@
   <script src="js/demo.js"></script>
   <script src="js/load-stats.js"></script>
   <script src="js/analysis.js"></script>
+  <script src="js/reactions.js"></script>
   <script src="js/compare.js"></script>
   <script src="js/rhythm.js"></script>
   <script src="js/patterns.js"></script>
@@ -921,6 +945,7 @@
   <script src="js/panels/replies.js"></script>
   <script src="js/panels/words.js"></script>
   <script src="js/panels/mood.js"></script>
+  <script src="js/panels/reactions.js"></script>
   <script src="js/panels/media.js"></script>
   <script src="js/panels/calls.js"></script>
   <script src="js/panels/sources.js"></script>

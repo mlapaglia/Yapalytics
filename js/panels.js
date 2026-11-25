@@ -99,7 +99,7 @@ function emptyOption(ui, text) {
 const VIEW_TOPICS = {
   convoGap: ['gap'], appsGap: ['appsGap'], gran: ['gran'], moodScorer: ['scorer'], phrase: ['phrase'], phraseGran: ['phrase'],
   vocabMo: ['vocab'], calYear: ['calendar'], wrapYear: ['wrapped'], otd: ['otd'], leader: ['leader'], browser: ['browser'],
-  compare: ['compare'],
+  compare: ['compare'], emojiRx: ['emojiRx'],
 };
 const FILTER_TOPICS = { contact: 'filter.contact', source: 'filter.source', groups: 'filter.groups', from: 'filter.dates', to: 'filter.dates' };
 

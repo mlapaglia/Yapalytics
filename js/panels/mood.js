@@ -41,7 +41,7 @@ function renderPolite(ui, C) {
 Panels.register({
   id: 'mood',
   tab: 'sec-mood',
-  topics: ['data', 'selection', 'scorer', 'theme'],
+  topics: ['data', 'selection', 'scorer', 'theme', 'emojiRx'],
   render(ctx) {
     const { ui } = ctx;
     const C = ctx.content();
@@ -59,8 +59,16 @@ Panels.register({
       : 'Swear words per 1,000 messages';
     Charts.set('c-swear', st.w[0] + st.w[1] ? swearOption(ui, C) : emptyOption(ui, 'No swearing in this selection 😇'));
     renderPolite(ui, C);
-    const em = emojiOption(ui, ctx.agg());
+    // Reactions count in the emoji cards (spec 027 R11, R11a); the box only changes Top emoji.
+    const R = Select.reactions();
+    $('#emojiRxChk').checked = View.emojiRx;
+    $('#emojiNote').textContent = View.emojiRx ? 'Typed and reacted, sent and received' : 'Typed in messages, sent and received';
+    const em = emojiOption(ui, ctx.agg(), 20, View.emojiRx ? R : null);
     Charts.set('c-emoji', em.empty ? emptyOption(ui, 'No emoji in this selection') : em.opt);
-    Charts.set('c-emojitrend', C.emojiTotals.size ? emojiTrendOption(ui, C) : emptyOption(ui, 'No emoji in this selection'));
+    const trend = emojiTrendWithReactions(C, R);
+    Charts.set('c-emojitrend', trend.emojiTotals.size ? emojiTrendOption(ui, trend) : emptyOption(ui, 'No emoji in this selection'));
+  },
+  init() {
+    $('#emojiRxChk').addEventListener('change', (e) => View.set({ emojiRx: e.target.checked }));
   },
 });

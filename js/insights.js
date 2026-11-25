@@ -26,7 +26,7 @@ function peakOf([r, s]) {
  * The most notable findings in a selection, most interesting first (at most one of each
  * kind). `single`: the selection is one conversation, so sentences talk about "here".
  */
-function buildHighlights(msgs, A, { labelFor = (k) => k, senderLabel = (x) => x, single = false, limit = HIGHLIGHT_LIMIT, crossApp = null, rhythm = null, unusual = null } = {}) {
+function buildHighlights(msgs, A, { labelFor = (k) => k, senderLabel = (x) => x, single = false, limit = HIGHLIGHT_LIMIT, crossApp = null, rhythm = null, unusual = null, reactions = null } = {}) {
   if (!msgs.length) return [];
   const out = [];
   const add = (kind, score, icon, parts) => out.push({ kind, score, icon, parts });
@@ -153,9 +153,10 @@ function buildHighlights(msgs, A, { labelFor = (k) => k, senderLabel = (x) => x,
       : [person(length.k), ' writes ', { b: timesText(length.lean) }, ' longer messages than you.']);
   }
 
-  // Your go-to emoji
-  const emoji = [...A.emojiFreq].sort((a, b) => b[1][1] - a[1][1])[0];
-  if (emoji && emoji[1][1] >= 10) add('emoji', 20, emoji[0], ['Your go-to emoji', single ? ' here' : '', ' is ', { b: emoji[0] }, ', sent ', { b: fmtNum(emoji[1][1]) }, ' times.']);
+  // Your go-to emoji, typed or reacted (spec 027 R11a)
+  const emojiFreq = withReactionEmoji(A.emojiFreq, reactions);
+  const emoji = [...emojiFreq].sort((a, b) => b[1][1] - a[1][1])[0];
+  if (emoji && emoji[1][1] >= 10) add('emoji', 20, emoji[0], ['Your go-to emoji', single ? ' here' : '', ' is ', { b: emoji[0] }, ', used ', { b: fmtNum(emoji[1][1]) }, ' times.']);
 
   // Daily rhythm
   if (total >= 50) {
@@ -168,7 +169,8 @@ function buildHighlights(msgs, A, { labelFor = (k) => k, senderLabel = (x) => x,
     add('groups', 12, '👥', [{ b: senderLabel(loud[0]) }, single ? ' is the most active member here, with ' : ' is the most active in your group chats, with ', { b: fmtNum(loud[1]) }, ' messages.']);
   }
 
-  moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, total });
+  moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, total, emojiFreq, reactions });
+  if (reactions) reactionHighlights(A, reactions, { add, person, single, rows });
   dynamicsHighlights(A, { add, person, single, rows, oneOnOne });
   rhythmHighlights(A, { add, person, single, rhythm, unusual });
 
@@ -184,7 +186,7 @@ function leanOf(a, b) {
 }
 
 /** Spec 008: moments, relationships over time, how two people talk, and habits. */
-function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, total }) {
+function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, total, emojiFreq = A.emojiFreq, reactions = null }) {
   const firstT = msgs[0].t;
   const lastT = msgs[msgs.length - 1].t;
   // 1-on-1 conversations to compare the two sides of: the busy ones, or the one selected
@@ -348,15 +350,16 @@ function moreHighlights(msgs, A, { add, person, single, rows, busy, oneOnOne, to
 
   // AC13: an emoji that belongs to one conversation
   if (!single) {
-    const all = emojiTotal(A.emojiFreq);
+    const all = emojiTotal(emojiFreq);
     let sig = null;
     for (const r of busy.slice(0, 15)) {
-      const e = signatureEmoji(r.bc, A.emojiFreq, all);
-      const uses = e && r.bc.emoji.get(e);
+      const bc = convoEmojiWithReactions(r.bc, reactions, r.k);
+      const e = signatureEmoji(bc, emojiFreq, all);
+      const uses = e && bc.emoji.get(e);
       if (!uses || uses < 5) continue;
       let mine = 0;
-      for (const n of r.bc.emoji.values()) mine += n;
-      const g = A.emojiFreq.get(e);
+      for (const n of bc.emoji.values()) mine += n;
+      const g = emojiFreq.get(e);
       const lift = uses / mine / ((g[0] + g[1]) / all);
       if (lift >= 5 && (!sig || lift > sig.lift)) sig = { k: r.k, e, lift };
     }
@@ -539,13 +542,52 @@ function rhythmHighlights(A, { add, person, single, rhythm, unusual }) {
   }
 }
 
+/**
+ * Spec 027 R17: who reacts the most, the gap in how fast each side reacts, reacting to
+ * your own messages, and reacting instead of replying.
+ */
+function reactionHighlights(A, R, { add, person, single, rows }) {
+  const total = R.n[0] + R.n[1];
+  if (!total) return;
+  const one = single && rows[0] && !rows[0].group ? rows[0].k : null;
+  const them = (cap) => (one ? person(one) : cap ? 'Others' : 'others');
+
+  // Who reacts to you the most, per 100 of your messages
+  const who = reactWhoRows(R, A).filter((r) => r.themRate >= 20).sort((a, b) => b.themRate - a.themRate)[0];
+  if (who) {
+    const every = Math.max(1, Math.round(100 / who.themRate));
+    add('reactsMost', 24 + Math.min(10, who.themRate / 5), '💞', every === 1
+      ? [person(who.k), ' reacts to ', { b: 'almost every one' }, ' of your messages.']
+      : [person(who.k), ' reacts to ', { b: `1 in ${every}` }, ' of your messages.']);
+  }
+
+  // How fast each side reacts
+  const [mThem, mYou] = R.median;
+  if (mThem != null && mYou != null && Math.max(mThem, mYou) >= 4 * Math.max(1, Math.min(mThem, mYou))) {
+    add('reactSpeed', 26, '⏱️', ['You react in a median of ', { b: fmtDuration(mYou) }, ', ', them(false), ' in ', { b: fmtDuration(mThem) }, '.']);
+  }
+
+  // Reacting to your own messages
+  if (R.own[1] >= 10) add('ownReactions', 22, '🪞', ["You've reacted to your own messages ", { b: fmtNum(R.own[1]) }, ' times.']);
+
+  // Reacting instead of replying: the side that does it more
+  const share = (o) => (R.judged[o] >= 30 ? R.instead[o] / R.judged[o] : 0);
+  const o = share(1) >= share(0) ? 1 : 0;
+  if (share(o) >= 0.3) {
+    add('reactInstead', 23 + share(o) * 10, '🫡', o
+      ? [{ b: pctText(share(o)) }, ' of your reactions are instead of a reply.']
+      : [{ b: pctText(share(o)) }, ' of ', ...(one ? [person(one), "'s"] : ['the']), ' reactions you get are instead of a reply.']);
+  }
+}
+
 /** A highlight's parts as plain text (for tests and titles). */
 function highlightText(h) {
   return h.parts.map((p) => (typeof p === 'string' ? p : p.b ?? p.text)).join('');
 }
 
 /** Everything a profile shows about one conversation, from its messages and their aggregate. */
-function profileFacts(msgs, A) {
+function profileFacts(msgs, A, R = null) {
+  const emojiFreq = withReactionEmoji(A.emojiFreq, R); // typed and reacted (spec 027 R11a)
   const questions = TRAITS.findIndex((t) => t.bit === 1);
   const side = (o) => ({
     messages: A.dir[o],
@@ -555,7 +597,7 @@ function profileFacts(msgs, A) {
     doubles: A.doubleTexts[o],
     questions: questions >= 0 ? A.traits[o][questions] : 0,
     night: A.hour[o].slice(0, NIGHT_END_HOUR).reduce((a, b) => a + b, 0),
-    emoji: [...A.emojiFreq].filter(([, v]) => v[o]).sort((a, b) => b[1][o] - a[1][o]).slice(0, 3).map(([e, v]) => [e, v[o]]),
+    emoji: [...emojiFreq].filter(([, v]) => v[o]).sort((a, b) => b[1][o] - a[1][o]).slice(0, 3).map(([e, v]) => [e, v[o]]),
     words: A.words[o],
   });
   const months = [...A.months.entries()].map(([mo, v]) => ({ mo, n: v.c[0] + v.c[1] }));

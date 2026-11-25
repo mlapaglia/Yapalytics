@@ -23,7 +23,7 @@
 function telegramParserWorker(self, lib) {
   'use strict';
 
-  const { analyzeText, stampTime, addReaction, listZip, readEntryText, contactMap } = lib;
+  const { analyzeText, stampTime, addReaction, reactionTime, listZip, readEntryText, contactMap } = lib;
 
   const BATCH_SIZE = 5000;
   const ONE_ON_ONE = new Set(['personal_chat', 'bot_chat']);
@@ -149,8 +149,8 @@ function telegramParserWorker(self, lib) {
       if (Array.isArray(m.reactions)) {
         for (const r of m.reactions) {
           if (!r || r.type !== 'emoji' || typeof r.emoji !== 'string') continue;
-          const recent = Array.isArray(r.recent) ? r.recent.map((x) => x && x.from).filter((x) => typeof x === 'string') : [];
-          addReaction(rec, r.emoji, +r.count || recent.length || 1, recent);
+          const recent = Array.isArray(r.recent) ? r.recent.filter((x) => x && typeof x.from === 'string') : [];
+          addReaction(rec, r.emoji, +r.count || recent.length || 1, recent.map((x) => x.from), recent.map((x) => reactionTime(x.date_unixtime || x.date)));
         }
       }
       analyzeText(text, rec);

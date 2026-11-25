@@ -1206,3 +1206,17 @@ table.apps-table td.apps-cell { min-width: 110px; }
 .lang-convos { margin: 0; padding: 0; list-style: none; font-size: 13px; }
 .lang-convos li { padding: 4px 0; border-bottom: 1px solid var(--border); }
 .lang-convos li:last-child { border-bottom: 0; }
+
+/* Reactions (spec 027) */
+.react-who th[scope="col"] { text-align: right; }
+.react-who tbody tr { cursor: pointer; }
+.react-who tbody tr:hover { background: var(--surface-2); }
+.react-top { max-height: none; }
+.react-top li { align-items: center; cursor: default; }
+.react-top li:hover { background: none; }
+.react-top-text { min-width: 0; overflow-wrap: anywhere; line-height: 1.45; }
+.react-top-side { display: flex; align-items: center; gap: 10px; flex: none; }
+.react-top-side .reactions { margin: 0; }
+@media (max-width: 560px) {
+  .react-top li { flex-wrap: wrap; }
+}

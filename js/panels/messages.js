@@ -96,12 +96,15 @@ function initMoodDetails() {
   });
 }
 
-/** Reactions on a message (spec 004): one chip per emoji, with who reacted on hover. */
+/**
+ * Reactions on a message (spec 004): one chip per emoji, with who reacted on hover. Its
+ * own reactions, then the reaction texts matched to it (spec 027 R8).
+ */
 function reactionsRow(m) {
   const row = document.createElement('div');
   row.className = 'reactions';
   const me = hasOwner(m.s) && Prefs.owners[m.s].name;
-  for (const x of m.rx) {
+  for (const x of [...(m.rx || []), ...(Data.textRx.get(m) || [])]) {
     const names = x.n.map((n) => (n === me ? 'You' : n));
     const more = x.c - names.length;
     const chip = document.createElement('span');
@@ -182,7 +185,7 @@ function renderBrowser(msgs) {
     }
     if (m.att) bubble.appendChild(messageAttachments(m));
     if (m.sh) bubble.appendChild(shareCard(m.sh, Prefs.igPreviews));
-    if (m.rx) bubble.appendChild(reactionsRow(m));
+    if (m.rx || Data.textRx.has(m)) bubble.appendChild(reactionsRow(m));
     // Sources without attachment references only know how many there were.
     const att = [];
     if (!m.att) {

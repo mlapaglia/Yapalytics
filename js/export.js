@@ -39,9 +39,10 @@ function exportNames(A, C, { anon, labelFor, senderLabel }) {
 /**
  * The tables of R3: [{ file, title, header, rows }], values raw (R4). `C` is
  * aggregateCalls of the selection's calls, or null. `appsOf(k)` gives a conversation's
- * app ids; `sources` is the app registry ({ id, kind, name }).
+ * app ids; `sources` is the app registry ({ id, kind, name }). `reactions` is
+ * aggregateReactions of the selection (spec 027 R18), or null.
  */
-function statsTables(A, C, { anon = false, labelFor = (k) => k, senderLabel = (x) => x, appsOf = () => [0], sources = [] } = {}) {
+function statsTables(A, C, { anon = false, labelFor = (k) => k, senderLabel = (x) => x, appsOf = () => [0], sources = [], reactions = null } = {}) {
   const names = exportNames(A, C, { anon, labelFor, senderLabel });
   const appName = (id) => sources.find((s) => s.id === id)?.name ?? String(id);
   const tables = [];
@@ -122,6 +123,17 @@ function statsTables(A, C, { anon = false, labelFor = (k) => k, senderLabel = (x
     [...A.emojiFreq.entries()]
       .sort((a, b) => b[1][0] + b[1][1] - (a[1][0] + a[1][1]) || (a[0] < b[0] ? -1 : 1))
       .map(([e, v]) => [e, v[1], v[0]]));
+
+  // Only when the selection has reactions (spec 027 R18): counts, no message text
+  const R = reactions;
+  if (R && R.n[0] + R.n[1]) {
+    add('reactions.csv', 'Reactions', ['emoji', 'yours', 'theirs'],
+      [...R.perEmoji.entries()]
+        .sort((a, b) => b[1][0] + b[1][1] - (a[1][0] + a[1][1]) || (a[0] < b[0] ? -1 : 1))
+        .map(([e, v]) => [e, v[1], v[0]]));
+    add('reaction_times.csv', 'Time to react', ['bin', 'your_reactions', 'their_reactions'],
+      REACT_BINS.map((b, i) => [b.label, R.hist[1][i], R.hist[0][i]]));
+  }
 
   add('attachments.csv', 'Attachments', ['month', ...MEDIA_TYPES.map((m) => MEDIA_COLUMNS[m.key])],
     [...A.mediaMonths.keys()].sort((a, b) => a - b).map((mo) => {

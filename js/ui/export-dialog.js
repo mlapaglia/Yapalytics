@@ -15,6 +15,7 @@ function exportTables() {
     senderLabel,
     appsOf: (k) => Data.keySources(k),
     sources: Sources.list,
+    reactions: Select.reactions(),
   });
 }
 

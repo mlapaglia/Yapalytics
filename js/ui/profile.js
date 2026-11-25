@@ -14,7 +14,8 @@ function openProfile(key) {
   const msgs = Data.messagesOf(key);
   if (!msgs.length) return;
   const A = aggregateMessages(msgs, View.convoGap);
-  const F = profileFacts(msgs, A);
+  const R = aggregateReactions(selectReactions(Data.reactionEvents, { contact: key }));
+  const F = profileFacts(msgs, A, R);
   const c = Data.contacts.get(key) || {};
   const group = key.startsWith('g:');
   const name = plainName(key);

@@ -73,6 +73,9 @@ function createDataset() {
     contacts: new Map(), // key -> { key, name, addr, group, lastT, s, members, label, search }; people add { person, threads, sources }
     archives: [], // loaded export files; attachments point into these by index (att.z). Append-only.
     reactions: 0, // reactions sent as texts, left out of the messages
+    reactionTexts: [], // those reactions, kept to match to their message (spec 027 R1), time-sorted after finish()
+    reactionEvents: [], // every reaction (buildReactions in reactions.js), rebuilt by rederive
+    textRx: new Map(), // message -> chips for the reaction texts matched to it (spec 027 R8)
     personOf: new Map(), // conversation key -> person key, for the links that apply to what's loaded
     firstSeen: new Map(), // key -> time of the first message loaded for that conversation
     byKey: new Map(), // key -> its messages, time-sorted
@@ -114,7 +117,12 @@ function createDataset() {
         }
         // Reactions sent as texts (tapbacks, "😂 to “…”") aren't messages. Reactions
         // on a message (Instagram, Messenger, Telegram, Google Chat) ride along in its rx.
-        if (m.f & T_REACTION) { seenMsgs.set(key, null); D.reactions++; continue; }
+        if (m.f & T_REACTION) {
+          seenMsgs.set(key, null);
+          D.reactions++;
+          if (m.rv) D.reactionTexts.push(m); // Instagram's "Liked a message" has no target: its reaction is on the message too
+          continue;
+        }
         seenMsgs.set(key, m);
         if (m.att) rebase(m.att);
         D.msgs.push(m);
@@ -152,6 +160,7 @@ function createDataset() {
     finish() {
       D.msgs.sort((a, b) => a.t - b.t);
       D.calls.sort((a, b) => a.t - b.t);
+      D.reactionTexts.sort((a, b) => a.t - b.t);
     },
 
     /** Forget everything read (not `archives`: attachment indexes from before stay valid). */
@@ -160,6 +169,9 @@ function createDataset() {
       D.calls = [];
       D.contacts = new Map();
       D.reactions = 0;
+      D.reactionTexts = [];
+      D.reactionEvents = [];
+      D.textRx = new Map();
       D.personOf = new Map();
       D.firstSeen = new Map();
       D.byKey = new Map();
@@ -272,10 +284,13 @@ function createDataset() {
      *      records' `k` becomes its key (the conversation's own key moves to `tk`)
      *   3. labels, then search text (which includes the label)
      *   4. first-seen times and the by-conversation index
+     *   5. reactions: matched to their messages and counted as events (spec 027)
      * `owners`: { [app id]: { name } }. `people`: saved links, Map(person key -> { key, name, threads }).
      */
     rederive({ owners, people }) {
-      for (const m of D.msgs) if (hasOwner(m.s)) m.o = m.sn === owners[m.s].name || isDefaultOwner(m.s, m.sn) ? 1 : 0;
+      for (const list of [D.msgs, D.reactionTexts]) {
+        for (const m of list) if (hasOwner(m.s)) m.o = m.sn === owners[m.s].name || isDefaultOwner(m.s, m.sn) ? 1 : 0;
+      }
 
       for (const [k, c] of D.contacts) if (c.person) D.contacts.delete(k);
       const counts = D.threadCounts();
@@ -300,6 +315,7 @@ function createDataset() {
       };
       for (const m of D.msgs) relink(m);
       for (const c of D.calls) relink(c);
+      for (const x of D.reactionTexts) relink(x);
 
       for (const c of D.contacts.values()) c.label = contactLabel(c);
       for (const c of D.contacts.values()) c.search = D.searchText(c, owners);
@@ -314,6 +330,10 @@ function createDataset() {
         }
         list.push(m);
       }
+
+      const rx = buildReactions(D, owners);
+      D.reactionEvents = rx.events;
+      D.textRx = rx.chips;
       D.version++;
     },
   };
