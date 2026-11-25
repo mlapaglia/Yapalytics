@@ -53,8 +53,8 @@ function renderReactWho(R, A) {
   }
   const rate = (x) => x.toFixed(1);
   box.innerHTML = html`<div class="table-wrap"><table class="vs react-who">
-    <thead><tr><th></th><th scope="col" title="Their reactions per 100 of your messages">They react</th><th scope="col" title="Your reactions per 100 of their messages">You react</th></tr></thead>
-    <tbody>${rows.map((r) => html`<tr data-key="${r.k}"><th scope="row">${labelFor(r.k)}</th><td title="${fmtNum(r.them)} reactions">${rate(r.themRate)}</td><td title="${fmtNum(r.you)} reactions">${rate(r.youRate)}</td></tr>`)}</tbody>
+    <thead><tr><th></th><th scope="col" title="Their reactions on your messages, per 100 of your messages">They react</th><th scope="col" title="Your reactions on their messages, per 100 of their messages">You react</th></tr></thead>
+    <tbody>${rows.map((r) => html`<tr data-key="${r.k}"><th scope="row"><button type="button" class="react-who-name" title="Open the profile">${labelFor(r.k)}</button></th><td title="${fmtNum(r.them)} reactions">${rate(r.themRate)}</td><td title="${fmtNum(r.you)} reactions">${rate(r.youRate)}</td></tr>`)}</tbody>
   </table></div>`;
 }
 
@@ -103,7 +103,8 @@ Panels.register({
       const b = e.target.closest('[data-read-day]');
       if (!b) return;
       const li = b.closest('li');
-      readDay(dayToTs(+li.dataset.day), { contact: View.filter.contact === 'all' ? li.dataset.contact : null, clearMood: true });
+      // A search or mood pick from before could hide the message, so both are cleared.
+      readDay(dayToTs(+li.dataset.day), { contact: View.filter.contact === 'all' ? li.dataset.contact : null, clearMood: true, clearSearch: true });
     });
   },
 });

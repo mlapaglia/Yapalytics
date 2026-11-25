@@ -66,7 +66,7 @@ messages.
   | `Laughed at` | 😂 |
   | `Emphasized` / `Emphasised` | ‼️ |
   | `Questioned` | ❓ |
-  | `Reacted X to`, `Reacted with X to`, `X to` | X |
+  | `Reacted X to`, `Reacted with X to`, `X to` (X may be a keycap like 1️⃣) | X |
   | `Removed a heart / like / dislike / laugh / exclamation / question mark from` | ❤️ 👍 👎 😂 ‼️ ❓, as a removal |
   | `Removed X from` | X, as a removal |
 
@@ -77,8 +77,10 @@ messages.
   is also on the message itself, so the text stays only in the loading screen's total.
 - **R3** Apps that store reactions on the message also keep each person's reaction
   time when the export has one: Instagram and Messenger `reactions[].timestamp`
-  (seconds), Telegram `recent[].date`. Google Chat exports give no time. Everything
-  else about these reactions is as spec 004 R6, R7, R9 and R10 say.
+  (seconds), Telegram `recent[].date`. Google Chat exports give no time. When two
+  overlapping exports give one reaction different times, the earliest is kept, whichever
+  was loaded first. Everything else about these reactions is as spec 004 R6, R7, R9 and
+  R10 say.
 - **R4** iMessage tapbacks (`Tapbacks:` followed by indented `Loved by Alex` lines) are
   read as reactions on the message above them, named "You" when the name is the
   iMessage owner. imessage-exporter writes `Loved`, `Liked`, `Disliked`, `Laughed`,
@@ -106,7 +108,8 @@ messages.
   the same reactor on a target they already reacted to replaces the earlier one, but
   the time to react stays the time of the first.
 - **R8** A matched reaction text shows under its target in Messages as a chip, like
-  other reactions (spec 004 R6). An unmatched one counts in totals and emoji but has no
+  other reactions (spec 004 R6). A group reactor is named by their own conversation, or
+  their name or number when there isn't one; never by the group. An unmatched one counts in totals and emoji but has no
   time to react and doesn't show in Messages.
 
 ### What counts
@@ -150,21 +153,22 @@ reactions in this selection".
   own-message reactions ("Own messages"), and the share that are reactions instead of a
   reply, as two paired bars. Only a reaction with a time and a known reactor can be
   told to be instead of a reply; the share is of those.
-- **R15** **Who reacts the most**: per conversation, reactions they gave and you gave,
-  each per 100 messages from the other side, for the top 10 by reactions. Group chats
-  are one row each. A row needs at least 50 messages from each side. Clicking a row
-  opens that conversation's profile.
+- **R15** **Who reacts the most**: per conversation, the reactions they put on your
+  messages and you put on theirs, each per 100 messages from the other side, for the
+  top 10 by reactions. Reactions on someone's own message, or between others in a group,
+  don't count here. Group chats are one row each. A row needs at least 50 messages from
+  each side. Each row's name is a button that opens that conversation's profile.
 - **R16** **Most-reacted messages**: the 5 messages with the most reactions, each with
   its sender, where it was (as the word tracker says it: "to Alex", "in" a group), date,
   reaction chips and a **Read →** button that opens that day in Messages (as Unusual
-  days does). A message with no text shows its kind of file. The text shows only in
+  days does), clearing a search and a mood pick that could hide the message. A message with no text shows its kind of file. The text shows only in
   this card, which is on the page like the message list.
 
 ### Highlights
 
 - **R17** Highlights, each only when it holds:
-  - "Alex reacts to 1 in 4 of your messages": the top row of R15 at 20 or more per
-    100.
+  - "Alex reacts to 1 in 4 of your messages": the R15 row whose reactions are on the
+    largest share of your messages, counting each message once, at 20% or more.
   - "You react in a median of 45 seconds, Alex in 3 hours": both medians from R13, at
     least 4× apart.
   - "You've reacted to your own messages 37 times": at least 10.

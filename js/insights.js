@@ -552,11 +552,11 @@ function reactionHighlights(A, R, { add, person, single, rows }) {
   const one = single && rows[0] && !rows[0].group ? rows[0].k : null;
   const them = (cap) => (one ? person(one) : cap ? 'Others' : 'others');
 
-  // Who reacts to you the most, per 100 of your messages
-  const who = reactWhoRows(R, A).filter((r) => r.themRate >= 20).sort((a, b) => b.themRate - a.themRate)[0];
+  // Who reacts to the most of your messages (each message once; not their own, not others')
+  const who = reactWhoRows(R, A).filter((r) => r.themShare >= 0.2).sort((a, b) => b.themShare - a.themShare)[0];
   if (who) {
-    const every = Math.max(1, Math.round(100 / who.themRate));
-    add('reactsMost', 24 + Math.min(10, who.themRate / 5), '💞', every === 1
+    const every = Math.max(1, Math.round(1 / who.themShare));
+    add('reactsMost', 24 + Math.min(10, who.themShare * 20), '💞', every === 1
       ? [person(who.k), ' reacts to ', { b: 'almost every one' }, ' of your messages.']
       : [person(who.k), ' reacts to ', { b: `1 in ${every}` }, ' of your messages.']);
   }

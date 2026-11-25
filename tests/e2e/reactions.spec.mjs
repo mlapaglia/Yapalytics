@@ -25,6 +25,10 @@ test.describe('spec 027 reactions', () => {
       { ...alex, at: at(1), sent: true, body: 'Loved “big news”' },
       { ...alex, at: new Date(Date.UTC(2024, 2, 5, 9)).toISOString(), body: 'later' },
     ])]);
+    // A search from before that the message doesn't match
+    await openTab(page, 'sec-messages');
+    await page.fill('#search', 'later');
+    await expect(page.locator('#messages .msg')).toHaveCount(1);
     await openTab(page, 'sec-mood');
     await scrollTo(page, '#reactTopCard');
     const row = page.locator('#reactTop li');
@@ -34,6 +38,18 @@ test.describe('spec 027 reactions', () => {
     await expect(page.locator('#tab-sec-messages')).toHaveAttribute('aria-selected', 'true');
     const f = await inApp(page, (app) => app.filter);
     expect([f.from, f.to]).toEqual([Date.UTC(2024, 2, 1), Date.UTC(2024, 2, 2) - 1]);
+    await expect(page.locator('#search')).toHaveValue('');
+    await expect(page.locator('#messages .msg', { hasText: 'big news' })).toBeVisible();
+  });
+
+  test('AC14: Who reacts the most opens a profile from the keyboard', async ({ page }) => {
+    await loadDemo(page);
+    await openTab(page, 'sec-mood');
+    await scrollTo(page, '#reactWhoCard');
+    const name = page.locator('#reactWho .react-who-name').first();
+    await name.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('dialog.profile[open]').first()).toBeVisible();
   });
 
   test.describe('with the demo', () => {

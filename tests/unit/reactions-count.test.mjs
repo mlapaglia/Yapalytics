@@ -9,11 +9,11 @@ const lib = messageLib();
 const {
   createDataset, selectReactions, aggregateReactions, aggregateMessages, aggregateContent, emojiOption, emojiTrendWithReactions,
   convoEmojiWithReactions, withReactionEmoji, signatureEmoji, emojiTotal, reactWhoRows, reactionHighlights, highlightText,
-  summaryStats, statsTables, REACT_BINS,
+  summaryStats, statsTables, REACT_BINS, mergeReactions,
 } = loadApp([
   'createDataset', 'selectReactions', 'aggregateReactions', 'aggregateMessages', 'aggregateContent', 'emojiOption', 'emojiTrendWithReactions',
   'convoEmojiWithReactions', 'withReactionEmoji', 'signatureEmoji', 'emojiTotal', 'reactWhoRows', 'reactionHighlights', 'highlightText',
-  'summaryStats', 'statsTables', 'REACT_BINS',
+  'summaryStats', 'statsTables', 'REACT_BINS', 'mergeReactions',
 ]);
 const ui = new Proxy({}, { get: (_, k) => (k === 'series' || k === 'heat' ? Array(8).fill('#888') : '#888') });
 
@@ -56,6 +56,8 @@ describe('spec 027 reading reactions', () => {
       ['Removed a question mark from “x”', { r: '❓', q: 'x', rm: true }],
       ['Removed 😂 from “x”', { r: '😂', q: 'x', rm: true }],
       ['Reacted :party_blob: to “x”', { r: ':party_blob:', q: 'x' }],
+      ['Reacted with :party_blob: to “x”', { r: ':party_blob:', q: 'x' }],
+      ['1️⃣ to “x”', { r: '1️⃣', q: 'x' }],
     ];
     for (const [body, want] of cases) assert.deepEqual(lib.reactionOf(body), want, body);
     assert.equal(lib.reactionOf('Loved the movie last night'), null);
@@ -85,6 +87,12 @@ describe('spec 027 reading reactions', () => {
     const tg = loaded([{ ...sms(0, 0, 'hi'), s: 4, sn: 'Mila', k: 'tg:1', rx: [{ r: '👍', c: 1, n: ['Jamie'], at: [T0 + 5 * MIN] }] }], { 4: { name: 'Jamie' } });
     assert.deepEqual(tg.reactionEvents.map((e) => [e.you, e.lag]), [[1, 5 * MIN]]);
 
+    // Two exports giving one reaction different times keep the earliest, in either order
+    const late = [{ r: '❤', c: 1, n: ['Alex'], at: [9000] }], early = [{ r: '❤', c: 1, n: ['Alex'], at: [5000] }];
+    assert.deepEqual(mergeReactions(late, early)[0].at, [5000]);
+    assert.deepEqual(mergeReactions(early, late)[0].at, [5000]);
+    assert.deepEqual(mergeReactions([{ r: '❤', c: 1, n: ['Alex'] }], late)[0].at, [9000], 'an unknown time is filled');
+
     // Google Chat: reactors, no times
     const chat = loaded([{ ...sms(0, 1, 'hi'), s: 1, k: 'gc:dm', rx: [{ r: '👍', c: 1, n: ['Alex'] }] }]);
     const R = counted(chat);
@@ -109,14 +117,22 @@ describe('spec 027 reading reactions', () => {
       'Tapbacks:',
       '    Laughed by Alex',
       '',
+      'May 17, 2022  5:33:00 PM',
+      'Alex',
+      'count off',
+      'Tapbacks:',
+      '    1️⃣ by Sam',
+      '    Loved by Me',
+      '',
     ].join('\n');
     const out = await runParser('imessage.js', 'iMessageParserWorker', { files: [new File([text], 'Alex.txt', { type: 'text/plain' })] });
     assert.deepEqual(out.msgs.map((m) => [m.b, m.rx]), [
       ['Hello world', [{ r: '❤️', c: 1, n: ['Me'] }, { r: '😂', c: 1, n: ['Sam'] }]],
       ['hi', [{ r: '😂', c: 1, n: ['Alex'] }]],
+      ['count off', [{ r: '1️⃣', c: 1, n: ['Sam'] }, { r: '❤️', c: 1, n: ['Me'] }]],
     ]);
     const D = loaded(out.msgs, { 3: { name: 'Me' } });
-    assert.deepEqual(D.reactionEvents.map((e) => [e.r, e.you, e.own]), [['❤️', 1, false], ['😂', 0, false], ['😂', 0, false]]);
+    assert.deepEqual(D.reactionEvents.map((e) => [e.r, e.you, e.own]), [['❤️', 1, false], ['😂', 0, false], ['😂', 0, false], ['1️⃣', 0, false], ['❤️', 1, false]]);
   });
 });
 
@@ -169,6 +185,10 @@ describe('spec 027 matching reaction texts', () => {
     const g = (min, sk, body) => ({ ...makeMessage(lib, { at: at(min), o: 0, k: 'g:+1555~+1666', body, m: 1 }), sk });
     const group = loaded([g(0, '+1555', 'from 1555'), g(1, '+1666', 'from 1666'), g(2, '+1555', 'Liked “from 1555”'), g(3, '+1555', 'Liked “from 1666”')]);
     assert.deepEqual(group.reactionEvents.map((e) => e.own), [true, false]);
+    // R8: a group reactor with no conversation of their own is named by their number, not the group
+    group.addContacts([{ key: 'g:+1555~+1666', name: 'Book Club', addr: '+1555~+1666', group: true, s: 0, lastT: 0, members: [] }]);
+    group.rederive({ owners: {}, people: new Map() });
+    assert.deepEqual(group.textRx.get(group.msgs[1]), [{ r: '👍', c: 1, n: ['+1555'] }]);
   });
 });
 
@@ -190,6 +210,17 @@ describe('spec 027 what counts', () => {
     const heart = (opt) => Object.fromEntries(opt.series.map((s) => [s.name, s.data[opt.yAxis.data.indexOf('❤️')]]));
     assert.deepEqual(heart(emojiOption(ui, A, 20, R).opt), { 'You typed': 2, 'You reacted': 3, 'They typed': 0, 'They reacted': 0 });
     assert.deepEqual(heart(emojiOption(ui, A, 20, null).opt), { Sent: 2, Received: 0 });
+  });
+
+  it('AC11: a typed ❤ and a reacted ❤️ are one emoji', () => {
+    const D = loaded([
+      sms(0, 1, '😂😂😂😂'), sms(1, 1, 'love ❤'), sms(2, 1, 'you ❤'),
+      sms(3, 0, 'a'), sms(4, 1, 'Loved “a”'), sms(5, 0, 'b'), sms(6, 1, 'Loved “b”'), sms(7, 0, 'c'), sms(8, 1, 'Loved “c”'),
+    ]);
+    const opt = emojiOption(ui, aggregateMessages(D.msgs), 20, counted(D)).opt;
+    assert.equal(opt.yAxis.data[0], '❤️');
+    assert.deepEqual(opt.series.map((s) => s.data[0]), [2, 3, 0, 0]);
+    assert.equal(summaryStats(D.msgs, aggregateMessages(D.msgs), { reactions: counted(D) }).emoji[0], '❤️');
   });
 
   it('AC11a: Emoji over time, the summary image and signature emoji count reactions too', () => {
@@ -236,11 +267,22 @@ describe('spec 027 the cards', () => {
   });
 
   it('AC14: Who reacts the most ranks by reactions, per 100 messages from the other side, from 50 messages each', () => {
-    const R = { byConvo: new Map([['a', { n: [10, 5] }], ['b', { n: [30, 20] }], ['c', { n: [90, 90] }]]) };
+    const convo = (n, onOther, reacted) => ({ n, onOther, reacted });
+    const R = { byConvo: new Map([['a', convo([10, 5], [10, 5], [8, 5])], ['b', convo([30, 20], [30, 20], [20, 20])], ['c', convo([90, 90], [90, 90], [90, 90])]]) };
     const A = { byContact: new Map([['a', { n: [100, 50] }], ['b', { n: [80, 200] }], ['c', { n: [49, 300] }]]) };
     const rows = reactWhoRows(R, A);
     assert.deepEqual(rows.map((r) => r.k), ['b', 'a']);
-    assert.deepEqual([rows[0].themRate, rows[0].youRate], [15, 25]);
+    assert.deepEqual([rows[0].themRate, rows[0].youRate, rows[0].themShare], [15, 25, 0.1]);
+  });
+
+  it('AC14: only reactions on the other side’s messages count, each message once for the share', () => {
+    // Alex hearts all 3 of their own messages, and one of yours twice (❤️ then 😂 from a second app).
+    const recs = [];
+    for (let i = 0; i < 60; i++) recs.push(sms(i * 2, 0, `alex ${i}`), sms(i * 2 + 1, 1, `you ${i}`));
+    recs.push(sms(200, 0, 'Loved “alex 1”'), sms(201, 0, 'Loved “alex 2”'), sms(202, 0, 'Loved “alex 3”'), sms(203, 0, 'Loved “you 50”'));
+    const D = loaded(recs);
+    const [row] = reactWhoRows(counted(D), aggregateMessages(D.msgs));
+    assert.deepEqual([row.them, row.themShare], [1, 1 / 60]);
   });
 
   it('AC15: the most-reacted messages come first', () => {
@@ -262,7 +304,7 @@ describe('spec 027 the cards', () => {
       });
       return Object.fromEntries(out.map((h) => [h.kind, highlightText(h)]));
     };
-    const who = (them) => fire({ byConvo: new Map([['Alex', { n: [them, 0] }]]) }, { byContact: new Map([['Alex', { n: [100, 100] }]]) });
+    const who = (them) => fire({ byConvo: new Map([['Alex', { n: [them, 0], onOther: [them, 0], reacted: [them, 0] }]]) }, { byContact: new Map([['Alex', { n: [100, 100] }]]) });
     assert.equal(who(20).reactsMost, 'Alex reacts to 1 in 5 of your messages.');
     assert.equal(who(19).reactsMost, undefined);
     assert.equal(fire({ median: [4 * 60e3, 60e3] }).reactSpeed, 'You react in a median of 1m, others in 4m.');

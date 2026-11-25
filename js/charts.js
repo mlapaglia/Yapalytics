@@ -570,9 +570,10 @@ function emojiOption(ui, A, limit = 20, R = null) {
 
 function emojiWithReactionsOption(ui, A, limit, R) {
   const none = [0, 0];
+  const typedFreq = emojiPairs(A.emojiFreq); // keyed like the reactions (❤ is ❤️)
   const rows = [...withReactionEmoji(A.emojiFreq, R).entries()]
     .map(([e, v]) => {
-      const typed = A.emojiFreq.get(e) || none, reacted = R.perEmoji.get(e) || none;
+      const typed = typedFreq.get(e) || none, reacted = R.perEmoji.get(e) || none;
       return { e, ts: typed[1], rs: reacted[1], tr: typed[0], rr: reacted[0], t: v[0] + v[1] };
     })
     .sort((a, b) => b.t - a.t)

@@ -72,7 +72,7 @@ function iMessageParserWorker(self, lib) {
   }
 
   // A tapback under "Tapbacks:" (spec 027 R4): "    Loved by Alex", "    😂 by Alex".
-  const TAPBACK_RE = /^ {4}(Loved|Liked|Disliked|Laughed(?: at)?|Emphasi[sz]ed|Questioned|[^\p{L}\p{N}\s]{1,12}) by (.+?)\s*$/u;
+  const TAPBACK_RE = /^ {4}(Loved|Liked|Disliked|Laughed(?: at)?|Emphasi[sz]ed|Questioned|(?:[#*0-9]\uFE0F?\u20E3|[^\p{L}\p{N}\s]){1,12}) by (.+?)\s*$/u; // 1️⃣ too
   const TAPBACK_EMOJI = { Loved: '❤️', Liked: '👍', Disliked: '👎', Laughed: '😂', 'Laughed at': '😂', Emphasized: '‼️', Emphasised: '‼️', Questioned: '❓' };
 
   /** Text, attachment kinds, attachment paths and tapbacks ({ r, who }) of one message body. */

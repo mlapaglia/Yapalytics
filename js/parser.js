@@ -68,7 +68,8 @@ function messageLib(vader) {
   // text in isolates) and no-break spaces between them, so the check reads the start of
   // the message with those marks dropped and any run of spaces as one plain space. A quote
   // can run on, but a reaction to media must be all there is, past those 200 characters too.
-  const REACT_VERB = String.raw`(?:Liked|Loved|Disliked|Laughed at|Emphasi[sz]ed|Questioned|Reacted .{1,16}? to|Removed .{1,40}? from|[^\p{L}\p{N}\s]{1,12} to)`;
+  const REACT_SYMBOL = String.raw`(?:[#*0-9]\uFE0F?\u20E3|[^\p{L}\p{N}\s])`; // a keycap (1️⃣) is one symbol
+  const REACT_VERB = String.raw`(?:Liked|Loved|Disliked|Laughed at|Emphasi[sz]ed|Questioned|Reacted (?:with )?.{1,16}? to|Removed .{1,40}? from|${REACT_SYMBOL}{1,12} to)`;
   const REACT_MEDIA = String.raw`an? (?:image|photo|picture|movie|video|GIF|gif|sticker|attachment|audio message|voice message|file|location|contact|link)[.!]?$`;
   const REACTION_QUOTE_RE = new RegExp(String.raw`^${REACT_VERB} [“"‘'„‚«‹「]`, 'u');
   const REACTION_MEDIA_RE = new RegExp(String.raw`^${REACT_VERB} ${REACT_MEDIA}`, 'u');
@@ -89,7 +90,7 @@ function messageLib(vader) {
     image: 'ph', photo: 'ph', picture: 'ph', movie: 'vd', video: 'vd', GIF: 'gf', gif: 'gf', 'audio message': 'au', 'voice message': 'au',
     sticker: 'any', attachment: 'any', file: 'any', location: 'any', contact: 'any', link: 'link',
   };
-  const REACT_PARTS_RE = /^(?:(Liked|Loved|Disliked|Laughed at|Emphasi[sz]ed|Questioned)|Reacted (?:with )?(.{1,16}?) to|Removed (.{1,40}?) from|([^\p{L}\p{N}\s]{1,12}) to) (.*)$/su;
+  const REACT_PARTS_RE = new RegExp(String.raw`^(?:(Liked|Loved|Disliked|Laughed at|Emphasi[sz]ed|Questioned)|Reacted (?:with )?(.{1,16}?) to|Removed (.{1,40}?) from|(${REACT_SYMBOL}{1,12}) to) (.*)$`, 'su');
   const REACT_MEDIA_PART_RE = new RegExp(String.raw`^${REACT_MEDIA}`, 'u');
   const OPEN_QUOTE_RE = /^[“"‘'„‚«‹「]\s?/u;
   const CLOSE_QUOTE_RE = /\s?[”"’'“‘»›」]$/u;
@@ -305,7 +306,8 @@ function mergeReactions(a, b) {
       if (j < 0) {
         x.n.push(n);
         if (t || x.at) (x.at || (x.at = x.n.slice(0, -1).map(() => null))).push(t);
-      } else if (t && !(x.at && x.at[j])) {
+      } else if (t && !(x.at && x.at[j] && x.at[j] <= t)) {
+        // Two exports with different times for one reaction: the earliest, in either order.
         if (!x.at) x.at = x.n.map(() => null);
         x.at[j] = t;
       }

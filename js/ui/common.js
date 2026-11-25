@@ -78,13 +78,19 @@ function kpi(label, value, sub = '', title = '') {
  * Show one calendar day in the message list. `contact` also focuses a conversation;
  * `clearMood` drops the mood chart's pick.
  */
-function readDay(dayStart, { contact = null, clearMood = false } = {}) {
+function readDay(dayStart, { contact = null, clearMood = false, clearSearch = false } = {}) {
   const d = new Date(dayStart);
   const filter = { from: dayStart, to: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() - 1 };
   if (contact) {
     filter.contact = contact;
     setPickerValue($('#contactSel'), contact);
   }
-  View.set(clearMood ? { filter, browser: { mood: null } } : { filter });
+  const browser = {};
+  if (clearMood) browser.mood = null;
+  if (clearSearch) {
+    browser.query = '';
+    $('#search').value = '';
+  }
+  View.set(Object.keys(browser).length ? { filter, browser } : { filter });
   Tabs.select('sec-messages');
 }

@@ -168,7 +168,11 @@ function buildReactions(D, owners) {
   for (const [m, per] of current) {
     const list = [];
     for (const e of per.values()) {
-      const name = e.you ? 'You' : (D.contacts.get(e.who) || D.contacts.get(m.tk || m.k) || {}).label || e.who;
+      // A group reactor is named by their own conversation, else their name or number; in a
+      // 1-on-1 it's the other side, named like the conversation.
+      const own = D.contacts.get(e.who);
+      const convo = isGroupKey(m.tk || m.k) ? null : D.contacts.get(m.tk || m.k);
+      const name = e.you ? 'You' : (own || convo || {}).label || e.who;
       const chip = list.find((c) => c.r === e.r);
       if (chip) { chip.c++; chip.n.push(name); } else list.push({ r: e.r, c: 1, n: [name] });
     }
@@ -267,9 +271,14 @@ function aggregateReactions(events, { gap = Infinity, byKey = new Map() } = {}) 
     if (!em) R.emojiMonths.set(e.mo, (em = new Map()));
     em.set(e.r, (em.get(e.r) || 0) + 1);
     let bc = R.byConvo.get(e.m.k);
-    if (!bc) R.byConvo.set(e.m.k, (bc = { n: [0, 0], emoji: new Map() }));
+    if (!bc) R.byConvo.set(e.m.k, (bc = { n: [0, 0], emoji: new Map(), onOther: [0, 0], reacted: [new Set(), new Set()] }));
     bc.n[o]++;
     bc.emoji.set(e.r, (bc.emoji.get(e.r) || 0) + 1);
+    // On the other side's message: them on yours, you on theirs (not their own, not between others)
+    if (e.target && e.target.o === 1 - o) {
+      bc.onOther[o]++;
+      bc.reacted[o].add(e.target);
+    }
     if (e.own) R.own[o]++;
     if (e.text && !e.target) R.unmatched++;
     if (e.lag != null) {
@@ -290,6 +299,7 @@ function aggregateReactions(events, { gap = Infinity, byKey = new Map() } = {}) 
     }
   }
   for (const o of [0, 1]) if (R.lags[o].length >= REACT_MEDIAN_MIN) R.median[o] = median(R.lags[o]);
+  for (const bc of R.byConvo.values()) bc.reacted = bc.reacted.map((set) => set.size);
   R.top = [...byTarget]
     .sort((a, b) => b[1].length - a[1].length || b[0].t - a[0].t)
     .slice(0, REACT_TOP)
@@ -305,25 +315,49 @@ function aggregateReactions(events, { gap = Infinity, byKey = new Map() } = {}) 
 }
 
 /**
- * R15: per conversation, the reactions each side gave per 100 messages from the other,
- * for conversations with at least REACT_WHO_MIN messages from each side.
+ * R15: per conversation, the reactions each side put on the other's messages, per 100
+ * messages from the other, for conversations with at least REACT_WHO_MIN messages from
+ * each side. Reactions on someone's own message, or between others in a group, don't
+ * count here. `themShare` is the share of your messages they reacted to at all (R17).
  */
 function reactWhoRows(R, A) {
   const rows = [];
   for (const [k, c] of R.byConvo) {
     const bc = A.byContact.get(k);
     if (!bc || bc.n[0] < REACT_WHO_MIN || bc.n[1] < REACT_WHO_MIN) continue;
-    rows.push({ k, n: c.n[0] + c.n[1], them: c.n[0], you: c.n[1], themRate: (c.n[0] / bc.n[1]) * 100, youRate: (c.n[1] / bc.n[0]) * 100 });
+    const [them, you] = c.onOther || [0, 0];
+    const reacted = c.reacted || [0, 0];
+    rows.push({ k, n: c.n[0] + c.n[1], them, you, themRate: (them / bc.n[1]) * 100, youRate: (you / bc.n[0]) * 100, themShare: reacted[0] / bc.n[1] });
   }
   return rows.sort((a, b) => b.n - a.n).slice(0, REACT_WHO_ROWS);
 }
 
 // ---------------------------------------------------------------- emoji with reactions (R11a)
 
+/** Emoji counts (emoji -> [them, you]) with one key per emoji: a typed ❤ joins ❤️, as reactions do. */
+function emojiPairs(freq) {
+  const out = new Map();
+  for (const [e, v] of freq) {
+    const k = reactionEmoji(e);
+    const x = out.get(k);
+    if (x) { x[0] += v[0]; x[1] += v[1]; } else out.set(k, [v[0], v[1]]);
+  }
+  return out;
+}
+
+/** The same for emoji -> count. */
+function emojiCounts(map) {
+  const out = new Map();
+  for (const [e, n] of map) {
+    const k = reactionEmoji(e);
+    out.set(k, (out.get(k) || 0) + n);
+  }
+  return out;
+}
+
 /** Typed emoji counts (emoji -> [them, you]) plus the reactions in `R`, as a new map. */
 function withReactionEmoji(freq, R) {
-  const out = new Map();
-  for (const [e, v] of freq) out.set(e, [v[0], v[1]]);
+  const out = emojiPairs(freq);
   if (R) {
     for (const [e, v] of R.perEmoji) {
       let x = out.get(e);
@@ -337,7 +371,7 @@ function withReactionEmoji(freq, R) {
 
 /** A conversation's typed emoji (`bc.emoji`) plus its reactions, shaped like `bc` for signatureEmoji. */
 function convoEmojiWithReactions(bc, R, k) {
-  const emoji = new Map(bc.emoji);
+  const emoji = emojiCounts(bc.emoji);
   const c = R && R.byConvo.get(k);
   if (c) for (const [e, n] of c.emoji) emoji.set(e, (emoji.get(e) || 0) + n);
   return { emoji };
@@ -346,8 +380,8 @@ function convoEmojiWithReactions(bc, R, k) {
 /** Emoji over time with reactions: aggregateContent's emojiMonths and emojiTotals plus `R`'s. */
 function emojiTrendWithReactions(C, R) {
   const emojiMonths = new Map();
-  for (const [mo, m] of C.emojiMonths) emojiMonths.set(mo, new Map(m));
-  const emojiTotals = new Map(C.emojiTotals);
+  for (const [mo, m] of C.emojiMonths) emojiMonths.set(mo, emojiCounts(m));
+  const emojiTotals = emojiCounts(C.emojiTotals);
   if (R) {
     for (const [mo, m] of R.emojiMonths) {
       let x = emojiMonths.get(mo);
