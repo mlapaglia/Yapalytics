@@ -66,12 +66,20 @@ function messageLib(vader) {
   // file, so those must be the whole message.
   // Phones can put invisible direction marks around the parts (Android wraps the quoted
   // text in isolates) and no-break spaces between them, so the check reads the start of
-  // the message with those marks dropped and any run of spaces as one plain space.
+  // the message with those marks dropped and any run of spaces as one plain space. A quote
+  // can run on, but a reaction to media must be all there is, past those 200 characters too.
   const REACT_VERB = String.raw`(?:Liked|Loved|Disliked|Laughed at|Emphasi[sz]ed|Questioned|Reacted .{1,16}? to|Removed .{1,40}? from|[^\p{L}\p{N}\s]{1,12} to)`;
   const REACT_MEDIA = String.raw`an? (?:image|photo|picture|movie|video|GIF|gif|sticker|attachment|audio message|voice message|file|location|contact|link)[.!]?$`;
-  const REACTION_RE = new RegExp(String.raw`^${REACT_VERB} (?:[“"‘'„‚«‹「]|${REACT_MEDIA})`, 'u');
+  const REACTION_QUOTE_RE = new RegExp(String.raw`^${REACT_VERB} [“"‘'„‚«‹「]`, 'u');
+  const REACTION_MEDIA_RE = new RegExp(String.raw`^${REACT_VERB} ${REACT_MEDIA}`, 'u');
   const REACT_MARKS_RE = /[\u200b\u200c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g; // not U+200D, which joins emoji
-  const isReactionText = (body) => REACTION_RE.test(body.slice(0, 200).replace(REACT_MARKS_RE, '').replace(/\s+/g, ' ').trim());
+  const REACT_HEAD = 200;
+  const tidyReaction = (s) => s.replace(REACT_MARKS_RE, '').replace(/\s+/g, ' ').trim();
+  function isReactionText(body) {
+    const head = tidyReaction(body.slice(0, REACT_HEAD));
+    if (REACTION_QUOTE_RE.test(head)) return true;
+    return REACTION_MEDIA_RE.test(head) && (body.length <= REACT_HEAD || !tidyReaction(body.slice(REACT_HEAD)));
+  }
   const UPPER_RE = /\p{Lu}/u;
   const LOWER_RE = /\p{Ll}/u;
 

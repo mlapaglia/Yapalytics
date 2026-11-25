@@ -48,6 +48,9 @@ describe('reactions sent as texts', () => {
     'guillemets': '❤️ to « see you soon »',
     'a trailing space after media': 'Loved an image ',
     'a family emoji (joined with U+200D)': '👨‍👩‍👧‍👦 to “see you soon”',
+    'a quote longer than the part checked': `❤️ to “${'so much to say '.repeat(40)}”`,
+    'media, with spaces running past the part checked': `Loved an image${' '.repeat(300)}`,
+    'media, with marks and spaces past the part checked': `Loved an image${' \u200b'.repeat(150)}\u2069`,
   };
   for (const [what, body] of Object.entries(reactions)) {
     it(`detects ${what}`, () => assert.equal(isReaction(body), true, body));
@@ -68,6 +71,8 @@ describe('reactions sent as texts', () => {
     'emoji, a no-break space and "to" without a quote': '😂\u00a0to me that is funny',
     'a quote mid-sentence after a direction mark': '\u200eGoing to „the place“',
     'a guillemet quote mid-sentence': 'Il est allé to « the place »',
+    'media then text past the part checked': `Loved an image${' '.repeat(186)}but this is my own comment`,
+    'media then text far past the part checked': `Liked a photo${' '.repeat(400)}ok`,
   };
   for (const [what, body] of Object.entries(messages)) {
     it(`leaves ${what} as a message`, () => assert.equal(isReaction(body), false, body));
