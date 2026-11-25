@@ -19,27 +19,32 @@ function summarySpan(first, last) {
 /**
  * Messages per sender in one conversation (like senderBreakdown), top 5 rows with the
  * rest folded into "Everyone else". With names off, the others are "Person 1", "Person
- * 2"… by messages, and no name is looked up.
+ * 2"… by messages, and no name is looked up. Your messages are keyed apart from every
+ * sender name, so someone in a group chat who is called "You" stays someone else.
  */
+const SUMMARY_SELF = Symbol('you');
 function summarySenders(msgs, key, { names, senderLabel }) {
   const group = key.startsWith('g:');
   const byId = new Map();
   for (const m of msgs) {
-    const id = m.o ? 'You' : group ? m.sn || m.sk || '' : key;
+    const id = m.o ? SUMMARY_SELF : group ? m.sn || m.sk || '' : key;
     byId.set(id, (byId.get(id) || 0) + 1);
   }
   let rows;
   if (names) {
+    // Senders that share a label (linked people) are one row; you are always your own.
     const byLabel = new Map();
     for (const [id, n] of byId) {
-      const label = id === 'You' ? 'You' : id ? senderLabel(id) : 'Unknown sender';
-      byLabel.set(label, (byLabel.get(label) || 0) + n);
+      const label = id === SUMMARY_SELF ? 'You' : id ? senderLabel(id) : 'Unknown sender';
+      const slot = id === SUMMARY_SELF ? SUMMARY_SELF : label;
+      const row = byLabel.get(slot) || byLabel.set(slot, { label, n: 0 }).get(slot);
+      row.n += n;
     }
-    rows = [...byLabel].map(([label, n]) => ({ label, n }));
+    rows = [...byLabel.values()];
   } else {
     let rank = 0;
     rows = [...byId].sort((a, b) => b[1] - a[1]).map(([id, n]) => ({
-      label: id === 'You' ? 'You' : id ? `Person ${++rank}` : 'Unknown sender',
+      label: id === SUMMARY_SELF ? 'You' : id ? `Person ${++rank}` : 'Unknown sender',
       n,
     }));
   }

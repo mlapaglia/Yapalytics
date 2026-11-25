@@ -61,6 +61,15 @@ describe('spec 025 summary image', () => {
     assert.deepEqual(named.bars.map((b) => b.label).sort(), ['Jordan', 'Riley', 'You']);
   });
 
+  it('AC3: a group sender named "You" is a stand-in, not you, names on or off', () => {
+    const at = (h, o, extra = {}) => makeMessage(lib, { at: new Date(START + h * 3600e3).toISOString(), o, k: 'g:club', body: 'hi', ...extra });
+    const msgs = [at(0, 1), at(1, 0, { sn: 'You' })];
+    const off = stats(msgs, { contact: 'g:club', names: false, labelFor: noNames, senderLabel: noNames });
+    assert.deepEqual(off.bars.map((b) => [b.label, b.n]).sort(), [['Person 1', 1], ['You', 1]]);
+    const on = stats(msgs, { contact: 'g:club', names: true });
+    assert.deepEqual(on.bars.map((b) => [b.label, b.n]), [['You', 1], ['You', 1]]);
+  });
+
   it('AC4: no word or link site from the messages is in the summary, names on or off', () => {
     const msgs = history('zebracorn https://example.org/page 😂');
     for (const n of [false, true]) {
