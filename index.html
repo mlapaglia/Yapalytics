@@ -253,7 +253,7 @@
       </div>
       <button class="btn small" type="button" id="filesBtn" title="See the loaded files, add more, or leave some out">📁 Files</button>
     </div>
-    <p class="scope"><span id="scope"></span> <button class="btn small ghost scope-btn" id="profileBtn" type="button" hidden>View profile</button></p>
+    <p class="scope"><span id="scope"></span> <button class="btn small ghost scope-btn" id="profileBtn" type="button" hidden>View profile</button> <button class="btn small ghost scope-btn" id="exportBtn" type="button" title="Download the numbers behind the dashboard as CSV files">Export stats</button></p>
 
     <nav class="tabs" id="dashTabs" aria-label="Dashboard sections">
       <div class="tab-list" id="tabList" role="tablist"></div>
@@ -262,6 +262,7 @@
 
     <section class="dash-section" id="sec-glance" data-slug="overview" data-tab="Overview">
       <h2 class="section-title">Overview</h2>
+      <div class="glance-bar"><button class="btn small" id="summaryBtn" type="button" title="One picture of these numbers to save or post. Names are hidden unless you show them.">📸 Summary image</button></div>
       <div class="kpis" id="kpis" aria-label="Summary"></div>
       <div class="grid">
       <article class="card" id="highlightsCard">
@@ -468,6 +469,23 @@
       <article class="card">
         <header><div><h2>Texting habits</h2><p class="sub"><span id="habitsNote"></span> <button class="btn small ghost note-btn" type="button" data-settings>Change</button></p></div></header>
         <div class="chart" id="c-behavior"></div>
+      </article>
+      <article class="card" id="endingsCard">
+        <header><div><h2>How conversations end</h2><p class="sub"><span id="endingsNote"></span> <button class="btn small ghost note-btn" type="button" data-settings>Change</button></p></div></header>
+        <div class="chart" id="c-endings"></div>
+      </article>
+      <article class="card" id="questionRepliesCard">
+        <header><div><h2>Questions that got a reply</h2><p class="sub">Questions answered by the other side before the conversation ended (1-on-1 only)</p></div></header>
+        <div class="chart" id="c-questions"></div>
+      </article>
+      <article class="card" id="turnsCard">
+        <header><div><h2>Turn-taking</h2><p class="sub" id="turnsNote"></p></div></header>
+        <div class="chart" id="c-turns"></div>
+      </article>
+      <article class="card wide" id="styleCard">
+        <header><div><h2>Style match</h2><p class="sub" id="styleNote"></p></div></header>
+        <div class="chart" id="c-style"></div>
+        <div id="styleMarkers"></div>
       </article>
       </div>
     </section>
@@ -719,6 +737,19 @@
     <div id="profileBottom"></div>
   </dialog>
 
+  <dialog id="summaryDlg" class="profile summary-dlg" aria-labelledby="summaryTitle">
+    <button class="btn ghost icon profile-close" type="button" aria-label="Close">✕</button>
+    <header class="people-head">
+      <h2 id="summaryTitle">Summary image</h2>
+      <p class="sub">The numbers for what's picked on the dashboard. No message text, and people are numbered unless you show their names. It's made and saved on this device.</p>
+    </header>
+    <div class="wrapped"><canvas id="summaryCanvas" width="1080" height="1350" aria-label="Summary image preview"></canvas></div>
+    <div class="profile-actions summary-actions">
+      <label class="check"><input type="checkbox" id="summaryNames"> Show names</label>
+      <button class="btn" id="summarySave" type="button">Save PNG</button>
+    </div>
+  </dialog>
+
   <dialog id="peopleDlg" class="profile people-dlg" aria-labelledby="peopleTitle">
     <button class="btn ghost icon profile-close" type="button" aria-label="Close">✕</button>
     <header class="people-head">
@@ -789,6 +820,21 @@
     </footer>
   </dialog>
 
+  <dialog id="exportDlg" class="profile export-dlg" aria-labelledby="exportTitle">
+    <button class="btn ghost icon profile-close" type="button" aria-label="Close">✕</button>
+    <header class="people-head">
+      <h2 id="exportTitle">Export stats</h2>
+      <p class="sub" id="exportScope"></p>
+    </header>
+    <p class="sub export-note">The numbers behind the dashboard for this selection, as CSV files for a spreadsheet: counts, dates, reply times, emoji and app names. No message text. The files contain names, and phone numbers where there's no name. They stay on this device unless you send them somewhere.</p>
+    <label class="check"><input type="checkbox" id="exportAnon"> Replace names with Conversation 1, 2, …</label>
+    <ul class="export-list" id="exportList"></ul>
+    <footer class="people-foot">
+      <span class="sub" id="exportCount"></span>
+      <button class="btn small primary" type="button" id="exportAll">Download all (.zip)</button>
+    </footer>
+  </dialog>
+
   <div class="drop-overlay" aria-hidden="true"><div>Drop backup files to load them</div></div>
 
   <script src="js/vendor/vader.js"></script>
@@ -819,6 +865,7 @@
   <script src="js/files.js"></script>
   <script src="js/dataset.js"></script>
   <script src="js/panels.js"></script>
+  <script src="js/export.js"></script>
   <script src="js/ui/common.js"></script>
   <script src="js/ui/pickers.js"></script>
   <script src="js/ui/filters.js"></script>
@@ -828,7 +875,9 @@
   <script src="js/ui/owner-dialog.js"></script>
   <script src="js/ui/people-dialog.js"></script>
   <script src="js/ui/settings-dialog.js"></script>
+  <script src="js/ui/export-dialog.js"></script>
   <script src="js/ui/profile.js"></script>
+  <script src="js/ui/summary-dialog.js"></script>
   <script src="js/ui/theme.js"></script>
   <script src="js/panels/layout.js"></script>
   <script src="js/panels/overview.js"></script>
