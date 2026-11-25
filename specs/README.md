@@ -53,3 +53,4 @@ see, changes what data leaves the browser, or takes more than a day to build.
 | [016 A livelier loading screen](016-loading-screen.md) | Approved: built |
 | [017 How two people talk](017-conversation-dynamics.md) | Approved: built |
 | [025 Summary image](025-summary-card.md) | Draft: built, awaiting review |
+| [026 Exporting stats as CSV](026-stats-export.md) | Draft: built, awaiting review |

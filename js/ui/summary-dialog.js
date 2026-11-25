@@ -219,12 +219,7 @@ function summaryFileName(now = new Date()) {
 
 function saveSummary() {
   $('#summaryCanvas').toBlob((blob) => {
-    if (!blob) return;
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = summaryFileName();
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    if (blob) saveBlob(blob, summaryFileName());
   }, 'image/png');
 }
 
