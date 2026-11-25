@@ -80,6 +80,7 @@ const Select = {
   caches: {
     base: cache(), range: cache(), calls: cache(), agg: cache(), content: cache(), cross: cache(), docFreq: cache(),
     periods: cache(), compareRange: cache(), compareAgg: cache(),
+    rhythm: cache(), unusual: cache(),
   },
 
   baseDeps() {
@@ -151,6 +152,19 @@ const Select = {
   /** aggregateMessages over compareRange(). The date range's own is agg(). */
   compareAgg() {
     return this.caches.compareAgg.get([...this.compareDeps(), View.convoGap], () => aggregateMessages(this.compareRange(), View.convoGap));
+  },
+
+  /** Your day, by rhythm day, with the schedule and time away worked out from it (spec 020). */
+  rhythm() {
+    return this.caches.rhythm.get(this.rangeDeps(), () => {
+      const days = yourDays(this.range(), utcApps());
+      return { days, schedule: sleepSchedule(days), away: awayStretches(days) };
+    });
+  },
+
+  /** Days far busier or quieter than normal for a conversation (spec 020). */
+  unusual() {
+    return this.caches.unusual.get(this.rangeDeps(), () => unusualDays(this.range()));
   },
 
   /** How many conversations in the picked app use each word (for "What you talk about"). */
