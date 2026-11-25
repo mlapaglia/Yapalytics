@@ -352,6 +352,52 @@
       </div>
     </section>
 
+    <section class="dash-section" id="sec-compare" data-slug="compare" data-tab="Compare">
+      <h2 class="section-title">Compare</h2>
+      <div class="grid">
+      <article class="card wide" id="compareHead">
+        <header>
+          <div><h2>Two periods</h2><p class="sub" id="compareHeadline"></p></div>
+          <div class="seg" id="compareMode" role="group" aria-label="Compare with">
+            <button type="button" data-mode="before">The period before</button>
+            <button type="button" data-mode="year">A year earlier</button>
+            <button type="button" data-mode="custom">Custom</button>
+          </div>
+        </header>
+        <div class="compare-custom" id="compareCustom" hidden>
+          <span>Compare with</span>
+          <input type="date" id="cmpFrom" aria-label="Compare from date">
+          <span class="dash-sep">–</span>
+          <input type="date" id="cmpTo" aria-label="Compare to date">
+        </div>
+        <div class="compare-start" id="compareStart" hidden>
+          <p id="compareStartNote"></p>
+          <div class="compare-start-btns">
+            <button class="btn" type="button" data-compare-preset="90">Last 90 days vs the 90 before</button>
+            <button class="btn" type="button" data-compare-preset="365">Last 365 days vs the 365 before</button>
+            <button class="btn" type="button" data-compare-preset="ytd">This year so far vs the same days last year</button>
+          </div>
+        </div>
+      </article>
+      <article class="card wide" id="compareCard">
+        <header><div><h2>Headline numbers</h2><p class="sub">Each change goes from the earlier period to the date range. ▲ and ▼ only say which way it went.</p></div></header>
+        <div class="table-wrap"><table class="vs compare-table" id="compareRows"></table></div>
+      </article>
+      <article class="card wide" id="comparePeopleCard">
+        <header><div><h2>People</h2><p class="sub">Your busiest conversations in the date range, and who came and went. Click a name for their profile.</p></div></header>
+        <div class="table-wrap"><table class="vs compare-table" id="comparePeople"></table></div>
+        <div class="compare-lists" id="compareLists"></div>
+      </article>
+      <article class="card wide" id="compareWhenCard">
+        <header><div><h2>When you talk</h2><p class="sub">Each period's share of its messages by hour and by day of the week</p></div></header>
+        <div class="compare-when">
+          <div class="chart" id="c-cmp-hour"></div>
+          <div class="chart" id="c-cmp-dow"></div>
+        </div>
+      </article>
+      </div>
+    </section>
+
     <section class="dash-section" id="sec-people" data-slug="people" data-tab="People">
       <h2 class="section-title">People</h2>
       <div class="grid">
@@ -806,6 +852,7 @@
   <script src="js/demo.js"></script>
   <script src="js/load-stats.js"></script>
   <script src="js/analysis.js"></script>
+  <script src="js/compare.js"></script>
   <script src="js/insights.js"></script>
   <script src="js/crossapp.js"></script>
   <script src="js/select.js"></script>
@@ -835,6 +882,7 @@
   <script src="js/panels/layout.js"></script>
   <script src="js/panels/overview.js"></script>
   <script src="js/panels/activity.js"></script>
+  <script src="js/panels/compare.js"></script>
   <script src="js/panels/people.js"></script>
   <script src="js/panels/groups.js"></script>
   <script src="js/panels/replies.js"></script>

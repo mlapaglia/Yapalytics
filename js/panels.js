@@ -16,7 +16,7 @@
  * Topics: 'data' (a load, owners, links), 'selection' plus 'filter.contact',
  * 'filter.source', 'filter.groups' and 'filter.dates', 'gap', 'appsGap', 'theme',
  * 'scorer', 'aiScores', and one per panel control ('gran', 'leader', 'calendar', 'otd',
- * 'phrase', 'vocab', 'wrapped', 'browser').
+ * 'phrase', 'vocab', 'wrapped', 'browser', 'compare').
  */
 
 /** The theme's colours (charts.js readTheme), read again only after the theme changes. */
@@ -99,6 +99,7 @@ function emptyOption(ui, text) {
 const VIEW_TOPICS = {
   convoGap: ['gap'], appsGap: ['appsGap'], gran: ['gran'], moodScorer: ['scorer'], phrase: ['phrase'], phraseGran: ['phrase'],
   vocabMo: ['vocab'], calYear: ['calendar'], wrapYear: ['wrapped'], otd: ['otd'], leader: ['leader'], browser: ['browser'],
+  compare: ['compare'],
 };
 const FILTER_TOPICS = { contact: 'filter.contact', source: 'filter.source', groups: 'filter.groups', from: 'filter.dates', to: 'filter.dates' };
 
@@ -116,7 +117,7 @@ View.set = (patch, opts) => {
         View.filter[k] = v;
         topics.add('selection').add(FILTER_TOPICS[k]);
       }
-    } else if (key === 'leader' || key === 'browser') {
+    } else if (key === 'leader' || key === 'browser' || key === 'compare') {
       Object.assign(View[key], value);
       for (const t of VIEW_TOPICS[key]) topics.add(t);
     } else {

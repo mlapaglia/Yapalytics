@@ -2,7 +2,7 @@
 import { test, expect, loadDemo, openTab } from './fixtures.mjs';
 import { inApp } from './state.mjs';
 
-const ALL_TABS = ['Overview', 'Messages', 'Activity', 'People', 'Groups', 'Replies', 'Words', 'Mood & emoji', 'Media & links', 'Calls', 'Sources', 'Year in review', 'AI analysis'];
+const ALL_TABS = ['Overview', 'Messages', 'Activity', 'Compare', 'People', 'Groups', 'Replies', 'Words', 'Mood & emoji', 'Media & links', 'Calls', 'Sources', 'Year in review', 'AI analysis'];
 
 /** The tabs shown, the selected one, and the sections on screen. */
 const tabState = (page) => page.evaluate(() => ({
