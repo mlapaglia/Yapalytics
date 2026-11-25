@@ -690,6 +690,42 @@ function styleOption(ui, lines) {
   return opt;
 }
 
+// ------------------------------------------------------------------ comparing two periods (spec 021)
+
+/** Colours of the two periods: the earlier one muted, the date range in a series colour. */
+const comparePeriodColors = (ui) => [ui.muted, ui.series[2]];
+const sharePct = (x) => Math.round(x * 1000) / 10;
+
+function compareTooltip(ps, head) {
+  return String(html`${tipHead(head)}${ps.map((p) => tipRow(p.color, p.seriesName, `${p.value}%`))}`);
+}
+
+/** Each period's share of its messages by hour: `a` and `b` are 24 shares (0–1), `labels` the two periods. */
+function compareHourOption(ui, a, b, labels) {
+  const [ca, cb] = comparePeriodColors(ui);
+  const opt = baseOption(ui);
+  opt.xAxis = catAxis(ui, HOUR_LABELS, { boundaryGap: false });
+  opt.yAxis = valAxis(ui, { axisLabel: { color: ui.muted, fontSize: 11, formatter: '{value}%' } });
+  opt.tooltip = tooltipBase(ui, 'axis', 'line');
+  opt.tooltip.formatter = (ps) => compareTooltip(ps, hourText(ps[0].dataIndex));
+  opt.series = [
+    line(labels[0], a.map(sharePct), ca, { lineStyle: { width: 2, color: ca, type: 'dashed' } }),
+    line(labels[1], b.map(sharePct), cb, { areaStyle: { color: cb, opacity: 0.12 } }),
+  ];
+  return opt;
+}
+
+/** Each period's share of its messages by day of the week, as paired bars. */
+function compareDowOption(ui, a, b, labels) {
+  const [ca, cb] = comparePeriodColors(ui);
+  const opt = baseOption(ui);
+  opt.xAxis = catAxis(ui, DOW_LABELS);
+  opt.yAxis = valAxis(ui, { axisLabel: { color: ui.muted, fontSize: 11, formatter: '{value}%' } });
+  opt.tooltip.formatter = (ps) => compareTooltip(ps, ps[0].axisValueLabel);
+  opt.series = [bar(labels[0], a.map(sharePct), ca, ui), bar(labels[1], b.map(sharePct), cb, ui)];
+  return opt;
+}
+
 // ------------------------------------------------------------------ call charts
 
 function callTrendOption(ui, C) {
@@ -813,6 +849,46 @@ function nightOwlOption(ui, A) {
     return String(html`<b>${fmtDate.month(v[0])}</b><br><b>${v[1]}%</b> after midnight · ${fmtNum(v[2])} of ${fmtNum(v[3])} messages`);
   };
   opt.series = [line('After midnight', data, ui.series[3], { showSymbol: data.length < 40, areaStyle: { color: ui.series[3], opacity: 0.1 } })];
+  opt.dataZoom = [insideZoom({ xAxisIndex: 0 })];
+  return opt;
+}
+
+/**
+ * Spec 020: your first and last message per week (or month), on a 4 am – 4 am axis with
+ * 4 am at the top, the time between them shaded, and each away stretch marked.
+ */
+function rhythmOption(ui, schedule, away) {
+  const { buckets, unit } = schedule;
+  const at = (key) => buckets.map((b) => [b.start, b[key]]);
+  const opt = baseOption(ui, { boxZoom: true });
+  opt.legend.data = ['First message', 'Last message'];
+  opt.xAxis = timeAxis(ui);
+  opt.yAxis = valAxis(ui, {
+    min: 0, max: 1440, interval: 180, inverse: true,
+    axisLabel: { color: ui.muted, fontSize: 11, formatter: (v) => hourText((v / 60 + RHYTHM_DAY_START) % 24) },
+  });
+  opt.tooltip = tooltipBase(ui, 'axis', 'line');
+  opt.tooltip.formatter = (ps) => {
+    const b = buckets[ps[0].dataIndex];
+    const head = unit === 'month' ? fmtDate.month(b.start) : `Week of ${fmtDate.day(b.start)}`;
+    if (b.first == null) return String(html`${tipHead(head)}${tipNote(`${b.n} day${b.n === 1 ? '' : 's'} with 5+ messages from you: too few`)}`);
+    return String(html`${tipHead(head)}${tipRow(ui.series[2], 'First message', rhythmClock(b.first))}${tipRow(ui.series[3], 'Last message', rhythmClock(b.last))}${tipNote(`Median of ${b.n} days`)}`);
+  };
+  const band = (name, data, extra) => ({ name, type: 'line', data, stack: 'day', symbol: 'none', lineStyle: { opacity: 0 }, silent: true, tooltip: { show: false }, ...extra });
+  opt.series = [
+    band('base', at('first')),
+    band('band', buckets.map((b) => [b.start, b.first == null ? null : b.last - b.first]), {
+      areaStyle: { color: ui.series[2], opacity: 0.12 },
+      markArea: away.length ? {
+        silent: true,
+        itemStyle: { color: ui.series[4], opacity: 0.18 },
+        label: { show: true, position: 'insideTop', color: ui.text2, fontSize: 11, formatter: 'Away?' },
+        data: away.map((x) => [{ xAxis: dayToTs(x.from) }, { xAxis: dayToTs(x.to + 1) }]),
+      } : undefined,
+    }),
+    line('First message', at('first'), ui.series[2], { showSymbol: buckets.length < 40, connectNulls: false }),
+    line('Last message', at('last'), ui.series[3], { showSymbol: buckets.length < 40, connectNulls: false }),
+  ];
   opt.dataZoom = [insideZoom({ xAxisIndex: 0 })];
   return opt;
 }

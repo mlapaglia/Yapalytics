@@ -24,6 +24,9 @@ const View = {
   // The message list: how many of the latest to show, the search, the mood chart's pick
   // ({ mo, o (null = both), kind: 'pos' | 'neg' | 'any' }) and whether scores show.
   browser: { limit: 200, query: '', mood: null, showMood: false },
+  // What the date range is compared with (spec 021): 'before' (the same number of days
+  // before it), 'year' (a year earlier) or 'custom' (from, to: ms, used only for custom).
+  compare: { mode: 'before', from: null, to: null },
 };
 
 /** `D`'s messages in a conversation (or 'all'), an app (or 'all'), with or without group chats. */
@@ -74,7 +77,11 @@ function cache() {
 }
 
 const Select = {
-  caches: { base: cache(), range: cache(), calls: cache(), agg: cache(), content: cache(), cross: cache(), docFreq: cache() },
+  caches: {
+    base: cache(), range: cache(), calls: cache(), agg: cache(), content: cache(), cross: cache(), docFreq: cache(),
+    periods: cache(), compareRange: cache(), compareAgg: cache(),
+    rhythm: cache(), unusual: cache(),
+  },
 
   baseDeps() {
     const { contact, source, groups } = View.filter;
@@ -113,6 +120,51 @@ const Select = {
   /** aggregateCrossApp over range() (spec 007). */
   cross() {
     return this.caches.cross.get([...this.rangeDeps(), View.appsGap], () => aggregateCrossApp(this.range(), View.appsGap));
+  },
+
+  compareDeps() {
+    const { mode, from, to } = View.compare;
+    return [...this.rangeDeps(), mode, from, to];
+  },
+
+  /**
+   * The two periods to compare (spec 021): comparePeriods for the date range, or null with
+   * no messages. History starts at the selection's first message, and ends where an open
+   * date range ends everywhere else (the presets, the scope line): the last thing loaded.
+   * Days after a conversation's last message still count, so going quiet shows.
+   */
+  periods() {
+    return this.caches.periods.get(this.compareDeps(), () => {
+      const base = this.base();
+      if (!base.length) return null;
+      return comparePeriods(View.filter, View.compare, { first: base[0].t, last: Math.max(base[base.length - 1].t, dataBounds().last) });
+    });
+  },
+
+  /** base() within the period the date range is compared with ([] when there's none). */
+  compareRange() {
+    return this.caches.compareRange.get(this.compareDeps(), () => {
+      const a = this.periods()?.a;
+      return a ? inDates(this.base(), a.from, a.to) : [];
+    });
+  },
+
+  /** aggregateMessages over compareRange(). The date range's own is agg(). */
+  compareAgg() {
+    return this.caches.compareAgg.get([...this.compareDeps(), View.convoGap], () => aggregateMessages(this.compareRange(), View.convoGap));
+  },
+
+  /** Your day, by rhythm day, with the schedule and time away worked out from it (spec 020). */
+  rhythm() {
+    return this.caches.rhythm.get(this.rangeDeps(), () => {
+      const days = yourDays(this.range(), utcApps());
+      return { days, schedule: sleepSchedule(days), away: awayStretches(days) };
+    });
+  },
+
+  /** Days far busier or quieter than normal for a conversation (spec 020). */
+  unusual() {
+    return this.caches.unusual.get(this.rangeDeps(), () => unusualDays(this.range()));
   },
 
   /** How many conversations in the picked app use each word (for "What you talk about"). */

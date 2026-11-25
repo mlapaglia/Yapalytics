@@ -48,30 +48,51 @@ function senderBreakdown(msgs, key) {
   return [...rows.slice(0, 4), { label: `Everyone else (${rows.length - 4} people)`, n: rest, rest: true }];
 }
 
-function drawWrapped(canvas, W, ui) {
+const CANVAS_SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const CANVAS_EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+const CANVAS_SOFT = 'rgba(255,255,255,0.68)';
+
+/**
+ * Drawing helpers shared by Year in review and the summary image (spec 025): the dark
+ * gradient background, text cut to a width with "…", and filled rounded rectangles.
+ */
+function canvasKit(canvas) {
   const ctx = canvas.getContext('2d');
   const w = canvas.width, h = canvas.height;
-  const sans = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-  const emojiFont = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
-  const g = ctx.createLinearGradient(0, 0, w, h);
-  g.addColorStop(0, '#13213f');
-  g.addColorStop(0.55, '#2b1d52');
-  g.addColorStop(1, '#4a1942');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, w, h);
+  const background = () => {
+    const g = ctx.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, '#13213f');
+    g.addColorStop(0.55, '#2b1d52');
+    g.addColorStop(1, '#4a1942');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  };
   const fit = (text, max) => {
     let t = String(text);
     if (ctx.measureText(t).width <= max) return t;
     while (t.length > 1 && ctx.measureText(t + '…').width > max) t = t.slice(0, -1);
     return t + '…';
   };
-  const text = (str, x, y, size, { weight = 400, color = '#ffffff', align = 'left', max = w - 160, font = sans } = {}) => {
+  const text = (str, x, y, size, { weight = 400, color = '#ffffff', align = 'left', max = w - 160, font = CANVAS_SANS } = {}) => {
     ctx.font = `${weight} ${size}px ${font}`;
     ctx.fillStyle = color;
     ctx.textAlign = align;
     ctx.fillText(fit(str, max), x, y);
   };
-  const soft = 'rgba(255,255,255,0.68)';
+  const box = (x, y, width, height, radius, color) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, radius);
+    ctx.fill();
+  };
+  return { ctx, w, h, background, text, box };
+}
+
+function drawWrapped(canvas, W, ui) {
+  const { w, h, background, text, box } = canvasKit(canvas);
+  const emojiFont = CANVAS_EMOJI;
+  background();
+  const soft = CANVAS_SOFT;
   const A = W.A;
 
   text(String(W.year), 80, 150, 120, { weight: 800 });
@@ -89,14 +110,8 @@ function drawWrapped(canvas, W, ui) {
       text(`${p.label}: ${fmtNum(p.n)} messages`, 80, y + 32, 26, { color: soft, max: 920 });
       return;
     }
-    ctx.fillStyle = 'rgba(255,255,255,0.10)';
-    ctx.beginPath();
-    ctx.roundRect(80, y, 560, 46, 10);
-    ctx.fill();
-    ctx.fillStyle = ui.series[i % ui.series.length];
-    ctx.beginPath();
-    ctx.roundRect(80, y, Math.max(46, (560 * p.n) / maxN), 46, 10);
-    ctx.fill();
+    box(80, y, 560, 46, 10, 'rgba(255,255,255,0.10)');
+    box(80, y, Math.max(46, (560 * p.n) / maxN), 46, 10, ui.series[i % ui.series.length]);
     text(p.label, 98, y + 32, 26, { weight: 600, max: 420 });
     text(fmtNum(p.n), 660, y + 32, 26, { color: soft, max: 200 });
   });
@@ -118,10 +133,7 @@ function drawWrapped(canvas, W, ui) {
   tiles.forEach(([label, value, sub], i) => {
     const col = i % 3, row = Math.floor(i / 3);
     const x = 80 + col * 315, y = 1030 + row * 135;
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.beginPath();
-    ctx.roundRect(x, y, 290, 118, 14);
-    ctx.fill();
+    box(x, y, 290, 118, 14, 'rgba(255,255,255,0.08)');
     text(label.toUpperCase(), x + 20, y + 34, 19, { weight: 600, color: soft, max: 250 });
     text(value, x + 20, y + 76, 34, { weight: 800, max: 250 });
     text(sub, x + 20, y + 104, 19, { color: soft, max: 250 });
@@ -147,12 +159,7 @@ function renderWrapped(ui, base) {
 
 function saveWrapped() {
   $('#wrapCanvas').toBlob((blob) => {
-    if (!blob) return;
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `Yapalytics-${View.wrapYear}.png`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    if (blob) saveBlob(blob, `Yapalytics-${View.wrapYear}.png`);
   }, 'image/png');
 }
 
