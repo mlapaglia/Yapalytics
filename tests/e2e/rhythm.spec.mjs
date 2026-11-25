@@ -48,15 +48,23 @@ test.describe('spec 020 daily rhythm', () => {
       expect(jump).toContain('Unusual days');
     });
 
-    test('AC11: the stretch is listed, and Read those days → picks its dates and opens Messages', async ({ page }) => {
+    test('AC11: the stretch is listed, and Read those days → picks its rhythm days, clears a mood pick and opens Messages', async ({ page }) => {
       const row = page.locator('#awayList li');
       await expect(row).toHaveCount(1);
       await expect(row).toContainText('Jan 28 – Feb 3, 2024: your messages ran about 6 hours later than usual.');
       await expect(page.locator('#awayList')).toContainText('A guess from when you send messages');
+      // A mood pick from another month would leave the list empty.
+      await inApp(page, (app) => app.showMoodMessages(2024 * 12 + 2, 1, 'pos'));
+      expect(await inApp(page, (app) => app.browserMood)).not.toBeNull();
+      await openTab(page, 'sec-activity');
       await row.getByRole('button', { name: 'Read those days →' }).click();
       await expect(page.locator('#tab-sec-messages')).toHaveAttribute('aria-selected', 'true');
-      const f = await inApp(page, (app) => app.filter);
-      expect([f.from, f.to]).toEqual([Date.UTC(2024, 0, 28), Date.UTC(2024, 1, 4) - 1]);
+      const [f, mood] = await inApp(page, (app) => [app.filter, app.browserMood]);
+      expect([f.from, f.to]).toEqual([Date.UTC(2024, 0, 28, 4), Date.UTC(2024, 1, 4, 4) - 1]);
+      expect(mood).toBeNull();
+      // Feb 3's last message from you is at 3:27 AM on Feb 4: still that rhythm day.
+      await expect(page.locator('#messages')).toContainText('note 33.8');
+      await expect(page.locator('#messages')).not.toContainText('note 33.9');
     });
 
     test('AC15: rows name the conversation for all conversations, and leave it out with one picked', async ({ page }) => {

@@ -166,7 +166,9 @@ Panels.register({
     $('#awayList').addEventListener('click', (e) => {
       const b = e.target.closest('[data-away-from]');
       if (!b) return;
-      setRange(dayToTs(+b.dataset.awayFrom), dayToTs(+b.dataset.awayTo + 1) - 1);
+      // Rhythm days run 4 am to 4 am, so the range does too. Like Read that day →, it
+      // clears a mood pick, which would otherwise hold the list to another month.
+      View.set({ filter: { from: rhythmDayStart(+b.dataset.awayFrom), to: rhythmDayStart(+b.dataset.awayTo + 1) - 1 }, browser: { mood: null } });
       Tabs.select('sec-messages');
     });
     $('#unusualDays').addEventListener('click', (e) => {

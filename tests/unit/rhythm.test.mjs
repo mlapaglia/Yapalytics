@@ -5,10 +5,10 @@ import { loadApp, makeMessage, messageLib } from '../helpers/load.mjs';
 const lib = messageLib();
 const {
   aggregateMessages, buildHighlights, highlightText, rhythmDayOf, clockMinutes, rhythmClock, yourDays, sleepSchedule,
-  awayStretches, unusualDays, unusualList, rhythmNoteText, timesText,
+  awayStretches, unusualDays, unusualList, rhythmNoteText, timesText, rhythmDayStart,
 } = loadApp([
   'aggregateMessages', 'buildHighlights', 'highlightText', 'rhythmDayOf', 'clockMinutes', 'rhythmClock', 'yourDays', 'sleepSchedule',
-  'awayStretches', 'unusualDays', 'unusualList', 'rhythmNoteText', 'timesText',
+  'awayStretches', 'unusualDays', 'unusualList', 'rhythmNoteText', 'timesText', 'rhythmDayStart',
 ]);
 
 const UTC = new Set([0, 1, 4, 5, 6]);
@@ -136,6 +136,19 @@ describe('spec 020 daily rhythm', () => {
   describe('time away', () => {
     it('AC8: 7 days running 6 hours late make one stretch', () => {
       assert.deepEqual(awayStretches(yourDays(awayHistory(), UTC)), [{ from: D0 + 27, to: D0 + 33, shift: 6, days: 7 }]);
+    });
+
+    it('AC11: a rhythm day starts at 4 am local time, on the days the clocks change too', () => {
+      assert.equal(rhythmDayStart(D0 + 27), Date.UTC(2024, 0, 28, 4));
+      const tz = process.env.TZ;
+      try {
+        process.env.TZ = 'America/New_York';
+        const day = (m, d) => Date.UTC(2024, m, d) / 86400000;
+        assert.equal(rhythmDayStart(day(2, 10)), Date.UTC(2024, 2, 10, 8)); // clocks went forward at 2 am: 4 am EDT
+        assert.equal(rhythmDayStart(day(10, 3)), Date.UTC(2024, 10, 3, 9)); // clocks went back at 2 am: 4 am EST
+      } finally {
+        process.env.TZ = tz;
+      }
     });
 
     it('AC9: a 2-hour shift, a shift on only 2 days, or one that lasts 50 days give none', () => {

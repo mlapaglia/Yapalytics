@@ -100,7 +100,9 @@ message text: only times, directions and conversations.
 - **R9** The card lists the away stretches under the chart, newest first, at most 5, and
   shades each one on the chart. Each reads "Mar 3 – Mar 12, 2024: your messages ran
   about **6 hours later** than usual." (or "earlier"), with a **Read those days →**
-  button that sets the date filter to the stretch and opens the Messages tab. One line
+  button that sets the date filter to the stretch, from 4 am on its first day to 4 am
+  after its last (rhythm days, so a 1:30 AM message on its last night is in), clears a
+  mood pick and opens the Messages tab. One line
   under the list says "A guess from when you send messages: travel, jet lag and night
   shifts all look like this."
 - **R10** Wall-clock apps never count towards away stretches (see Clocks). When the
@@ -217,7 +219,8 @@ caches `unusualDays`, both keyed on `rangeDeps()` (`js/select.js`), like `agg()`
 
 - `js/panels/activity.js` registers a `rhythm` panel (tab `sec-activity`, topics `data`,
   `selection`, `theme`) that draws both cards. **Read those days →** calls
-  `setRange(from, to)` and `Tabs.select('sec-messages')`. **Read that day →** calls
+  `View.set` with the range from `rhythmDayStart` (`js/rhythm.js`) and no mood pick, then
+  `Tabs.select('sec-messages')`. **Read that day →** calls
   `readDay` (`js/ui/common.js`).
 - `js/charts.js` gets `rhythmOption(ui, schedule, away)`: two lines and a band on a
   time-of-day axis, with a `markArea` for each away stretch.
@@ -256,8 +259,10 @@ cached per selection and only worked out when the Activity or Overview tab draws
 - **AC10** The AC8 history from WhatsApp (`s = 2`) gives no stretch, and the card says
   time away needs messages from the other apps.
 - **AC11** The card lists the AC8 stretch as "…: your messages ran about 6 hours later
-  than usual." **Read those days →** sets the date filter to those 7 days and opens the
-  Messages tab.
+  than usual." **Read those days →** sets the date filter to those 7 rhythm days (4 am on
+  the first to 4 am after the last, so your 3:27 AM message after the last day is listed),
+  clears a mood pick and opens the Messages tab. `rhythmDayStart` gives 4 am local time on
+  the days the clocks change.
 - **AC12** `unusualDays`: a conversation with about 20 messages a day for 90 days and one
   day of 200 lists that day as busy, with usual 20 and "10×". A day of 45 doesn't fire.
 - **AC13** A conversation with about 40 a day and one day of 2 lists it as quiet. A run of

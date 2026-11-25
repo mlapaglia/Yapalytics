@@ -42,6 +42,15 @@ function rhythmDayOf(r) {
   return r.h >= RHYTHM_DAY_START ? r.d : r.d - 1;
 }
 
+/**
+ * When rhythm day `d` starts: 4 am local time on that date. Built from the calendar date,
+ * so it is 4 am on the days the clocks change too.
+ */
+function rhythmDayStart(d) {
+  const t = new Date(dayToTs(d));
+  return new Date(t.getFullYear(), t.getMonth(), t.getDate(), RHYTHM_DAY_START).getTime();
+}
+
 /** Minutes after 4 am (0–1439) of a message. */
 function clockMinutes(r) {
   return (r.h * 60 + new Date(r.t).getMinutes() - RHYTHM_DAY_START * 60 + DAY_MIN) % DAY_MIN;
