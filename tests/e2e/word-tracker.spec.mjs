@@ -1,5 +1,6 @@
-import { test, expect, loadDemo, scrollTo, chartOption } from './fixtures.mjs';
+import { test, expect, loadDemo, loadFiles, scrollTo, chartOption } from './fixtures.mjs';
 import { inApp } from './state.mjs';
+import { smsBackup } from '../helpers/sms.mjs';
 
 /** What the tracker should show, computed straight from the selected messages. */
 const expected = (page) => inApp(page, (app) => {
@@ -99,4 +100,21 @@ test.describe('word tracker', () => {
     await expect.poll(() => emptyText(page)).toBe('Nobody said “xyzzy plugh” in this selection');
     await expect(page.locator('#phraseFirsts')).toBeEmpty();
   });
+});
+
+test('word tracker: a reaction quoting a message is not saying it, hidden characters and all', async ({ page }) => {
+  // Reactions as phones send them: a zero-width space first, a no-break space before
+  // "to", direction marks around the quote.
+  const alex = { address: '+15551234567', name: 'Alex Rivera' };
+  const quote = 'big victory today for the team';
+  const reactions = [`❤️ to “${quote}”`, `\u200bLoved “${quote}”`, `❤️\u00a0to “${quote}”`, `❤️ to \u2068“${quote}”\u2069`, `❤️ to \u200b“${quote}”\u200b`];
+  await loadFiles(page, [smsBackup([
+    { ...alex, at: '2026-08-01T12:00:00Z', body: quote },
+    ...reactions.map((body, i) => ({ ...alex, at: `2026-08-0${2 + i}T12:00:00Z`, sent: true, body })),
+  ])]);
+  expect(await inApp(page, (app) => app.msgs.map((m) => m.b))).toEqual([quote]);
+  await scrollTo(page, '#phraseCard');
+  await page.fill('#phraseInput', 'big victory');
+  await expect(page.locator('#phraseFirsts .phrase-headline')).toHaveText("You've never said it. Alex Rivera said it first.");
+  await expect(page.locator('#phraseFirsts .phrase-first')).toHaveCount(1);
 });

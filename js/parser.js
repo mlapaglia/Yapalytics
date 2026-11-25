@@ -64,9 +64,14 @@ function messageLib(vader) {
   // Reacted 😂 to “…”, Removed a heart from “…”) and Google Messages ones (😂 to “…,
   // often cut short with no closing quote). Reactions to media name only the kind of
   // file, so those must be the whole message.
+  // Phones can put invisible direction marks around the parts (Android wraps the quoted
+  // text in isolates) and no-break spaces between them, so the check reads the start of
+  // the message with those marks dropped and any run of spaces as one plain space.
   const REACT_VERB = String.raw`(?:Liked|Loved|Disliked|Laughed at|Emphasi[sz]ed|Questioned|Reacted .{1,16}? to|Removed .{1,40}? from|[^\p{L}\p{N}\s]{1,12} to)`;
   const REACT_MEDIA = String.raw`an? (?:image|photo|picture|movie|video|GIF|gif|sticker|attachment|audio message|voice message|file|location|contact|link)[.!]?$`;
-  const REACTION_RE = new RegExp(String.raw`^${REACT_VERB} (?:[“"‘']|${REACT_MEDIA})`, 'u');
+  const REACTION_RE = new RegExp(String.raw`^${REACT_VERB} (?:[“"‘'„‚«‹「]|${REACT_MEDIA})`, 'u');
+  const REACT_MARKS_RE = /[\u200b\u200c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g; // not U+200D, which joins emoji
+  const isReactionText = (body) => REACTION_RE.test(body.slice(0, 200).replace(REACT_MARKS_RE, '').replace(/\s+/g, ' ').trim());
   const UPPER_RE = /\p{Lu}/u;
   const LOWER_RE = /\p{Ll}/u;
 
@@ -89,7 +94,7 @@ function messageLib(vader) {
     }
     rec.e = emo;
     let f = 0;
-    if (REACTION_RE.test(body)) f |= T_REACTION;
+    if (isReactionText(body)) f |= T_REACTION;
     else {
       if (body.indexOf('?') >= 0) f |= T_QUESTION;
       if (LINK_RE.test(body)) f |= T_LINK;

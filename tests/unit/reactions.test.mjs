@@ -35,6 +35,19 @@ describe('reactions sent as texts', () => {
     'removed tapback': 'Removed a heart from “see you soon”',
     'removed tapback from media': 'Removed a like from an image',
     'removed emoji reaction': 'Removed 😂 from “lol”',
+    'a no-break space before "to"': '❤️\u00a0to “see you soon”',
+    'a narrow no-break space after "to"': '❤️ to\u202f“see you soon”',
+    'direction isolates around the quote': '❤️ to \u2068“see you soon”\u2069',
+    'direction isolates around the emoji and the quote': '\u2068❤️\u2069 to \u2068"see you soon"\u2069',
+    'a left-to-right mark first': '\u200eLoved “see you soon”',
+    'a byte order mark first': '\ufeff❤️ to “see you soon”',
+    'a leading space': ' ❤️ to “see you soon”',
+    'a leading carriage return': '\r❤️ to “see you soon”',
+    'two spaces': 'Loved  “see you soon”',
+    'a German low quote': '❤️ to „see you soon“',
+    'guillemets': '❤️ to « see you soon »',
+    'a trailing space after media': 'Loved an image ',
+    'a family emoji (joined with U+200D)': '👨‍👩‍👧‍👦 to “see you soon”',
   };
   for (const [what, body] of Object.entries(reactions)) {
     it(`detects ${what}`, () => assert.equal(isReaction(body), true, body));
@@ -52,6 +65,9 @@ describe('reactions sent as texts', () => {
     'Removed, not a reaction': 'Removed the stain from my shirt',
     'loved an image, mid-sentence': 'I loved an image of the sunset',
     'Reacted, not a reaction': 'Reacted badly to the news',
+    'emoji, a no-break space and "to" without a quote': '😂\u00a0to me that is funny',
+    'a quote mid-sentence after a direction mark': '\u200eGoing to „the place“',
+    'a guillemet quote mid-sentence': 'Il est allé to « the place »',
   };
   for (const [what, body] of Object.entries(messages)) {
     it(`leaves ${what} as a message`, () => assert.equal(isReaction(body), false, body));
