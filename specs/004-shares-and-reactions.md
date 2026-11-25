@@ -60,8 +60,9 @@ SMS, are a different thing. They're already counted and left out of the messages
   (`reactions[]`: `emoji.unicode`, or `:name:` for a custom emoji, and `reactor_emails`,
   named from the conversation's members). Telegram custom-emoji and paid reactions have
   no emoji to show and are skipped.
-- **R8** Reactions on a message never count as messages and don't change any statistic.
-  They aren't sent to AI analysis.
+- **R8** Reactions on a message never count as messages. ~~They don't change any
+  statistic.~~ Spec 027 counts them in the emoji statistics and adds reaction cards;
+  nothing else changes. They aren't sent to AI analysis.
 - **R9** You are named "You" by the owner picked for the source (Instagram, Telegram),
   so picking a different owner relabels the reactions. Google Chat knows your email
   from the export.
