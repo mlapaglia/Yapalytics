@@ -33,6 +33,9 @@ Panels.register({
     const X = ctx.cross();
     show('#sec-apps', source === 'all' && (all ? X.total.n > 0 : X.people.has(contact)));
     show('#sec-wrapped', ctx.base().length > 0);
+    // Compare (spec 021): whenever there are messages at any date; People only for all conversations.
+    show('#sec-compare', ctx.base().length > 0);
+    show('#comparePeopleCard', all);
     show('#callsSection', Select.calls().length > 0);
     show('#galleryCard', facts.media);
   },

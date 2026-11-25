@@ -16,6 +16,7 @@ function init() {
   initFilters();
   initPeople();
   initSettings();
+  initExport();
   initFiles();
   initProfile();
   Panels.init();

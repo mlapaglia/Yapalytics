@@ -1142,6 +1142,50 @@ table.apps-table td.apps-cell { min-width: 110px; }
   .app-split-legend { grid-column: 2; }
 }
 
+/* Style match markers (spec 017) */
+#styleMarkers:not(:empty) { margin-top: 12px; }
+.style-table th[scope="col"] { text-align: right; }
+.style-table tr.style-total th, .style-table tr.style-total td { font-weight: 650; color: var(--text); border-bottom: 0; }
+
+/* Summary image (spec 025) */
+.glance-bar { display: flex; justify-content: flex-end; margin: 0 0 10px; }
+.summary-dlg { width: min(560px, calc(100vw - 32px)); }
+.summary-dlg .wrapped canvas { width: min(360px, 100%); }
+.summary-actions { align-items: center; justify-content: space-between; margin-top: 16px; }
+.summary-actions .check { padding-bottom: 0; }
+
+/* Export stats (spec 026) */
+.export-dlg { width: min(640px, calc(100vw - 32px)); }
+/* Only the list scrolls, so Download all stays in view. */
+.export-dlg[open] { display: flex; flex-direction: column; overflow: hidden; }
+.export-note { margin: 12px 0 10px; }
+.export-list { flex: 0 1 auto; min-height: 0; overflow-y: auto; list-style: none; margin: 8px 0 0; padding: 0; border-top: 1px solid var(--border); }
+.export-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 9px 2px; border-bottom: 1px solid var(--border); }
+.export-what { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.export-what b { font-weight: 600; font-size: 14px; }
+.export-what .sub { font-size: 12.5px; }
+.export-list .btn { flex: none; }
+.scope-btn:disabled { color: var(--muted); cursor: default; }
+
+/* Compare (spec 021) */
+#compareHead header { flex-wrap: wrap; gap: 10px; }
+.compare-custom { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--text-2); font-size: 13px; margin-top: 4px; }
+.compare-start p { color: var(--text-2); margin: 4px 0 10px; }
+.compare-start-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.compare-table thead th[scope="col"] { text-align: right; }
+.cmp-dates { display: block; font-size: 11px; font-weight: 400; white-space: nowrap; }
+.cmp-change { white-space: nowrap; color: var(--text); font-weight: 600; }
+.cmp-change.cmp-same { color: var(--muted); font-weight: 400; }
+.compare-lists { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 14px; }
+.cmp-list h3 { font-size: 13px; font-weight: 600; margin: 0 0 6px; color: var(--text-2); }
+.cmp-list ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.cmp-list p { margin: 0; }
+.compare-when { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 720px) {
+  .compare-when, .compare-lists { grid-template-columns: minmax(0, 1fr); }
+  .cmp-dates { display: none; }
+}
+
 /* Daily rhythm (spec 020) */
 .rhythm-list:not(:empty) { margin-top: 10px; }
 .rhythm-head { font-size: 13px; font-weight: 600; margin: 4px 0 4px; }

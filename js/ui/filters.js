@@ -116,6 +116,7 @@ Panels.register({
   topics: ['data', 'selection'],
   render(ctx) {
     show('#profileBtn', !ctx.all);
+    $('#exportBtn').disabled = ctx.none; // spec 026 R1
     syncRangeUi();
     renderScope(ctx.msgs().length);
   },
