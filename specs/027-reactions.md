@@ -1,6 +1,6 @@
 # 027 Counting reactions
 
-Status: Approved · Author: · PR:
+Status: Approved · PR: [#39](https://github.com/mlapaglia/Yapalytics/pull/39)
 
 ## Problem
 

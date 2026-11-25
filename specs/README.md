@@ -57,4 +57,4 @@ see, changes what data leaves the browser, or takes more than a day to build.
 | [021 Comparing two periods](021-period-comparison.md) | Draft: built, awaiting review |
 | [025 Summary image](025-summary-card.md) | Draft: built, awaiting review |
 | [026 Exporting stats as CSV](026-stats-export.md) | Draft: built, awaiting review |
-| [027 Counting reactions](027-reactions.md) | Approved: built |
+| [027 Counting reactions](027-reactions.md) | Approved: built ([#39](https://github.com/mlapaglia/Yapalytics/pull/39)) |
