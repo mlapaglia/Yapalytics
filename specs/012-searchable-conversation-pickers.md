@@ -35,8 +35,12 @@ a second control for nearly the same job.
   phone numbers, emails or handles, or, for a group chat, any member's name or number.
   A linked person matches by any of its conversations' names or numbers (this carries
   over spec 005 R8).
-- **R2** "All conversations" stays first and can always be picked. Order and message
-  and call counts are the same as today.
+  Conversations whose own name contains the typed text list first, then ones found
+  only by a number, handle or member, so typing "matt" puts Matt above group chats
+  they're in.
+- **R2** "All conversations" stays first and can always be picked. Message and call
+  counts are the same as today, and so is the order within each group of R1's results
+  (and of the whole list when nothing is typed).
 - **R3** The picker's list follows the app filter and the loaded files as it does today:
   with Instagram picked, only Instagram conversations (and linked people with Instagram
   messages) are listed and searched.
@@ -94,8 +98,9 @@ is pinned as a devDependency and `tests/e2e/fixtures.mjs` serves both files from
 - `contactName(c)`: a conversation's label without the emoji app mark (split out of
   `contactLabel`, which keeps building `c.label` for everywhere else).
 - `makePicker(sel)`: a Tom Select on `sel` that searches the `search` field, with no
-  limit on rows. Its `score` gives every match the same score, so results keep the
-  list's own order and "All conversations" always stays (R2). It also writes the picked
+  limit on rows. Its `score` gives "All conversations" 3 so it always stays (R2), a
+  conversation whose `data-name` matches 2, and any other match 1; Tom Select breaks
+  ties by the list's own order (R1, R2). It also writes the picked
   value straight to the `<select>`: Tom Select's own write-back moves the picked
   `<option>` to the end, which would reorder the plain list. It uses Tom Select's
   `dropdown_input` plugin, so the search box sits at the top of the open list and the
@@ -162,6 +167,8 @@ attached while the page scrolls.
   conversation; Escape closes it without changing the conversation.
 - **AC14** In dark mode, the closed picker with a conversation picked has the dark
   surface and text colours, as when it's open.
+- **AC15** Typing "sam" lists Sam Patel's 1-on-1 above the group chat Sam Patel is in,
+  with "All conversations" still first.
 
 ## Open questions
 

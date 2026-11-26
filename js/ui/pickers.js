@@ -42,11 +42,17 @@ function makePicker(sel, opts = {}) {
     maxOptions: null,
     refreshThrottle: 100, // ms after a key before the list filters (300 by default felt slow)
     closeAfterSelect: true,
-    // Every match scores the same, so results keep the list's own order (most messages
-    // first), and "All conversations" always stays (R2).
+    // "All conversations" always stays first (R2). Then conversations whose own name
+    // matches come before ones found only by a member, number or handle (R1), so
+    // "matt" puts Matt above group chats they're in. Within each, results keep the list's
+    // own order (most messages first): Tom Select breaks score ties by that order.
     score(query) {
       const match = this.getScoreFunction(query);
-      return (item) => (item.value === 'all' || match(item) > 0 ? 1 : 0);
+      return (item) => {
+        if (item.value === 'all') return 3;
+        if (!(match(item) > 0)) return 0;
+        return item.name && match({ search: item.name }) > 0 ? 2 : 1;
+      };
     },
     render: { option: pickerRowHtml, item: pickerRowHtml, no_results: () => '<div class="no-results">No conversations match</div>' },
     ...opts,

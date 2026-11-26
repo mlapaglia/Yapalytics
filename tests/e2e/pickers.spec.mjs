@@ -58,6 +58,20 @@ test.describe('spec 012 searchable conversation pickers', () => {
     await expect.poll(() => rowValues(page, 'contactSel')).toContain(group);
   });
 
+  test('AC15: a name match lists above chats found by a member', async ({ page }) => {
+    const group = await groupKey(page);
+    for (const [text, person] of [['sam', IG_SAM], ['alex', IG_ALEX]]) {
+      await search(page, 'contactSel', text);
+      // Polled as a whole: the list filters a moment after the last key, so a read
+      // can still catch the rows for the first letters typed.
+      await expect.poll(async () => {
+        const values = await rowValues(page, 'contactSel');
+        return values[0] === 'all' && values.includes(group) && values.indexOf(person) < values.indexOf(group) && values.indexOf(person) > 0;
+      }).toBe(true);
+      await page.keyboard.press('Escape');
+    }
+  });
+
   test('AC2: typing part of a phone number finds the 1-on-1', async ({ page }) => {
     await search(page, 'contactSel', '98765');
     await expect.poll(() => rowValues(page, 'contactSel')).toEqual(['all', SMS_PAT]);
