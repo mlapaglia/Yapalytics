@@ -64,7 +64,7 @@ test.describe('spec 019 language patterns', () => {
 
     test('AC10: one conversation’s inside jokes show uses, who said it first and when, and when it was last used', async ({ page }) => {
       const { k, jokes } = await inApp(page, () => {
-        const df = Select.docFreq();
+        const df = Select.docFreq({ now: true });
         for (const key of Data.byKey.keys()) {
           if (key.startsWith('g:')) continue;
           const j = insideJokes(conversationTerms(Data.messagesOf(key), df), df);
@@ -83,7 +83,7 @@ test.describe('spec 019 language patterns', () => {
     test('AC12: “What you talk about” gives the same words as before', async ({ page }) => {
       const { same, total } = await inApp(page, (app, src) => {
         const old = eval(src);
-        const df = Select.docFreq();
+        const df = Select.docFreq({ now: true });
         let same = 0, total = 0;
         for (const key of Data.byKey.keys()) {
           total++;

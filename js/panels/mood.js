@@ -41,10 +41,24 @@ function renderPolite(ui, C) {
 Panels.register({
   id: 'mood',
   tab: 'sec-mood',
-  topics: ['data', 'selection', 'scorer', 'theme', 'emojiRx'],
+  topics: ['data', 'selection', 'scorer', 'theme', 'emojiRx', 'content'],
   render(ctx) {
     const { ui } = ctx;
+    // Top emoji comes from the message stats, not the word counts: it draws at once (spec 028).
+    const R = Select.reactions();
+    $('#emojiRxChk').checked = View.emojiRx;
+    $('#emojiNote').textContent = View.emojiRx ? 'Typed and reacted, sent and received' : 'Typed in messages, sent and received';
+    const em = emojiOption(ui, ctx.agg(), 20, View.emojiRx ? R : null);
+    Charts.set('c-emoji', em.empty ? emptyOption(ui, 'No emoji in this selection') : em.opt);
     const C = ctx.content();
+    if (!C) {
+      $('#moodNote').textContent = 'Share of messages that read positive (up) or negative (down) each month';
+      $('#swearNote').textContent = 'Swear words per 1,000 messages';
+      $('#politeNote').textContent = 'Share of messages that say thanks or sorry';
+      ctx.countingChart('c-mood', 'content', MOOD_ON);
+      for (const id of ['c-swear', 'c-polite', 'c-emojitrend']) ctx.countingChart(id);
+      return;
+    }
     const mt = C.moodTotal;
     $('#moodNote').textContent = mt.n[0] + mt.n[1]
       ? `Share of messages that read positive (up) or negative (down), scored with ${View.moodScorer === 'ai' ? 'the AI model' : 'VADER'}. You: ${shareText(mt.pos[1], mt.n[1])} positive, ${shareText(mt.neg[1], mt.n[1])} negative · Them: ${shareText(mt.pos[0], mt.n[0])} positive, ${shareText(mt.neg[0], mt.n[0])} negative`
@@ -60,11 +74,6 @@ Panels.register({
     Charts.set('c-swear', st.w[0] + st.w[1] ? swearOption(ui, C) : emptyOption(ui, 'No swearing in this selection 😇'));
     renderPolite(ui, C);
     // Reactions count in the emoji cards (spec 027 R11, R11a); the box only changes Top emoji.
-    const R = Select.reactions();
-    $('#emojiRxChk').checked = View.emojiRx;
-    $('#emojiNote').textContent = View.emojiRx ? 'Typed and reacted, sent and received' : 'Typed in messages, sent and received';
-    const em = emojiOption(ui, ctx.agg(), 20, View.emojiRx ? R : null);
-    Charts.set('c-emoji', em.empty ? emptyOption(ui, 'No emoji in this selection') : em.opt);
     const trend = emojiTrendWithReactions(C, R);
     Charts.set('c-emojitrend', trend.emojiTotals.size ? emojiTrendOption(ui, trend) : emptyOption(ui, 'No emoji in this selection'));
   },

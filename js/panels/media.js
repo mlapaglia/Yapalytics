@@ -3,14 +3,16 @@
 Panels.register({
   id: 'media',
   tab: 'sec-media',
-  topics: ['data', 'selection', 'theme'],
+  topics: ['data', 'selection', 'theme', 'content'],
   render(ctx) {
     const { ui } = ctx;
     const A = ctx.agg();
     const anyMedia = MEDIA_TYPES.some((m) => A.media[m.key][0] + A.media[m.key][1]);
     Charts.set('c-media', anyMedia ? mediaOption(ui, A) : emptyOption(ui, 'No attachments in this selection'));
     Charts.set('c-media-trend', anyMedia ? mediaTrendOption(ui, A) : emptyOption(ui, 'No attachments in this selection'));
-    const dm = domainsOption(ui, ctx.content());
+    const C = ctx.content();
+    if (!C) return ctx.countingChart('c-domains');
+    const dm = domainsOption(ui, C);
     Charts.set('c-domains', dm.empty ? emptyOption(ui, 'No links in this selection') : dm.opt);
   },
 });

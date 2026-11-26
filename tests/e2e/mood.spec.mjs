@@ -1,4 +1,4 @@
-import { test, expect, loadDemo, scrollTo } from './fixtures.mjs';
+import { test, expect, loadDemo, scrollTo, chartSettled } from './fixtures.mjs';
 import { inApp } from './state.mjs';
 
 /** Center of a drawn bar on the mood chart: series 0 = you positive, 1 = you negative, 2 / 3 = them. */
@@ -30,6 +30,7 @@ test.describe('mood details', () => {
     await loadDemo(page);
     await scrollTo(page, '#c-mood');
     await page.waitForFunction(() => echarts.getInstanceByDom(document.getElementById('c-mood'))?.getOption().series?.length === 4);
+    await chartSettled(page, 'c-mood'); // the bars are counted in slices, then grow in (spec 028)
   });
 
   test('clicking a bar lists that month’s messages of that side and mood, with scores', async ({ page }) => {

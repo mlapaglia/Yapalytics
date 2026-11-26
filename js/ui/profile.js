@@ -68,7 +68,7 @@ function openProfile(key) {
     <h3 class="profile-h">You and ${them === 'Everyone else' ? 'everyone else' : them}</h3>
     ${vs}${c.person ? profileCrossApp(key, msgs, name) : ''}`;
 
-  const words = distinctiveWords(msgs, Select.docFreq(), 15);
+  const words = distinctiveWords(msgs, Select.docFreq({ now: true }), 15); // the dialog draws once: count now (spec 028 R7)
   const started = F.firstText;
   const bottom = [];
   if (group) {

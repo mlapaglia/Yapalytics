@@ -58,4 +58,4 @@ see, changes what data leaves the browser, or takes more than a day to build.
 | [025 Summary image](025-summary-card.md) | Draft: built, awaiting review |
 | [026 Exporting stats as CSV](026-stats-export.md) | Draft: built, awaiting review |
 | [027 Counting reactions](027-reactions.md) | Approved: built ([#39](https://github.com/mlapaglia/Yapalytics/pull/39)) |
-| [028 Counting words without freezing the page](028-responsive-words-tab.md) | Draft |
+| [028 Counting words without freezing the page](028-responsive-words-tab.md) | Approved |

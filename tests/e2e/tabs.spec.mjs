@@ -1,5 +1,5 @@
 /* specs/003-dashboard-tabs.md: one section at a time, picked from a sticky tab bar. */
-import { test, expect, loadDemo, openTab } from './fixtures.mjs';
+import { test, expect, loadDemo, openTab, chartSettled } from './fixtures.mjs';
 import { inApp } from './state.mjs';
 
 const ALL_TABS = ['Overview', 'Messages', 'Activity', 'Compare', 'People', 'Groups', 'Replies', 'Words', 'Mood & emoji', 'Media & links', 'Calls', 'Sources', 'Year in review', 'AI analysis'];
@@ -91,6 +91,7 @@ test.describe('spec 003: dashboard tabs', () => {
   test('AC6: a bar on the Mood chart opens the Messages tab, filtered to those messages', async ({ page }) => {
     await openTab(page, 'sec-mood');
     await page.waitForFunction(() => echarts.getInstanceByDom(document.getElementById('c-mood'))?.getOption().series?.length === 4);
+    await chartSettled(page, 'c-mood'); // the bars are counted in slices, then grow in (spec 028)
     await page.locator('#c-mood').scrollIntoViewIfNeeded();
     const bar = await page.evaluate(() => {
       const chart = echarts.getInstanceByDom(document.getElementById('c-mood'));

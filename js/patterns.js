@@ -432,8 +432,9 @@ function otherLanguageConversations(C, main, limit = 10) {
  * `phrases: Map(phrase -> stats)` of the 2- and 3-word phrases (links left out) with a
  * word of 3+ letters in at most JOKE_MAX_DF conversations. Stats: { n: [r, s], who: Set,
  * days, first (record), last (time) }. Each message's text is split once (twice with a link).
+ * A generator (spec 028); conversationTerms runs it in one go.
  */
-function conversationTerms(msgs, docFreq = null) {
+function* conversationTermsSteps(msgs, docFreq = null) {
   const group = msgs.length > 0 && msgs[0].k.startsWith('g:');
   const words = new Map();
   const phrases = new Map();
@@ -446,7 +447,10 @@ function conversationTerms(msgs, docFreq = null) {
     v.last = r.t;
   };
   const plain = [];
+  let done = 0;
+  const steps = docFreq ? msgs.length * 2 : msgs.length; // the phrases are a second pass
   for (const r of msgs) {
+    if (++done % STEP_MSGS === 0) yield done / steps;
     if (!r.b || r.f & T_REACTION) continue;
     const all = wordsOf(r.b);
     for (const w of all) if (isToken(w)) add(words, w, r);
@@ -454,11 +458,18 @@ function conversationTerms(msgs, docFreq = null) {
   }
   if (docFreq) {
     const rare = (w) => w.length >= 3 && (docFreq.df.get(w) || 0) <= JOKE_MAX_DF;
+    done = msgs.length;
     for (const [r, ws] of plain) {
+      if (++done % STEP_MSGS === 0) yield done / steps;
       for (const p of phrasesOf(ws)) if (p.split(' ').some(rare)) add(phrases, p, r);
     }
   }
   return { group, words, phrases };
+}
+
+/** conversationTerms in one go. */
+function conversationTerms(msgs, docFreq = null) {
+  return runSteps(conversationTermsSteps(msgs, docFreq));
 }
 
 /**

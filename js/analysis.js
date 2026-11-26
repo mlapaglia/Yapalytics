@@ -638,6 +638,17 @@ function domainOf(host) {
 
 let swearFamilyOf = null; // messageLib().swearFamily, created on first use
 
+/** Counting generators (spec 028) yield how far they are, 0–1, every this many messages. */
+const STEP_MSGS = 1000;
+
+/** Runs a counting generator to the end and returns its result. */
+function runSteps(steps) {
+  for (;;) {
+    const r = steps.next();
+    if (r.done) return r.value;
+  }
+}
+
 /**
  * Second pass for the text-heavy views: the most used words, emoji per month, shared
  * link domains, vocabulary (unique words) per month, mood (positive / negative share) per
@@ -646,8 +657,10 @@ let swearFamilyOf = null; // messageLib().swearFamily, created on first use
  * dashboard's selection that splits message text into words (spec 014 R10): once per
  * message, and a message with a link once more without its links. `phrases: false`
  * skips counting phrases (Year in review shows none); `phraseCap` bounds each phrase counter.
+ * A generator (spec 028): it yields how far it is and returns the counts; aggregateContent
+ * runs it in one go.
  */
-function aggregateContent(msgs, scorer = 'vader', { phrases = true, phraseCap = PHRASE_CAP } = {}) {
+function* aggregateContentSteps(msgs, scorer = 'vader', { phrases = true, phraseCap = PHRASE_CAP } = {}) {
   const C = {
     wordFreq: new Map(), // word -> [r, s], filler words left out
     emojiMonths: new Map(), // mo -> Map(emoji -> n)
@@ -683,7 +696,9 @@ function aggregateContent(msgs, scorer = 'vader', { phrases = true, phraseCap = 
     C.phrases = { mode: pw.mode, people: pw.people, who: new Map(pw.people.map((id) => [id, phraseCounter(phraseCap)])), all: phraseCounter(phraseCap) };
   }
   const lastBy = new Map(); // conversation + sender -> { t, words } of their previous message (corrections)
+  let done = 0;
   for (const r of msgs) {
+    if (++done % STEP_MSGS === 0) yield done / msgs.length;
     const o = r.o;
     if (r.e) {
       let em = C.emojiMonths.get(r.mo);
@@ -765,6 +780,11 @@ function aggregateContent(msgs, scorer = 'vader', { phrases = true, phraseCap = 
   return C;
 }
 
+/** aggregateContent in one go: what aggregateContentSteps works out, without slices. */
+function aggregateContent(...args) {
+  return runSteps(aggregateContentSteps(...args));
+}
+
 /**
  * A matcher for a tracked word or phrase: any case, whole words only (so "lol" skips
  * "lollipop"), any run of spaces between words, and curly apostrophes match straight ones.
@@ -799,10 +819,12 @@ function aggregatePhrase(msgs, re) {
   return P;
 }
 
-/** Number of conversations each word appears in (document frequency for TF-IDF). */
-function buildDocFreq(msgs) {
+/** Number of conversations each word appears in (document frequency for TF-IDF), in slices (spec 028). */
+function* buildDocFreqSteps(msgs) {
   const perThread = new Map();
+  let done = 0;
   for (const r of msgs) {
+    if (++done % STEP_MSGS === 0) yield done / msgs.length;
     if (!r.b || r.f & T_REACTION) continue;
     let set = perThread.get(r.k);
     if (!set) perThread.set(r.k, (set = new Set()));
@@ -811,6 +833,11 @@ function buildDocFreq(msgs) {
   const df = new Map();
   for (const set of perThread.values()) for (const tk of set) df.set(tk, (df.get(tk) || 0) + 1);
   return { df, docs: perThread.size };
+}
+
+/** buildDocFreq in one go. */
+function buildDocFreq(msgs) {
+  return runSteps(buildDocFreqSteps(msgs));
 }
 
 /**

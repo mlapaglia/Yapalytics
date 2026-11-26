@@ -36,6 +36,8 @@ const Tabs = {
       if (b) this.select(b.dataset.panel);
     });
     $('#tabList').addEventListener('keydown', (e) => this.onKey(e));
+    // Moving by hand ends keeping the jumped-to card in view (keepJump).
+    for (const type of ['wheel', 'touchstart', 'keydown', 'pointerdown']) window.addEventListener(type, () => { this.jumped = null; }, { passive: true });
     $('#jumpSel').addEventListener('change', (e) => {
       const card = this.cards[+e.target.value];
       e.target.value = '';
@@ -125,7 +127,18 @@ const Tabs = {
   /** Show a card's section and scroll the card into view. */
   jump({ el, sec }) {
     this.select(sec.id, { scroll: false });
+    this.jumped = el;
     requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  },
+
+  jumped: null, // the card last jumped to, until the user scrolls or types
+
+  /**
+   * Counts arrived and cards above the one jumped to may have grown (spec 028 R9): scroll
+   * to it again, unless the user has moved since.
+   */
+  keepJump() {
+    if (this.jumped?.isConnected && !this.jumped.closest('[hidden]')) this.jumped.scrollIntoView({ behavior: 'smooth', block: 'start' });
   },
 
   /** Arrow keys, Home and End move between the tabs that are shown (ARIA tabs pattern). */

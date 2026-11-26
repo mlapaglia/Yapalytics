@@ -117,6 +117,14 @@ export async function openTabOf(page, selector) {
   if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
 }
 
+/**
+ * Waits until the word counts (spec 028) have arrived and chart `id` has finished drawing
+ * them: its bars grow in, and a click lands on a bar only once they're drawn.
+ */
+export async function chartSettled(page, id) {
+  await page.waitForFunction((id) => !Background.jobs.size && !Counting.shown.size && Charts.get(id)?.getZr().animation.isFinished(), id);
+}
+
 /** Opens a dashboard tab by its section id, e.g. 'sec-messages'. */
 export async function openTab(page, panel) {
   await page.click(`#tabList [data-panel="${panel}"]`);

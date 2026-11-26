@@ -1,6 +1,6 @@
 # 028 Counting words without freezing the page
 
-Status: Draft · Author: · PR:
+Status: Approved · Author: · PR:
 
 ## Problem
 
@@ -39,16 +39,17 @@ making it wait at all.
 - **R4** Changing what's selected while counting (conversation, app, groups, dates, mood
   scorer, AI scores arriving) drops the counting under way and starts on the new
   selection. A card never shows counts from a selection that's no longer picked.
-- **R5** Counting starts as soon as the dashboard has drawn after a load or a selection
-  change, whichever tab is open, so the Words, Mood & emoji and Media & links tabs are
-  often ready by the time they're opened. It's the same work the tabs would do anyway,
-  done earlier; it's never done twice for one selection.
+- ~~**R5** Counting starts as soon as the dashboard has drawn after a load or a selection
+  change, whichever tab is open.~~ Dropped: counting starts only when a card needs the
+  counts (see Decisions). For one selection it's never done twice.
 - **R6** Inside jokes and "What you talk about" (per-conversation words and the
   conversation counts behind them) are counted the same way, after the selection's counts.
 - **R7** Code that needs counts at once (the conversation profile's "What you talk about",
   Year in review, tests) can still ask for them and get them: it finishes the
   counting under way in one go rather than waiting for slices.
 - **R8** The counts are the same as counting in one go, for any selection.
+- **R9** A card picked in Jump to… stays scrolled into view when counts arrive and the
+  cards above it grow, unless the user has scrolled, tapped or typed since.
 
 ## Privacy
 
@@ -84,12 +85,26 @@ The panels: words, distinct, phrases, jokes, corrections, languages, vocab (Word
 (Mood & emoji); media's link domains (Media & links). While a job runs, the waiting
 panels redraw their placeholder at most twice a second for the percentage.
 
-**Starting early (R5).** After `finishLoad` draws the dashboard, and after each
-`View.set` that changes the selection, the loader asks `Select.content()` once (and
-then `docFreq()` and the open conversation's `terms`), which starts the jobs.
+**Jobs.** Each kind of count has a slot (`content`, `docFreq`, `terms:<conversation>`).
+A slot holds one job: asking for another selection's counts replaces it. Jobs run one at
+a time, in the order they were started. Inside jokes need the conversation counts first,
+so `terms(k)` returns `null` until `docFreq()` is ready, and asks again when the panels
+redraw.
 
-**Timers.** Each job adds its slices' time to `LoadPerf` under its name, so `?perf`
-shows how long counting took and its longest slice.
+**Placeholders.** `ctx.counting(target, slot)` draws "Counting words… 40%" and remembers
+it; at most twice a second the runner rewrites the percentage of the placeholders still
+showing, without redrawing their panels. Drawing a panel forgets its placeholders, so a
+late percentage never covers real counts.
+
+**Jump to… (R9).** `Tabs.jump` remembers the card; any wheel, touch, key or pointer input
+forgets it. When counts arrive, after the panels redraw, `Tabs.keepJump()` scrolls to the
+remembered card again.
+
+**Small selections.** A selection of fewer than 5,000 messages (`Background.syncBelow`) is
+counted at once: it takes a few milliseconds, and a placeholder would only flash.
+
+**Timers.** `Background.last` keeps each finished job's total time, number of slices and
+longest slice; `?perf` prints them to the console.
 
 ### Considered: a worker
 
@@ -111,18 +126,20 @@ later.
   appear, and then every card shows the same content as with counting in one go.
 - **AC3** Picking another conversation while counting ends with the cards showing that
   conversation's counts, and no card ever shows the earlier selection's.
-- **AC4** After a load, with the Overview tab open, counting runs and finishes on its own:
-  opening Words afterwards shows the counts at once, with no "Counting words…".
+- ~~**AC4** After a load, with the Overview tab open, counting runs and finishes on its own.~~
+  Dropped with R5.
 - **AC5** The Mood & emoji and Media & links tabs show "Counting words…" while counting
   and their charts once it's done.
 - **AC6** Opening a conversation's profile while counting shows its "What you talk about"
   words, the same as with counting in one go.
 - **AC7** A dropped job never runs again: after three quick selection changes, only the
   last selection's job finishes.
+- **AC8** Jumping to Swearing while the Mood & emoji counts are being counted leaves the
+  card 12 px under the sticky bars once they've arrived.
 
-## Open questions
+## Decisions
 
-- Is a percentage in the placeholder worth it, or is "Counting words…" enough?
-- Starting early (R5) spends a few seconds of slices after every load even if the Words
-  tab is never opened. The page stays responsive, but it's work the user didn't ask for.
-  Worth it?
+- Slices on the page, not a worker (see Considered: a worker).
+- The placeholder shows a percentage.
+- Counting starts only when a card needs it, not in the background after every load:
+  no work the user didn't ask for.
