@@ -125,15 +125,25 @@ function phraseZ(y, n, all, N) {
 /**
  * Of `rows` ({ term, n }), when one term's words are inside a longer one's, keep the longer
  * only if it has KEEP_LONGER of the shorter's uses; otherwise keep the shorter (R3).
+ * Terms are words joined by single spaces, so the shorter terms inside one are its runs of
+ * fewer words: those are looked up, rather than every row compared with every other.
  */
 function dropNested(rows) {
   const gone = new Set();
-  const byLen = [...rows].sort((a, b) => b.term.split(' ').length - a.term.split(' ').length);
+  const words = new Map(rows.map((r) => [r, r.term.split(' ')]));
+  const at = new Map(); // term -> its rows' indexes
+  rows.forEach((r, i) => { const list = at.get(r.term); if (list) list.push(i); else at.set(r.term, [i]); });
+  const byLen = [...rows].sort((a, b) => words.get(b).length - words.get(a).length);
   for (const long of byLen) {
     if (gone.has(long)) continue;
-    for (const short of rows) {
-      if (short === long || gone.has(short) || short.term.split(' ').length >= long.term.split(' ').length) continue;
-      if (!` ${long.term} `.includes(` ${short.term} `)) continue;
+    const w = words.get(long);
+    const inside = new Set();
+    for (let size = 1; size < w.length; size++) {
+      for (let i = 0; i + size <= w.length; i++) for (const j of at.get(w.slice(i, i + size).join(' ')) || []) inside.add(j);
+    }
+    for (const j of [...inside].sort((a, b) => a - b)) { // in rows' order, as they were compared
+      const short = rows[j];
+      if (gone.has(short)) continue;
       if (long.n >= KEEP_LONGER * short.n) gone.add(short);
       else { gone.add(long); break; }
     }
@@ -143,7 +153,11 @@ function dropNested(rows) {
 
 /** Whether one phrase's last words are the other's first words ("pushed the fix", "fix can you"). */
 function phrasesOverlap(a, b) {
-  const x = a.split(' '), y = b.split(' ');
+  return wordsOverlap(a.split(' '), b.split(' '));
+}
+
+/** phrasesOverlap on phrases already split into words. */
+function wordsOverlap(x, y) {
   for (let i = 1; i < Math.min(x.length, y.length); i++) {
     if (x.slice(-i).join(' ') === y.slice(0, i).join(' ') || y.slice(-i).join(' ') === x.slice(0, i).join(' ')) return true;
   }
@@ -153,9 +167,22 @@ function phrasesOverlap(a, b) {
 /**
  * Of `rows` sorted best first, leave out each one that overlaps a better one with about
  * the same uses (KEEP_LONGER either way): they're pieces of one longer sentence (R3a).
+ * Whether a row stays depends only on the rows before it, so with `limit` it stops once
+ * that many stay.
  */
-function dropOverlapping(rows) {
-  return rows.filter((r, i) => !rows.slice(0, i).some((b) => phrasesOverlap(b.term, r.term) && Math.min(b.n, r.n) >= KEEP_LONGER * Math.max(b.n, r.n)));
+function dropOverlapping(rows, limit = Infinity) {
+  const words = rows.map((r) => r.term.split(' '));
+  const out = [];
+  for (let i = 0; i < rows.length && out.length < limit; i++) {
+    const r = rows[i];
+    let overlaps = false;
+    for (let j = 0; j < i && !overlaps; j++) {
+      const b = rows[j];
+      overlaps = Math.min(b.n, r.n) >= KEEP_LONGER * Math.max(b.n, r.n) && wordsOverlap(words[j], words[i]);
+    }
+    if (!overlaps) out.push(r);
+  }
+  return out;
 }
 
 /**
@@ -178,7 +205,7 @@ function signaturePhrases(P, limit = PHRASE_LIMIT) {
         if (z >= PHRASE_MIN_Z) rows.push({ term, n: y, z });
       }
     }
-    return { id, phrases: dropOverlapping(dropNested(rows).sort((a, b) => b.z - a.z || b.n - a.n)).slice(0, limit) };
+    return { id, phrases: dropOverlapping(dropNested(rows).sort((a, b) => b.z - a.z || b.n - a.n), limit) };
   });
 }
 
@@ -448,5 +475,5 @@ function insideJokes(terms, { df }, limit = JOKE_LIMIT) {
   };
   for (const [w, v] of terms.words) if (w.length >= 3 && (df.get(w) || 0) <= JOKE_MAX_DF) consider(w, v);
   for (const [p, v] of terms.phrases) consider(p, v);
-  return dropOverlapping(dropNested(rows).sort((a, b) => b.score - a.score || (a.term < b.term ? -1 : 1))).slice(0, limit);
+  return dropOverlapping(dropNested(rows).sort((a, b) => b.score - a.score || (a.term < b.term ? -1 : 1)), limit);
 }
