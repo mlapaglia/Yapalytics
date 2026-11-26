@@ -27,7 +27,7 @@
 function iMessageParserWorker(self, lib) {
   'use strict';
 
-  const { analyzeText, stampTime, listZip, readEntryText, contactMap } = lib;
+  const { analyzeText, stampTime, addReaction, listZip, readEntryText, contactMap } = lib;
 
   const BATCH_SIZE = 5000;
   const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
@@ -71,13 +71,25 @@ function iMessageParserWorker(self, lib) {
     return new Date(+m[3], MONTHS[m[1]], +m[2], h, +m[5], +m[6]).getTime();
   }
 
-  /** Text, attachment kinds and attachment paths of one message body. */
+  // A tapback under "Tapbacks:" (spec 027 R4): "    Loved by Alex", "    😂 by Alex".
+  const TAPBACK_RE = /^ {4}(Loved|Liked|Disliked|Laughed(?: at)?|Emphasi[sz]ed|Questioned|(?:[#*0-9]\uFE0F?\u20E3|[^\p{L}\p{N}\s]){1,12}) by (.+?)\s*$/u; // 1️⃣ too
+  const TAPBACK_EMOJI = { Loved: '❤️', Liked: '👍', Disliked: '👎', Laughed: '😂', 'Laughed at': '😂', Emphasized: '‼️', Emphasised: '‼️', Questioned: '❓' };
+
+  /** Text, attachment kinds, attachment paths and tapbacks ({ r, who }) of one message body. */
   function readBody(lines) {
-    const out = { text: [], kinds: [], paths: [] };
+    const out = { text: [], kinds: [], paths: [], tapbacks: [] };
+    let inTapbacks = false;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].replace(/\r$/, '');
-      if (/^ {4}/.test(line)) continue; // tapbacks and repeated thread replies
-      if (line === 'Tapbacks:' && /^ {4}/.test(lines[i + 1] || '')) continue;
+      if (/^ {4}/.test(line)) {
+        // Tapbacks, then repeated thread replies, which are skipped.
+        const tb = inTapbacks && line.match(TAPBACK_RE);
+        if (tb) out.tapbacks.push({ r: TAPBACK_EMOJI[tb[1]] || tb[1], who: tb[2] });
+        else inTapbacks = false;
+        continue;
+      }
+      inTapbacks = false;
+      if (line === 'Tapbacks:' && /^ {4}/.test(lines[i + 1] || '')) { inTapbacks = true; continue; }
       if (DROP_LINES.has(line) || EXPRESSIVE_RE.test(line) || /^Transcription: /.test(line)) continue;
       if (/ unsent this message part(?: .*)?!$/.test(line)) continue;
       if (line === 'Translated from:') { i++; continue; }
@@ -94,7 +106,7 @@ function iMessageParserWorker(self, lib) {
       }
       out.text.push(line);
     }
-    return { text: out.text.join('\n').trim(), kinds: out.kinds, paths: out.paths };
+    return { text: out.text.join('\n').trim(), kinds: out.kinds, paths: out.paths, tapbacks: out.tapbacks };
   }
 
   /** Split one conversation file into { stamp, sender, lines } blocks. */
@@ -206,6 +218,7 @@ function iMessageParserWorker(self, lib) {
             if (i >= 0) rec.mb += src.sizes.get(p.slice(i)) || 0;
           }
         }
+        for (const tb of m.body.tapbacks) addReaction(rec, tb.r, 1, [tb.who]);
         analyzeText(m.body.text, rec);
         stampTime(rec);
         if (rec.t > c.lastT) c.lastT = rec.t;

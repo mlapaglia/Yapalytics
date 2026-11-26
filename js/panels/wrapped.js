@@ -13,7 +13,9 @@ function wrappedStats(base, year) {
       .map(([k, bc]) => ({ label: labelFor(k), n: bc.n[0] + bc.n[1] }))
       .sort((a, b) => b.n - a.n)
       .slice(0, 5);
-  const emoji = [...A.emojiFreq.entries()].sort((a, b) => (b[1][0] + b[1][1]) - (a[1][0] + a[1][1])).slice(0, 3).map(([e]) => e);
+  // Typed and reacted emoji (spec 027 R11a), with the same filters as `base`
+  const R = aggregateReactions(selectReactions(Data.reactionEvents, { ...View.filter, from, to: to - 1 }));
+  const emoji = [...withReactionEmoji(A.emojiFreq, R).entries()].sort((a, b) => (b[1][0] + b[1][1]) - (a[1][0] + a[1][1])).slice(0, 3).map(([e]) => e);
   const word = [...C.wordFreq.entries()].sort((a, b) => (b[1][0] + b[1][1]) - (a[1][0] + a[1][1]))[0];
   const site = [...C.domains.entries()].sort((a, b) => (b[1][0] + b[1][1]) - (a[1][0] + a[1][1]))[0];
   let night = 0;

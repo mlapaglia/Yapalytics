@@ -27,6 +27,7 @@ const View = {
   // What the date range is compared with (spec 021): 'before' (the same number of days
   // before it), 'year' (a year earlier) or 'custom' (from, to: ms, used only for custom).
   compare: { mode: 'before', from: null, to: null },
+  emojiRx: true, // Top emoji counts reactions too (spec 027 R11)
 };
 
 /** `D`'s messages in a conversation (or 'all'), an app (or 'all'), with or without group chats. */
@@ -80,7 +81,7 @@ const Select = {
   caches: {
     base: cache(), range: cache(), calls: cache(), agg: cache(), content: cache(), cross: cache(), docFreq: cache(),
     periods: cache(), compareRange: cache(), compareAgg: cache(),
-    rhythm: cache(), unusual: cache(),
+    rhythm: cache(), unusual: cache(), reactions: cache(),
   },
 
   baseDeps() {
@@ -165,6 +166,14 @@ const Select = {
   /** Days far busier or quieter than normal for a conversation (spec 020). */
   unusual() {
     return this.caches.unusual.get(this.rangeDeps(), () => unusualDays(this.range()));
+  },
+
+  /** aggregateReactions over the reactions in range() (spec 027 R9). */
+  reactions() {
+    return this.caches.reactions.get([...this.rangeDeps(), View.convoGap], () => aggregateReactions(
+      selectReactions(Data.reactionEvents, View.filter),
+      { gap: View.convoGap, byKey: Data.byKey },
+    ));
   },
 
   /** How many conversations in the picked app use each word (for "What you talk about"). */

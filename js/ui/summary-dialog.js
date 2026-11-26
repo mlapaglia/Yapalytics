@@ -59,7 +59,7 @@ function summarySenders(msgs, key, { names, senderLabel }) {
  * picked conversation, or 'all'. With `names: false`, `labelFor` and `senderLabel` are
  * never called (R5). Nothing here comes from message text (R4).
  */
-function summaryStats(msgs, A, { contact = 'all', names = false, labelFor = (k) => k, senderLabel = (x) => x, appName = (s) => String(s) } = {}) {
+function summaryStats(msgs, A, { contact = 'all', names = false, labelFor = (k) => k, senderLabel = (x) => x, appName = (s) => String(s), reactions = null } = {}) {
   const single = contact !== 'all';
   const total = A.dir[0] + A.dir[1];
   const group = single && contact.startsWith('g:');
@@ -97,7 +97,7 @@ function summaryStats(msgs, A, { contact = 'all', names = false, labelFor = (k) 
       }));
   }
 
-  const emoji = [...A.emojiFreq.entries()]
+  const emoji = [...withReactionEmoji(A.emojiFreq, reactions).entries()] // typed and reacted (spec 027 R11a)
     .sort((a, b) => (b[1][0] + b[1][1]) - (a[1][0] + a[1][1]))
     .slice(0, 3)
     .map(([e]) => e);
@@ -190,11 +190,11 @@ function drawSummary(canvas, sum) {
 }
 
 /** The selection's summary (spec 025), as the dialog shows it now. */
-const Summary = { msgs: null, A: null, contact: 'all' };
+const Summary = { msgs: null, A: null, R: null, contact: 'all' };
 
 function drawSummaryPreview() {
   const sum = summaryStats(Summary.msgs, Summary.A, {
-    contact: Summary.contact, names: $('#summaryNames').checked, labelFor: plainName, senderLabel, appName: sourceName,
+    contact: Summary.contact, names: $('#summaryNames').checked, labelFor: plainName, senderLabel, appName: sourceName, reactions: Summary.R,
   });
   drawSummary($('#summaryCanvas'), sum);
 }
@@ -203,6 +203,7 @@ function drawSummaryPreview() {
 function openSummaryDialog() {
   Summary.msgs = Select.range();
   Summary.A = Select.agg();
+  Summary.R = Select.reactions();
   Summary.contact = View.filter.contact;
   if (!Summary.msgs.length) return;
   $('#summaryNames').checked = false;

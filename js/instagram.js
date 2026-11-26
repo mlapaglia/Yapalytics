@@ -38,7 +38,7 @@
 function metaParserWorker(self, lib) {
   'use strict';
 
-  const { analyzeText, stampTime, addReaction, listZip, readEntryText, T_REACTION, contactMap } = lib;
+  const { analyzeText, stampTime, addReaction, reactionTime, listZip, readEntryText, T_REACTION, contactMap } = lib;
 
   const APPS = {
     instagram: {
@@ -250,7 +250,7 @@ function metaParserWorker(self, lib) {
       }
       if (att.length) rec.att = att;
       if (!text && !media.length && !rec.sh) { counts.skipped++; continue; }
-      if (Array.isArray(m.reactions)) for (const r of m.reactions) if (r) addReaction(rec, str(r.reaction), 1, [str(r.actor)]);
+      if (Array.isArray(m.reactions)) for (const r of m.reactions) if (r) addReaction(rec, str(r.reaction), 1, [str(r.actor)], [reactionTime(r.timestamp_ms ?? r.timestamp)]);
       keep(rec, text, sender, c, members);
     }
     c.members = [...members];
@@ -295,7 +295,7 @@ function metaParserWorker(self, lib) {
       }
       if (att.length) rec.att = att;
       if (!text && !media.length) { counts.skipped++; continue; }
-      if (Array.isArray(m.reactions)) for (const r of m.reactions) if (r) addReaction(rec, str(r.reaction), 1, [str(r.actor)]);
+      if (Array.isArray(m.reactions)) for (const r of m.reactions) if (r) addReaction(rec, str(r.reaction), 1, [str(r.actor)], [reactionTime(r.timestamp_ms ?? r.timestamp)]);
       keep(rec, text, sender, c, members);
     }
     c.members = [...members];

@@ -30,7 +30,8 @@ test.describe('spec 026 exporting stats as CSV', () => {
     const items = dlg(page).locator('#exportList li');
     await expect(items.locator('b')).toHaveText([
       'summary.csv', 'conversations.csv', 'months.csv', 'days.csv', 'hours.csv', 'weekdays.csv', 'heatmap.csv',
-      'reply_times.csv', 'emoji.csv', 'attachments.csv', 'calls.csv', 'group_senders.csv',
+      'reply_times.csv', 'emoji.csv', 'reactions.csv', 'reaction_times.csv', // reactions: spec 027 R18
+      'attachments.csv', 'calls.csv', 'group_senders.csv',
     ]);
     await expect(items.filter({ hasText: 'summary.csv' })).toContainText('Summary · 23 rows');
     await expect(items.filter({ hasText: 'heatmap.csv' })).toContainText('168 rows');

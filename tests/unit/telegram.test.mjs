@@ -131,7 +131,8 @@ describe('spec 004 reactions on Telegram messages', () => {
   it('AC11: keeps emoji reactions with their count and the people listed, and skips custom emoji', async () => {
     const out = await parse(resultJson(fullExport()));
     const nice = out.msgs.find((m) => m.b === 'nice');
-    assert.deepEqual(nice.rx, [{ r: '👍', c: 3, n: ['Jamie Park'] }]);
+    // spec 027 AC8: each listed reactor keeps when they reacted (the export's local time).
+    assert.deepEqual(nice.rx, [{ r: '👍', c: 3, n: ['Jamie Park'], at: [new Date(2024, 7, 20, 10, 6).getTime()] }]);
     assert.equal(out.msgs.filter((m) => m.rx).length, 1);
   });
 });

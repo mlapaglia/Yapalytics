@@ -29,7 +29,7 @@ function renderKpis(A) {
 
 function renderHighlights(msgs, A, X) {
   const crossApp = X ? crossAppHighlight(X, { labelFor: plainName, names: sourceNames() }) : null;
-  const items = buildHighlights(msgs, A, { labelFor: plainName, senderLabel, single: View.filter.contact !== 'all', crossApp, limit: Infinity, rhythm: Select.rhythm(), unusual: Select.unusual() });
+  const items = buildHighlights(msgs, A, { labelFor: plainName, senderLabel, single: View.filter.contact !== 'all', crossApp, limit: Infinity, rhythm: Select.rhythm(), unusual: Select.unusual(), reactions: Select.reactions() });
   $('#highlights').innerHTML = items.length
     ? html`${items.map((h, i) => html`<li${i >= HIGHLIGHT_LIMIT ? raw(' class="hl-more" hidden') : ''}><span class="hl-icon" aria-hidden="true">${h.icon}</span><span>${partsHtml(h.parts)}</span></li>`)}`
     : html`<li class="empty">Not enough messages here for highlights yet.</li>`;

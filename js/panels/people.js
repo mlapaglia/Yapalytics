@@ -42,8 +42,11 @@ function renderLeaderboard(A) {
     return (x < y ? -1 : x > y ? 1 : 0) * dir || b.n - a.n;
   });
   const shown = View.leader.all ? rows : rows.slice(0, 50);
-  const total = emojiTotal(A.emojiFreq);
-  for (const r of shown) r.sig = signatureEmoji(r.bc, A.emojiFreq, total);
+  // Typed and reacted emoji (spec 027 R11a)
+  const R = Select.reactions();
+  const emojiFreq = withReactionEmoji(A.emojiFreq, R);
+  const total = emojiTotal(emojiFreq);
+  for (const r of shown) r.sig = signatureEmoji(convoEmojiWithReactions(r.bc, R, r.k), emojiFreq, total);
 
   const table = $('#leaderTable');
   table.innerHTML = html`<thead><tr>${LEADER_COLS.map((c) => html`<th data-key="${c.key}" class="${c.key === col.key ? 'sorted' + (View.leader.asc ? ' asc' : '') : ''}">${c.title}</th>`)}</tr></thead>` +

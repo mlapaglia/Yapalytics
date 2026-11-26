@@ -68,7 +68,8 @@ function messageLib(vader) {
   // text in isolates) and no-break spaces between them, so the check reads the start of
   // the message with those marks dropped and any run of spaces as one plain space. A quote
   // can run on, but a reaction to media must be all there is, past those 200 characters too.
-  const REACT_VERB = String.raw`(?:Liked|Loved|Disliked|Laughed at|Emphasi[sz]ed|Questioned|Reacted .{1,16}? to|Removed .{1,40}? from|[^\p{L}\p{N}\s]{1,12} to)`;
+  const REACT_SYMBOL = String.raw`(?:[#*0-9]\uFE0F?\u20E3|[^\p{L}\p{N}\s])`; // a keycap (1️⃣) is one symbol
+  const REACT_VERB = String.raw`(?:Liked|Loved|Disliked|Laughed at|Emphasi[sz]ed|Questioned|Reacted (?:with )?.{1,16}? to|Removed .{1,40}? from|${REACT_SYMBOL}{1,12} to)`;
   const REACT_MEDIA = String.raw`an? (?:image|photo|picture|movie|video|GIF|gif|sticker|attachment|audio message|voice message|file|location|contact|link)[.!]?$`;
   const REACTION_QUOTE_RE = new RegExp(String.raw`^${REACT_VERB} [“"‘'„‚«‹「]`, 'u');
   const REACTION_MEDIA_RE = new RegExp(String.raw`^${REACT_VERB} ${REACT_MEDIA}`, 'u');
@@ -79,6 +80,53 @@ function messageLib(vader) {
     const head = tidyReaction(body.slice(0, REACT_HEAD));
     if (REACTION_QUOTE_RE.test(head)) return true;
     return REACTION_MEDIA_RE.test(head) && (body.length <= REACT_HEAD || !tidyReaction(body.slice(REACT_HEAD)));
+  }
+
+  // What a reaction text says (spec 027 R2): the emoji, and the quoted text or the kind of
+  // file it's on. Tapback verbs stand for the emoji iPhones show for them.
+  const VERB_EMOJI = { Liked: '👍', Loved: '❤️', Disliked: '👎', 'Laughed at': '😂', Emphasized: '‼️', Emphasised: '‼️', Questioned: '❓' };
+  const REMOVED_EMOJI = { 'a heart': '❤️', 'a like': '👍', 'a dislike': '👎', 'a laugh': '😂', 'an exclamation': '‼️', 'an exclamation mark': '‼️', 'a question mark': '❓' };
+  const MEDIA_WORD_KIND = {
+    image: 'ph', photo: 'ph', picture: 'ph', movie: 'vd', video: 'vd', GIF: 'gf', gif: 'gf', 'audio message': 'au', 'voice message': 'au',
+    sticker: 'any', attachment: 'any', file: 'any', location: 'any', contact: 'any', link: 'link',
+  };
+  const REACT_PARTS_RE = new RegExp(String.raw`^(?:(Liked|Loved|Disliked|Laughed at|Emphasi[sz]ed|Questioned)|Reacted (?:with )?(.{1,16}?) to|Removed (.{1,40}?) from|(${REACT_SYMBOL}{1,12}) to) (.*)$`, 'su');
+  const REACT_MEDIA_PART_RE = new RegExp(String.raw`^${REACT_MEDIA}`, 'u');
+  const OPEN_QUOTE_RE = /^[“"‘'„‚«‹「]\s?/u;
+  const CLOSE_QUOTE_RE = /\s?[”"’'“‘»›」]$/u;
+
+  /**
+   * A reaction text's parts, or null: { r: emoji, q: quoted text, cut: the quote was cut
+   * short, mk: kind of file ('ph', 'vd', 'gf', 'au', 'any', 'link'), rm: a removal }.
+   */
+  function reactionOf(body) {
+    if (!isReactionText(body)) return null;
+    const m = tidyReaction(body).match(REACT_PARTS_RE);
+    if (!m) return null;
+    const [, verb, reacted, removed, symbol, rest] = m;
+    const out = {};
+    if (verb) out.r = VERB_EMOJI[verb];
+    else if (reacted) out.r = reacted.trim();
+    else if (symbol) out.r = symbol;
+    else {
+      out.rm = true;
+      out.r = REMOVED_EMOJI[removed] || removed.trim();
+    }
+    const media = rest.match(REACT_MEDIA_PART_RE);
+    if (media) {
+      const word = rest.replace(/^an? /, '').replace(/[.!]$/, '');
+      out.mk = MEDIA_WORD_KIND[word] || 'any';
+      return out;
+    }
+    let q = rest.replace(OPEN_QUOTE_RE, '');
+    if (CLOSE_QUOTE_RE.test(q) && q.length > 1) q = q.replace(CLOSE_QUOTE_RE, '');
+    else out.cut = true;
+    if (/(?:…|\.\.\.)$/.test(q)) {
+      q = q.replace(/\s?(?:…|\.\.\.)$/, '');
+      out.cut = true;
+    }
+    out.q = q;
+    return out;
   }
   const UPPER_RE = /\p{Lu}/u;
   const LOWER_RE = /\p{Ll}/u;
@@ -114,7 +162,11 @@ function messageLib(vader) {
       }
     }
     rec.f = f;
-    if (f & T_REACTION) return;
+    if (f & T_REACTION) {
+      const rv = reactionOf(body);
+      if (rv) rec.rv = rv;
+      return;
+    }
 
     let sw = 0;
     if (words) for (const w of words) if (swearFamily(w.toLowerCase())) sw++;
@@ -170,15 +222,35 @@ function messageLib(vader) {
   /**
    * Notes a reaction on a message (spec 004): rec.rx is [{ r: emoji, c: count, n: [who] }],
    * one entry per emoji in the order first seen. `names` may be fewer than `count`
-   * (Telegram lists only recent reactors). Reactions never count as messages.
+   * (Telegram lists only recent reactors). Reactions never count as messages. `times`,
+   * when the export has them, are when each of `names` reacted (ms, or null), kept in
+   * `at` alongside `n` (spec 027 R3).
    */
-  function addReaction(rec, emoji, count, names) {
+  function addReaction(rec, emoji, count, names, times) {
     if (!emoji || !(count > 0)) return;
     const list = rec.rx || (rec.rx = []);
     let x = list.find((y) => y.r === emoji);
     if (!x) list.push((x = { r: emoji, c: 0, n: [] }));
     x.c += count;
-    for (const n of names) if (n && !x.n.includes(n)) x.n.push(n);
+    names.forEach((n, i) => {
+      if (!n || x.n.includes(n)) return;
+      x.n.push(n);
+      const t = times && times[i];
+      if (t || x.at) {
+        if (!x.at) x.at = x.n.map(() => null);
+        x.at[x.n.length - 1] = t || null;
+      }
+    });
+  }
+
+  /** A reaction time from an export: seconds or ms since 1970, or a date string; null if none. */
+  function reactionTime(v) {
+    if (typeof v === 'number' || (typeof v === 'string' && /^\d+$/.test(v))) {
+      const n = +v;
+      return n > 0 ? (n < 1e12 ? n * 1000 : n) : null;
+    }
+    const t = typeof v === 'string' ? Date.parse(v) : NaN;
+    return t > 0 ? t : null;
   }
 
   /**
@@ -202,7 +274,7 @@ function messageLib(vader) {
     return map;
   }
 
-  return { analyzeText, stampTime, swearFamily, explainMood, addReaction, contactMap, TRAIT, T_REACTION };
+  return { analyzeText, stampTime, swearFamily, explainMood, addReaction, reactionTime, reactionOf, contactMap, TRAIT, T_REACTION };
 }
 
 /*
@@ -223,11 +295,23 @@ function messageLib(vader) {
  * reaction removed between the two exports stays.
  */
 function mergeReactions(a, b) {
-  const out = (a || []).map((x) => ({ r: x.r, c: x.c, n: [...x.n] }));
+  const copy = (x) => (x.at ? { r: x.r, c: x.c, n: [...x.n], at: [...x.at] } : { r: x.r, c: x.c, n: [...x.n] });
+  const out = (a || []).map(copy);
   for (const y of b || []) {
     const x = out.find((z) => z.r === y.r);
-    if (!x) { out.push({ r: y.r, c: y.c, n: [...y.n] }); continue; }
-    for (const n of y.n) if (!x.n.includes(n)) x.n.push(n);
+    if (!x) { out.push(copy(y)); continue; }
+    y.n.forEach((n, i) => {
+      const t = (y.at && y.at[i]) || null;
+      const j = x.n.indexOf(n);
+      if (j < 0) {
+        x.n.push(n);
+        if (t || x.at) (x.at || (x.at = x.n.slice(0, -1).map(() => null))).push(t);
+      } else if (t && !(x.at && x.at[j] && x.at[j] <= t)) {
+        // Two exports with different times for one reaction: the earliest, in either order.
+        if (!x.at) x.at = x.n.map(() => null);
+        x.at[j] = t;
+      }
+    });
     x.c = Math.max(x.c, y.c, x.n.length);
   }
   return out.length ? out : undefined;

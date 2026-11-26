@@ -125,6 +125,18 @@ function buildDemoFiles() {
     return `<mms date="${t}" ct_t="application/vnd.wap.multipart.related" msg_box="${sent ? 2 : 1}" address="${addressList.join('~')}" m_type="${sent ? 128 : 132}" read="1" text_only="${media ? 0 : 1}" sub_id="1" readable_date="${readable(t)}" contact_name="${esc(name)}"><parts>${parts.join('')}</parts><addrs>${addrs.join('')}</addrs></mms>`;
   }
 
+  // Reaction texts quote the other side's latest message in the conversation (spec 027), in
+  // the shape of the line picked. No random draws, so the rest of the demo is unchanged.
+  const REACT_FORMS = new Map([
+    ['\u200bLiked “dinner at 7?”', (q) => `\u200bLiked “${q}”`],
+    ['Loved “see you soon 😊”', (q) => `Loved “${q}”`],
+    ['Laughed at “that was hilarious 🤣🤣”', (q) => `Laughed at “${q}”`],
+    ['😂 to “ that was hilarious 🤣🤣', (q) => `😂 to “ ${[...q].slice(0, 24).join('')}`],
+    ['❤️\u00a0to \u2068“see you soon 😊”\u2069', (q) => `❤️\u00a0to \u2068“${q}”\u2069`],
+  ]);
+
+  const textLines = lines.filter((l) => !messageLib().reactionOf(l));
+
   const allTargets = [...contacts.map((c) => ({ c })), ...groups.map((g) => ({ g }))];
   const targetW = allTargets.map((x) => (x.c || x.g).weight);
 
@@ -148,18 +160,26 @@ function buildDemoFiles() {
 
       const len = 2 + Math.floor(rand() * rand() * 30);
       let sent = rand() < 0.5;
+      const lastText = new Map(); // sent -> that side's latest text here
       for (let i = 0; i < len; i++) {
-        const body = pick(lines);
+        let body = pick(lines);
+        const form = REACT_FORMS.get(body);
+        const quote = form && (lastText.get(!sent) || lastText.get(sent));
+        if (quote) body = form(quote);
         const mediaRoll = rand();
         const media = mediaRoll < 0.04 ? 'photo' : mediaRoll < 0.05 ? 'gif' : mediaRoll < 0.058 ? 'video' : mediaRoll < 0.061 ? 'audio' : mediaRoll < 0.062 ? 'vcard' : null;
+        let text = body;
         if (target.g) {
           const from = pick(target.g.numbers);
-          out.push(mmsXml(target.g.numbers, target.g.name, t, sent, media && rand() < 0.5 ? '' : body, media, from));
+          text = media && rand() < 0.5 ? '' : body;
+          out.push(mmsXml(target.g.numbers, target.g.name, t, sent, text, media, from));
         } else if (media) {
-          out.push(mmsXml([target.c.number], target.c.name, t, sent, rand() < 0.5 ? '' : body, media, target.c.number));
+          text = rand() < 0.5 ? '' : body;
+          out.push(mmsXml([target.c.number], target.c.name, t, sent, text, media, target.c.number));
         } else {
           out.push(smsXml(target.c, t, sent, body));
         }
+        if (text && !form && !body.startsWith('Loved an')) lastText.set(sent, text);
         // Next message: same sender (double text) or a reply
         const talky = target.c ? target.c.talky : 0.55;
         sent = rand() < 0.3 ? sent : rand() < talky ? !sent : sent;
@@ -184,12 +204,13 @@ function buildDemoFiles() {
   return [
     new File([sms], `sms-${stamp}.xml`, { type: 'text/xml' }),
     new File([calls], `calls-${stamp}.xml`, { type: 'text/xml' }),
-    ...buildDemoChatZips(rand, pick, lines, startT, end.getTime(), stamp),
-    ...buildDemoWhatsApp(rand, pick, lines, end.getTime()),
+    // Only SMS and iMessage carry reactions as texts; the other apps store them on the message.
+    ...buildDemoChatZips(rand, pick, textLines, startT, end.getTime(), stamp),
+    ...buildDemoWhatsApp(rand, pick, textLines, end.getTime()),
     ...buildDemoIMessage(rand, pick, lines, end.getTime()),
-    buildDemoTelegram(rand, pick, lines, end.getTime()),
-    buildDemoInstagram(rand, pick, lines, end.getTime()),
-    ...buildDemoMessenger(rand, pick, lines, end.getTime()),
+    buildDemoTelegram(rand, pick, textLines, end.getTime()),
+    buildDemoInstagram(rand, pick, textLines, end.getTime()),
+    ...buildDemoMessenger(rand, pick, textLines, end.getTime()),
   ];
 }
 
@@ -499,7 +520,11 @@ function buildDemoTelegram(rand, pick, lines, endT) {
       m.text = pick(textLines);
     }
     m.text_entities = typeof m.text === 'string' ? (m.text ? [{ type: 'plain', text: m.text }] : []) : m.text;
-    if (rand() < 0.07) m.reactions = [{ type: 'emoji', count: 1, emoji: pick(['👍', '😂', '❤']) }];
+    if (rand() < 0.07) {
+      // Who reacted and when, a few minutes later (spec 027 R3), without another random draw
+      const by = who === me ? mila : me;
+      m.reactions = [{ type: 'emoji', count: 1, emoji: pick(['👍', '😂', '❤']), recent: [{ from: by.name, from_id: by.id, date: local(t + (1 + (m.id % 30)) * 60e3) }] }];
+    }
     return m;
   };
 
@@ -591,7 +616,7 @@ function buildDemoIMessage(rand, pick, lines, endT) {
         else if (roll < 0.08) body.push(`${stamp(t).slice(-11).trim()} ${pick(lines)}`, `Edited 12 seconds later: ${pick(lines)}`);
         else body.push(...pick(lines).split('\n'));
         if (rand() < 0.02) body.push('Sent with Confetti');
-        if (rand() < 0.12) body.push('Tapbacks:', `    ${pick(['Loved', 'Liked', 'Laughed at', 'Emphasized'])} by ${sender === 'Me' ? pick(people) : 'Me'}`);
+        if (rand() < 0.12) body.push('Tapbacks:', `    ${pick(['Loved', 'Liked', 'Laughed', 'Emphasized'])} by ${sender === 'Me' ? pick(people) : 'Me'}`);
         out.push({ t, lines: [stamp(t) + read, sender, ...body] });
         if (rand() < 0.4) sender = sender === 'Me' ? pick(people) : 'Me';
         t += Math.floor((rand() < 0.8 ? rand() * 4 : 4 + rand() * 120) * 60000) + 1000;
@@ -765,7 +790,7 @@ function buildDemoChatZips(rand, pick, lines, startT, endT, stamp) {
         }
         msg.topic_id = topic;
         msg.message_id = `${groupId}/${topic}/${rand().toString(36).slice(2, 13)}`;
-        if (rand() < 0.08) msg.reactions = [{ emoji: { unicode: '👍' }, reactor_emails: [pick(c.members).email] }];
+        if (rand() < 0.08) msg.reactions = [{ emoji: { unicode: '👍' }, reactor_emails: [pick(c.members.filter((x) => x !== sender)).email] }]; // someone else (spec 027)
         messages.push(msg);
         if (rand() < 0.01) messages.push({ message_state: 'DELETED', deleted_date: chatDate(t + 1000), topic_id: topic, deletion_metadata: { deletion_type: 'CREATOR' }, message_id: `${groupId}/${topic}/deleted${i}` });
         sender = rand() < 0.35 ? sender : sender === me ? pick(c.members.slice(1)) : me;

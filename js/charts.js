@@ -551,7 +551,12 @@ function topContactsOption(ui, rows) {
   return opt;
 }
 
-function emojiOption(ui, A, limit = 20) {
+/**
+ * Top emoji. With reactions `R` (spec 027 R11), each row stacks typed by you, reacted by
+ * you, typed by them and reacted by them, the reactions in lighter shades.
+ */
+function emojiOption(ui, A, limit = 20, R = null) {
+  if (R && R.perEmoji.size) return emojiWithReactionsOption(ui, A, limit, R);
   const rows = [...A.emojiFreq.entries()]
     .map(([e, v]) => ({ e, r: v[0], s: v[1], t: v[0] + v[1] }))
     .sort((a, b) => b.t - a.t)
@@ -561,6 +566,77 @@ function emojiOption(ui, A, limit = 20) {
   // sized to fit 20 rows in the card.
   opt.yAxis.axisLabel = { interval: 0, fontSize: 14, lineHeight: 16, color: ui.text, fontFamily: EMOJI_FONT };
   return { opt, empty: rows.length === 0 };
+}
+
+function emojiWithReactionsOption(ui, A, limit, R) {
+  const none = [0, 0];
+  const typedFreq = emojiPairs(A.emojiFreq); // keyed like the reactions (❤ is ❤️)
+  const rows = [...withReactionEmoji(A.emojiFreq, R).entries()]
+    .map(([e, v]) => {
+      const typed = typedFreq.get(e) || none, reacted = R.perEmoji.get(e) || none;
+      return { e, ts: typed[1], rs: reacted[1], tr: typed[0], rr: reacted[0], t: v[0] + v[1] };
+    })
+    .sort((a, b) => b.t - a.t)
+    .slice(0, limit);
+  const opt = baseOption(ui, { boxZoom: false });
+  opt.yAxis = catAxis(ui, rows.map((x) => x.e), { inverse: true });
+  opt.xAxis = valAxis(ui);
+  const part = (name, key, color, last = false) => {
+    const b = bar(name, rows.map((x) => x[key]), color, ui, { stack: 'm', rounded: last, horizontal: true });
+    if (key[0] === 'r') b.itemStyle.opacity = 0.45;
+    return b;
+  };
+  opt.series = [part('You typed', 'ts', ui.sent), part('You reacted', 'rs', ui.sent), part('They typed', 'tr', ui.recv), part('They reacted', 'rr', ui.recv, true)];
+  opt.tooltip.formatter = stackTooltip;
+  opt.yAxis.axisLabel = { interval: 0, fontSize: 14, lineHeight: 16, color: ui.text, fontFamily: EMOJI_FONT };
+  return { opt, empty: rows.length === 0 };
+}
+
+// ------------------------------------------------------------------ reactions (spec 027)
+
+/** R12: the top reaction emoji, given by you and by them. */
+function reactionsOption(ui, R, limit = 10) {
+  const rows = [...R.perEmoji.entries()].sort((a, b) => (b[1][0] + b[1][1]) - (a[1][0] + a[1][1])).slice(0, limit);
+  const opt = sentRecvStack(ui, rows.map(([e]) => e), rows.map(([, v]) => v[1]), rows.map(([, v]) => v[0]), { horizontal: true });
+  opt.series[0].name = 'You reacted';
+  opt.series[1].name = 'They reacted';
+  opt.yAxis.axisLabel = { interval: 0, fontSize: 14, lineHeight: 16, color: ui.text, fontFamily: EMOJI_FONT };
+  return opt;
+}
+
+/** R13: time to react, per side, in REACT_BINS. */
+function reactTimeOption(ui, R) {
+  const opt = baseOption(ui, { boxZoom: true });
+  opt.grid.bottom = 18;
+  opt.xAxis = catAxis(ui, REACT_BINS.map((b) => b.label), { name: 'time to react', nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: ui.muted, fontSize: 11 } });
+  opt.xAxis.axisLabel = { ...opt.xAxis.axisLabel, interval: 0, fontSize: 10 }; // every bin, "> 1 day" too
+  opt.yAxis = valAxis(ui);
+  opt.tooltip.formatter = (ps) => String(html`${tipHead(ps[0].axisValueLabel)}${ps.map((p) => tipRow(p.color, p.seriesName, `${fmtNum(p.value)} reactions`))}`);
+  opt.series = [bar('You', R.hist[1], ui.sent, ui), bar('Them', R.hist[0], ui.recv, ui)];
+  return opt;
+}
+
+/** R14: each side's share of reactions on their own messages, and instead of a reply. */
+function reactHowOption(ui, R) {
+  const share = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : 0);
+  const labels = ['Own messages', 'Instead of a reply'];
+  const opt = baseOption(ui, { boxZoom: false });
+  opt.grid.left = 12;
+  opt.yAxis = catAxis(ui, labels, { inverse: true });
+  opt.xAxis = valAxis(ui, { max: 100, axisLabel: { color: ui.muted, fontSize: 11, formatter: '{value}%' } });
+  const counts = [[R.own, R.n], [R.instead, R.judged]];
+  opt.tooltip.formatter = (ps) => {
+    const row = counts[ps[0].dataIndex];
+    return String(html`${tipHead(ps[0].axisValueLabel)}${ps.map((p) => {
+      const o = p.seriesName === 'You' ? 1 : 0;
+      return tipRow(p.color, p.seriesName, `${p.value}% (${fmtNum(row[0][o])} of ${fmtNum(row[1][o])})`);
+    })}`);
+  };
+  opt.series = [
+    bar('You', counts.map(([a, b]) => share(a[1], b[1])), ui.sent, ui, { horizontal: true }),
+    bar('Them', counts.map(([a, b]) => share(a[0], b[0])), ui.recv, ui, { horizontal: true }),
+  ];
+  return opt;
 }
 
 function wordsOption(ui, C, limit = 25) {
