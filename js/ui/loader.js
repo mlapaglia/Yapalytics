@@ -6,6 +6,9 @@
 
 let fileSeq = 0;
 
+/** How many parser workers run at once: a core is left for the page. */
+const PARSE_WORKERS = () => Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
+
 /** An entry in Files.loaded (spec 006) for `file` of `kind` (detectFile's result). */
 const fileEntry = (file, kind) => ({ id: ++fileSeq, file, name: file.name, size: file.size, lastModified: file.lastModified, kind, on: true });
 
@@ -19,7 +22,8 @@ let fileOps = Promise.resolve();
 function queueFileOp(op) {
   Files.busy++;
   updateFilesButton();
-  fileOps = fileOps.then(op).catch((err) => console.error(err)).finally(() => {
+  fileOps = fileOps.then(() => { LoadPerf.begin(); return op(); }).catch((err) => console.error(err)).finally(() => {
+    LoadPerf.end();
     LoadScreen.stop();
     Files.busy--;
     updateFilesButton();
@@ -39,7 +43,7 @@ function loadDemo() {
     showProgress({ demo: true });
     LoadScreen.step('demo');
     await nextFrame();
-    await loadPicked(buildDemoFiles());
+    await loadPicked(LoadPerf.step('build demo files', buildDemoFiles));
   });
 }
 
@@ -54,7 +58,7 @@ async function loadPicked(picked) {
   LoadScreen.step('check');
   let entries;
   try {
-    const kinds = await Promise.all(files.map(detectFile));
+    const kinds = await LoadPerf.step('detect file types', () => Promise.all(files.map(detectFile)));
     entries = files.map((f, i) => fileEntry(f, kinds[i]));
   } catch (err) {
     console.error(err);
@@ -96,6 +100,7 @@ async function readFiles(entries) {
   let badDates = ''; // an app's message when its dates couldn't be read
   let job = null;
   const jobs = [];
+  const abort = new AbortController(); // stops the other workers when a job fails
 
   try {
     // One job per file or per app (Sources: jobs). Attachments point at their file by
@@ -104,27 +109,60 @@ async function readFiles(entries) {
       const files = entries.filter((e) => e.kind === src.kind).map((e) => e.file);
       if (!files.length) continue;
       for (const group of src.jobs === 'each' ? files.map((f) => [f]) : [files]) {
-        const job = { files: group, src, parse: (cb) => src.parse(group, cb) };
+        const label = group.length > 1 ? `${group.length} ${src.name} files` : group[0].name;
+        const job = { files: group, src, label, queue: [], result: null };
         if (src.archives) job.attBase = Data.archive(group);
         jobs.push(job);
       }
     }
 
     LoadScreen.beginRead(entries);
+
+    // Jobs are parsed at the same time, a few workers at once, but their batches are
+    // added in job order, as if the jobs ran one after another: a message in two
+    // overlapping exports keeps the same copy whichever worker is faster. A later job's
+    // batches wait in its queue until the jobs before it are done.
+    let current = 0;
+    let started = 0;
+    const add = (i, msgs, calls, found) => {
+      const { perf, attBase } = jobs[i];
+      const t0 = performance.now();
+      const res = Data.addBatch(msgs, calls, attBase);
+      const t1 = performance.now();
+      LoadScreen.batch(i, res, found);
+      LoadPerf.add(perf, 'Data.addBatch', t1 - t0, msgs.length + calls.length);
+      LoadPerf.add(perf, 'LoadScreen.batch', performance.now() - t1, msgs.length + calls.length);
+    };
+    const startNext = () => {
+      if (started >= jobs.length || abort.signal.aborted) return;
+      const i = started++;
+      const job = jobs[i];
+      LoadScreen.startJob(i, job.files);
+      job.perf = LoadPerf.startJob(job.label);
+      job.result = job.src.parse(job.files, {
+        signal: abort.signal,
+        perf: job.perf,
+        onBatch: (msgs, calls, found) => (i === current ? add(i, msgs, calls, found) : job.queue.push([msgs, calls, found])),
+        onProgress: (loaded, total) => LoadScreen.progress(i, loaded, total),
+      }).then((done) => ({ done, at: performance.now() }), (error) => ({ error, at: performance.now() }));
+      job.result.then(startNext); // registered before readFiles awaits it, so the next job starts first
+    };
+    for (let k = 0; k < PARSE_WORKERS(); k++) startNext();
+
     for (let i = 0; i < jobs.length; i++) {
       job = jobs[i];
-      const label = job.files.length > 1 ? `${job.files.length} ${job.src.name} files` : job.files[0].name;
-      LoadScreen.step('read', label);
-      LoadScreen.startJob(i, job.files);
-      const done = await job.parse({
-        onBatch: (msgs, calls, found) => LoadScreen.batch(i, Data.addBatch(msgs, calls, job.attBase), found),
-        onProgress: (loaded, total) => LoadScreen.progress(i, loaded, total),
-      });
-      LoadScreen.endJob(i, false);
+      current = i;
+      LoadScreen.step('read', job.label);
+      for (const batch of job.queue) add(i, ...batch);
+      job.queue = [];
+      const { done, error, at } = await job.result;
+      if (error) throw error;
+      LoadScreen.endJob(i, false, at);
       Data.addContacts(done.contacts);
       if (job.src.badDatesError && done.counts.badDates) badDates = job.src.badDatesError;
     }
   } catch (err) {
+    abort.abort();
     console.error(err);
     if (job) LoadScreen.endJob(jobs.indexOf(job), true);
     return { error: 'Could not read that file: ' + err.message, failed: job ? job.files : entries.map((e) => e.file) };
@@ -146,11 +184,11 @@ async function readFiles(entries) {
 async function finishLoad() {
   LoadScreen.step('merge', fmtNum(Data.msgs.length));
   await nextFrame();
-  Data.finish();
+  LoadPerf.step('sort (Data.finish)', () => Data.finish());
   $('#igPreviewsLabel').hidden = !Data.msgs.some((m) => m.sh && instagramEmbedUrl(m.sh.u));
   LoadScreen.step('owners');
   await nextFrame();
-  Data.guessOwners(Prefs.owners);
+  LoadPerf.step('guess owners', () => Data.guessOwners(Prefs.owners));
   rederive();
   // Files were left out or removed (spec 006 R10): an app or conversation that's gone goes back to All.
   const f = View.filter;
@@ -160,7 +198,7 @@ async function finishLoad() {
   await nextFrame();
   $('#landing').hidden = true;
   $('#dash').hidden = false;
-  Panels.invalidate(['*']); // draws the open tab now
+  LoadPerf.step('draw dashboard', () => Panels.invalidate(['*'])); // draws the open tab now
   LoadScreen.stop(); // after it, so the step's time is the drawing's
 }
 
@@ -212,13 +250,15 @@ function showLoadError(msg) {
  * bring the filter and Settings' "Which one is you?" section in line.
  */
 function rederive() {
-  Data.rederive({ owners: Prefs.owners, people: Prefs.people });
+  LoadPerf.step('Data.rederive', () => Data.rederive({ owners: Prefs.owners, people: Prefs.people }));
   const sel = View.filter.contact;
   if (Data.personOf.has(sel)) View.filter.contact = Data.personOf.get(sel);
   else if (sel.startsWith('p:') && !Data.contacts.has(sel)) View.filter.contact = 'all';
   const sources = Object.keys(Prefs.owners).map(Number).filter((s) => Data.ownerChoices(s).length);
-  renderOwnerDialog(sources);
-  updateOwnerSection(sources);
+  LoadPerf.step('owner dialog', () => {
+    renderOwnerDialog(sources);
+    updateOwnerSection(sources);
+  });
 }
 
 function initLoader() {

@@ -74,6 +74,12 @@ messages. Watching the years fill in as files are read is a good first look.
   Instagram export or a Takeout split across zips) share a state and one count, since
   the parser can't say which file a message came from: each of their rows says
   "30 messages from these 2 files".
+  - Up to 4 files (or jobs) are read at the same time, each in its own worker, leaving
+    a core for the page. Their batches are still added in file order, as if the files
+    were read one after another, so a message in two overlapping exports keeps the
+    same copy whichever file finishes first. Until the files before it are added, a
+    file that's already read shows "Reading 100%" and its counts wait. Its time is how
+    long its own reading took.
 - **R8** **Steps.** A short list that ticks off as it goes, each with the time it
   took: Preparing the demo (demo only), Checking files, Reading files, Merging and
   sorting, Who's you and linked people, Drawing the dashboard. The current step has
@@ -219,6 +225,10 @@ pulse and transitions (R12).
   found before reading ends, with the SMS logo, and the list never holds more than 8.
 - **AC17** A conversation named `<img src=x onerror=alert(1)>` shows as that text in
   Conversations found, and no script runs.
+- **AC18** Given a large SMS backup and a small one that repeats its first messages,
+  loaded in that order, the small one finishes reading first (they're read at the same
+  time), yet the large one's row counts every message and the small one's counts none:
+  its messages are the duplicates.
 
 ## Decisions
 

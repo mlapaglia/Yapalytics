@@ -203,11 +203,45 @@ function dayLabel(d) {
   return fmtDate.weekday(dayToTs(d));
 }
 
+/**
+ * The median of `arr`, or null when it's empty. Found by quickselect, not by sorting: the
+ * same value in linear time. An array with NaN is sorted as before (NaN sorts last).
+ */
 function median(arr) {
-  if (!arr.length) return null;
-  const s = Float64Array.from(arr).sort();
-  const mid = s.length >> 1;
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  const n = arr.length;
+  if (!n) return null;
+  const s = Float64Array.from(arr);
+  const mid = n >> 1;
+  if (n < 32 || s.some(Number.isNaN)) {
+    s.sort();
+    return n % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  }
+  const hi = selectNth(s, mid);
+  if (n % 2) return hi;
+  let lo = s[0]; // everything before `mid` is ≤ hi now: the largest of it comes just before hi
+  for (let i = 1; i < mid; i++) if (s[i] > lo) lo = s[i];
+  return (lo + hi) / 2;
+}
+
+/** Rearranges `a` (a Float64Array without NaN) so a[k] is its k-th smallest value, smaller ones before it; returns a[k]. */
+function selectNth(a, k) {
+  let left = 0, right = a.length - 1;
+  while (right > left) {
+    // Median of three as the pivot, then Hoare's partition.
+    const m = (left + right) >> 1;
+    let x = a[left], y = a[m], z = a[right];
+    const pivot = x < y ? (y < z ? y : x < z ? z : x) : (x < z ? x : y < z ? z : y);
+    let i = left, j = right;
+    while (i <= j) {
+      while (a[i] < pivot) i++;
+      while (a[j] > pivot) j--;
+      if (i <= j) { const t = a[i]; a[i] = a[j]; a[j] = t; i++; j--; }
+    }
+    if (k <= j) right = j;
+    else if (k >= i) left = i;
+    else break; // a[j+1..i-1] all equal the pivot, and k is among them
+  }
+  return a[k];
 }
 
 const zeros = (n) => new Array(n).fill(0);

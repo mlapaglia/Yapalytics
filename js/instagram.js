@@ -39,6 +39,7 @@ function metaParserWorker(self, lib) {
   'use strict';
 
   const { analyzeText, stampTime, addReaction, reactionTime, listZip, readEntryText, T_REACTION, contactMap } = lib;
+  const timed = lib.timed || ((name, fn) => fn());
 
   const APPS = {
     instagram: {
@@ -94,7 +95,9 @@ function metaParserWorker(self, lib) {
   function fixText(s) {
     if (!/[\u0080-ÿ]/.test(s) || /[^\u0000-ÿ]/.test(s)) return s;
     try {
-      return utf8.decode(Uint8Array.from(s, (c) => c.charCodeAt(0)));
+      const bytes = new Uint8Array(s.length);
+      for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+      return utf8.decode(bytes);
     } catch {
       return s; // real Latin-1 text, not escaped UTF-8
     }
@@ -317,7 +320,7 @@ function metaParserWorker(self, lib) {
       if (app === APPS.messenger && isEncrypted(data)) {
         parseEncryptedThread(data, src, byPath);
         needChats.delete(src.chat);
-      } else if (src.chat == null) parseThread(fixAll(data), src, byTail);
+      } else if (src.chat == null) parseThread(timed('fixAll', () => fixAll(data)), src, byTail);
       // else: a .json in a zip that isn't a chat (some other part of an export)
       loaded += src.size;
       self.postMessage({ type: 'progress', loaded, total });

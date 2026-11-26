@@ -265,6 +265,20 @@ test.describe('spec 016 loading screen', () => {
     });
   }
 
+  test('AC18: files read at the same time are added in file order', async ({ page }) => {
+    const big = sms(30000, 'sms-big.xml');
+    const small = sms(5, 'sms-small.xml'); // the same 5 messages the big one starts with
+    await loadFiles(page, [big, small]);
+    const { rows, jobs, workers } = await inApp(page, (app) => ({
+      rows: app.loadSnapshot.files.map((f) => ({ name: f.name, msgs: f.msgs })),
+      jobs: LoadPerf.last.jobs.map((j) => ({ label: j.label, end: j.t0 + j.ms })),
+      workers: PARSE_WORKERS(),
+    }));
+    expect(rows).toEqual([{ name: 'sms-big.xml', msgs: 30000 }, { name: 'sms-small.xml', msgs: 0 }]);
+    // With one core to spare, the files are read one after another and the order is moot.
+    if (workers > 1) expect(jobs[1].end).toBeLessThan(jobs[0].end);
+  });
+
   test('AC17: a conversation name with markup shows as text', async ({ page }) => {
     const name = '<img src=x onerror=alert(1)>';
     page.on('dialog', () => { throw new Error('a dialog opened'); });
