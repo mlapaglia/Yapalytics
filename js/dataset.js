@@ -156,11 +156,16 @@ function createDataset() {
       }
     },
 
-    /** After a load: messages and calls in time order. */
+    /**
+     * After a load: messages and calls in time order. Apps are read at the same time, so
+     * their batches arrive in any order: messages at the same moment go by app, then as
+     * read, as when files were read one at a time.
+     */
     finish() {
-      D.msgs.sort((a, b) => a.t - b.t);
+      const byTime = (a, b) => a.t - b.t || (a.s || 0) - (b.s || 0);
+      D.msgs.sort(byTime);
       D.calls.sort((a, b) => a.t - b.t);
-      D.reactionTexts.sort((a, b) => a.t - b.t);
+      D.reactionTexts.sort(byTime);
     },
 
     /** Forget everything read (not `archives`: attachment indexes from before stay valid). */

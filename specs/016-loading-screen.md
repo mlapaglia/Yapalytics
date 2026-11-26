@@ -40,6 +40,8 @@ messages. Watching the years fill in as files are read is a good first look.
   "Drawing the dashboard". It's announced to screen readers when it changes
   (`aria-live="polite"`), and only then, not on every number change. The line is
   written as soon as the step changes, so a step shorter than a frame still shows.
+  While several files are read at once (R7) it names them: "Reading sms-….xml and
+  WhatsApp Chat with Alex.zip", or "Reading takeout-1.zip and 2 more".
 - **R3** **Progress bar.** It's split into one segment per file, sized by the file's
   share of the total bytes, coloured with that file's app colour. Each segment fills
   as its file is read. The percentage beside it is bytes read over total bytes for
@@ -74,12 +76,12 @@ messages. Watching the years fill in as files are read is a good first look.
   Instagram export or a Takeout split across zips) share a state and one count, since
   the parser can't say which file a message came from: each of their rows says
   "30 messages from these 2 files".
-  - Up to 4 files (or jobs) are read at the same time, each in its own worker, leaving
-    a core for the page. Their batches are still added in file order, as if the files
-    were read one after another, so a message in two overlapping exports keeps the
-    same copy whichever file finishes first. Until the files before it are added, a
-    file that's already read shows "Reading 100%" and its counts wait. Its time is how
-    long its own reading took.
+  - Different apps' files are read at the same time, up to 4 workers, leaving a core
+    for the page; their counts go up as their batches arrive. One app's files (several
+    SMS backups) are read one after another, in order, so a message in two overlapping
+    exports keeps the same copy as when every file was read in turn. Messages of
+    different apps can't be duplicates of each other, so nothing waits to be added.
+  - If a file fails, the files still being read stop at once.
 - **R8** **Steps.** A short list that ticks off as it goes, each with the time it
   took: Preparing the demo (demo only), Checking files, Reading files, Merging and
   sorting, Who's you and linked people, Drawing the dashboard. The current step has
@@ -194,9 +196,10 @@ pulse and transitions (R12).
 - **AC1** Given a load of an SMS backup and a WhatsApp chat, the screen
   shows two file rows with their app logos and sizes, and two bar segments sized by
   their bytes.
-- **AC2** During that load, the current step reads "Reading <file name>" for each file
-  in turn, then "Sorting … messages", "Working out who's you" and "Drawing the
-  dashboard", in that order.
+- **AC2** During that load, the current step names the files being read, both at once
+  ("Reading sms-….xml and WhatsApp Chat with Sam.txt") since they're of different apps,
+  then "Sorting … messages", "Working out who's you" and "Drawing the dashboard", in
+  that order.
 - **AC3** When reading ends, the Messages, Calls and Conversations counts equal
   `Data.msgs.length`, `Data.calls.length` and the number of distinct conversation keys.
 - **AC4** Loading a file twice in the Files dialog (overlapping exports) shows a
@@ -225,10 +228,15 @@ pulse and transitions (R12).
   found before reading ends, with the SMS logo, and the list never holds more than 8.
 - **AC17** A conversation named `<img src=x onerror=alert(1)>` shows as that text in
   Conversations found, and no script runs.
-- **AC18** Given a large SMS backup and a small one that repeats its first messages,
-  loaded in that order, the small one finishes reading first (they're read at the same
-  time), yet the large one's row counts every message and the small one's counts none:
-  its messages are the duplicates.
+- **AC18** Given a large SMS backup, a small one that repeats its first messages and a
+  WhatsApp chat, loaded in that order: the WhatsApp chat is read while the large backup
+  is (different apps), the small backup only once the large one is done (the same app),
+  and the large one's row counts every message and the small one's counts none: its
+  messages are the duplicates.
+- **AC19** Given a large SMS backup and a Telegram `result.json` that isn't valid JSON,
+  loaded together, the SMS backup's worker is stopped as soon as the Telegram file fails,
+  before it finishes; the SMS backup is then read again on its own and the error names
+  the Telegram file.
 
 ## Decisions
 
