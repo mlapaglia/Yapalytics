@@ -250,6 +250,42 @@ function awayStretches(days) {
   return out;
 }
 
+/** In ascending integer array `a`, the first index whose value is above `x` (a.length if none). */
+function firstAbove(a, x) {
+  let lo = 0, hi = a.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (a[mid] > x) hi = mid; else lo = mid + 1;
+  }
+  return lo;
+}
+
+/** The median of a[lo..hi), which is sorted ascending and not empty. */
+function sortedMedian(a, lo, hi) {
+  const len = hi - lo, mid = lo + (len >> 1);
+  return len % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
+}
+
+/**
+ * A robust standard deviation of a[lo..hi) (sorted ascending) around its median `m`: 1.4826
+ * times the median distance from `m`, and at least √m and 1. The distances are read in
+ * order by walking out from `m` both ways.
+ */
+function spread(a, lo, hi, m) {
+  const len = hi - lo;
+  let r = lo;
+  while (r < hi && a[r] < m) r++;
+  let l = r - 1;
+  let prev = 0, cur = 0;
+  for (let step = 0; step <= len >> 1; step++) {
+    prev = cur;
+    if (l >= lo && (r >= hi || m - a[l] <= a[r] - m)) cur = m - a[l--];
+    else cur = a[r++] - m;
+  }
+  const mad = len % 2 ? cur : (prev + cur) / 2;
+  return Math.max(1.4826 * mad, Math.sqrt(m), 1);
+}
+
 /**
  * Days far busier or quieter than normal for a conversation (R11, R12): [{ d, k, n, usual,
  * kind: 'busy' | 'quiet', score }], best first. Each day is judged against the
@@ -281,24 +317,31 @@ function unusualDays(msgs, { minMessages = UNUSUAL_MIN_MSGS, top = UNUSUAL_TOP }
       for (let x = i; x < j; x++) emptyRun[x] = j - i;
       i = j;
     }
-    // The usual count and its spread (a robust standard deviation, at least √usual and 1).
-    const norm = (xs) => {
-      const m = median(xs);
-      return { m, s: Math.max(1.4826 * median(xs.map((x) => Math.abs(x - m))), Math.sqrt(m), 1) };
-    };
-    for (let i = UNUSUAL_MIN_HISTORY; i < counts.length; i++) {
-      const win = counts.slice(Math.max(0, i - UNUSUAL_WINDOW), i);
-      const n = counts[i];
-      // Busy: against the days that had messages, so a conversation that's quiet most days
-      // but long when it happens doesn't make every ordinary chat a spike.
-      const active = win.filter((x) => x > 0);
-      if (n >= 30 && active.length >= UNUSUAL_MIN_ACTIVE) {
-        const { m, s } = norm(active);
-        if (n >= 3 * Math.max(m, 1) && (n - m) / s >= 5) { out.push({ d: first + i, k, n, usual: m, kind: 'busy', score: (n - m) / s }); continue; }
+    // The window's counts, kept sorted as it slides: its median, and that of the days with
+    // messages (a suffix of it), are read off it without sorting each day.
+    const win = [];
+    for (let i = 0; i < counts.length; i++) {
+      if (i >= UNUSUAL_MIN_HISTORY) {
+        const n = counts[i];
+        // Busy: against the days that had messages, so a conversation that's quiet most days
+        // but long when it happens doesn't make every ordinary chat a spike.
+        const active = firstAbove(win, 0);
+        let busy = false;
+        if (n >= 30 && win.length - active >= UNUSUAL_MIN_ACTIVE) {
+          const m = sortedMedian(win, active, win.length);
+          if (n >= 3 * Math.max(m, 1)) {
+            const s = spread(win, active, win.length, m);
+            busy = (n - m) / s >= 5;
+            if (busy) out.push({ d: first + i, k, n, usual: m, kind: 'busy', score: (n - m) / s });
+          }
+        }
+        // Quiet: against every day, so only a conversation busy nearly every day has quiet days.
+        const m = busy ? 0 : sortedMedian(win, 0, win.length);
+        if (m >= 15 && n <= 0.15 * m && emptyRun[i] < 3) out.push({ d: first + i, k, n, usual: m, kind: 'quiet', score: (m - n) / spread(win, 0, win.length, m) });
       }
-      // Quiet: against every day, so only a conversation busy nearly every day has quiet days.
-      const { m, s } = norm(win);
-      if (m >= 15 && n <= 0.15 * m && emptyRun[i] < 3) out.push({ d: first + i, k, n, usual: m, kind: 'quiet', score: (m - n) / s });
+      // Slide: the window for day i + 1 is days i + 1 - UNUSUAL_WINDOW to i.
+      win.splice(firstAbove(win, counts[i]), 0, counts[i]);
+      if (i >= UNUSUAL_WINDOW) win.splice(firstAbove(win, counts[i - UNUSUAL_WINDOW] - 1), 1);
     }
   }
   return out.sort((a, b) => b.score - a.score || b.d - a.d);

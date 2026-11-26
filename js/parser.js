@@ -75,7 +75,9 @@ function messageLib(vader) {
   const REACTION_MEDIA_RE = new RegExp(String.raw`^${REACT_VERB} ${REACT_MEDIA}`, 'u');
   const REACT_MARKS_RE = /[\u200b\u200c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g; // not U+200D, which joins emoji
   const REACT_HEAD = 200;
-  const tidyReaction = (s) => s.replace(REACT_MARKS_RE, '').replace(/\s+/g, ' ').trim();
+  // Most messages have no marks and only single plain spaces: then tidying is just trimming.
+  const UNTIDY_RE = /[\u200b\u200c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]|[^\S ]| {2}/;
+  const tidyReaction = (s) => (UNTIDY_RE.test(s) ? s.replace(REACT_MARKS_RE, '').replace(/\s+/g, ' ').trim() : s.trim());
   function isReactionText(body) {
     const head = tidyReaction(body.slice(0, REACT_HEAD));
     if (REACTION_QUOTE_RE.test(head)) return true;
@@ -321,8 +323,10 @@ function smsParserWorker(self, lib) {
   'use strict';
 
   const { analyzeText, stampTime, contactMap } = lib;
+  const timed = lib.timed || ((name, fn) => fn());
 
   const CHUNK_BYTES = 8 * 1024 * 1024;
+  const READ_AHEAD = 3; // chunks being read at once
   const BATCH_SIZE = 5000;
 
   // ---------------------------------------------------------------- XML scanning
@@ -675,11 +679,23 @@ function smsParserWorker(self, lib) {
     const bom = head[0] === 0xef && head[1] === 0xbb && head[2] === 0xbf ? 3 : 0;
     const scanner = createScanner(onOpen, onClose, new Set(['data']), bom);
     const decoder = new TextDecoder('utf-8');
+    // The next chunks are read while this one is decoded and scanned.
+    const reads = [];
+    let readAt = 0;
+    const readAhead = () => {
+      while (reads.length < READ_AHEAD && readAt < file.size) {
+        reads.push(file.slice(readAt, readAt + CHUNK_BYTES).arrayBuffer());
+        readAt += CHUNK_BYTES;
+      }
+    };
+    readAhead();
     let offset = 0;
-    while (offset < file.size) {
-      const buf = await file.slice(offset, offset + CHUNK_BYTES).arrayBuffer();
+    while (reads.length) {
+      const buf = await timed('wait for file', () => reads.shift());
+      readAhead();
       offset += buf.byteLength;
-      scanner.feed(decoder.decode(buf, { stream: offset < file.size }));
+      const text = timed('decode UTF-8', () => decoder.decode(buf, { stream: offset < file.size }));
+      scanner.feed(text);
       flush();
       self.postMessage({ type: 'progress', loaded: offset, total: file.size });
     }
@@ -700,29 +716,41 @@ function smsParserWorker(self, lib) {
 
 /**
  * Run a parser worker over `payload`. Callbacks: onBatch(msgs, calls, found), onProgress(loaded, total).
- * `found` lists the conversations first seen in that batch (spec 016 R15).
+ * `found` lists the conversations first seen in that batch (spec 016 R15). `signal` (an
+ * AbortSignal) stops the worker; `perf` is its LoadPerf job.
  * Resolves with the worker's final { type:'done', contacts, counts } message.
  */
-function runParserWorker(workerFn, payload, { onBatch, onProgress }) {
+function runParserWorker(workerFn, payload, { onBatch, onProgress, perf, signal }) {
   return new Promise((resolve, reject) => {
-    const lib = `Object.assign((${messageLib})((${vaderLib})()), (${zipLib})())`;
+    if (signal?.aborted) { reject(new Error('Stopped')); return; }
+    // perfLib (perf.js) builds the lib with its parsing functions timed.
+    const lib = `(${perfLib})(self, ${messageLib}, ${vaderLib}, ${zipLib})`;
     const src = `(${workerFn})(self, ${lib});`;
     const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
     const worker = new Worker(url);
+    const stop = () => {
+      worker.terminate();
+      URL.revokeObjectURL(url);
+      signal?.removeEventListener('abort', onAbort);
+    };
+    const onAbort = () => { stop(); reject(new Error('Stopped')); };
+    signal?.addEventListener('abort', onAbort);
     worker.onmessage = (e) => {
+      // The message is copied in when e.data is first read.
+      const t = performance.now();
       const d = e.data;
+      if (perf && d.type === 'batch') LoadPerf.add(perf, 'receive batches', performance.now() - t, d.msgs.length + d.calls.length);
       if (d.type === 'batch') onBatch(d.msgs, d.calls, d.found || []);
       else if (d.type === 'progress') onProgress(d.loaded, d.total);
       else if (d.type === 'done' || d.type === 'error') {
-        worker.terminate();
-        URL.revokeObjectURL(url);
+        if (perf) LoadPerf.endJob(perf, d.perf);
+        stop();
         if (d.type === 'done') resolve(d);
         else reject(new Error(d.message));
       }
     };
     worker.onerror = (e) => {
-      worker.terminate();
-      URL.revokeObjectURL(url);
+      stop();
       reject(new Error(e.message || 'Worker failed'));
     };
     worker.postMessage(payload);

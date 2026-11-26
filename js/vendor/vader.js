@@ -14,7 +14,11 @@
  * removed) so the parser Web Workers can include it in their serialized source.
  * polarity_scores' per-word step is split out as word_sentiments, and explain()
  * returns those per-word values so the page can show why a message scored as it
- * did. The algorithm and the lexicon are unchanged.
+ * did. Splitting a text into words looks each token up instead of building every
+ * word × punctuation combination (about 10× faster, same words), negation words are a
+ * Set, the ALL CAPS regex is made once, each word is lowercased once, idioms are only
+ * looked up near an idiom's word, and ! and ? are counted without building strings.
+ * The algorithm and the lexicon are unchanged.
  */
 function vaderLib() {
   'use strict';
@@ -7558,6 +7562,8 @@ function vaderLib() {
     '!?!?'
   ];
 
+  const PUNC_CHARS = new Set(['.', '!', '?', ',', ';', ':', '-', "'", '"'].map(c => c.charCodeAt(0)));
+
   const NEGATE = [
     'aint',
     'arent',
@@ -7619,6 +7625,8 @@ function vaderLib() {
     'seldom',
     'despite'
   ];
+
+  const NEGATE_SET = new Set(NEGATE);
 
   // booster/dampener 'intensifiers' or 'degree adverbs'
   // http://en.wiktionary.org/wiki/Category:English_degree_adverbs
@@ -7703,6 +7711,11 @@ function vaderLib() {
     'hand to mouth': -2
   };
 
+  // Words of the multi-word idioms and boosters, so idioms_check can tell none is near.
+  const IDIOM_WORDS = new Set(
+    [...Object.keys(SPECIAL_CASE_IDIOMS), ...Object.keys(BOOSTER_DICT)].filter(k => k.includes(' ')).flatMap(k => k.split(' '))
+  );
+
   // static methods
 
   const negated = (input_words, include_nt = true) => {
@@ -7710,10 +7723,8 @@ function vaderLib() {
       Determine if input contains negation words
      */
 
-    let neg_words = [];
-    neg_words.push.apply(neg_words, NEGATE);
-    for (let i = 0; i < neg_words.length; i++) {
-      if (input_words.indexOf(neg_words[i]) >= 0) {
+    for (let i = 0; i < input_words.length; i++) {
+      if (NEGATE_SET.has(input_words[i])) {
         return true;
       }
     }
@@ -7761,14 +7772,13 @@ function vaderLib() {
     return cap_differential > 0 && cap_differential < words.length;
   };
 
-  const scalar_inc_dec = (word, valence, is_cap_diff) => {
+  const scalar_inc_dec = (word, word_lower, valence, is_cap_diff) => {
     /**
         Check if the preceding words increase, decrease, or negate/nullify the
         valence
       */
 
     let scalar = 0.0;
-    const word_lower = word.toLowerCase();
     if (BOOSTER_DICT.hasOwnProperty(word_lower)) {
       scalar = BOOSTER_DICT[word_lower];
       if (valence < 0) {
@@ -7786,6 +7796,7 @@ function vaderLib() {
     return scalar;
   };
 
+  const UPPER_PYTHON_RE = /^[^a-z]*[A-Z]+[^a-z]*$/;
   const is_upper_python = word => {
     /**
         Python style "isupper" function. Requirements are that the string is at least one character in length,
@@ -7794,7 +7805,7 @@ function vaderLib() {
      */
     if (typeof word === 'string' || word instanceof String) {
       if (word.length > 0) {
-        return /^[^a-z]*[A-Z]+[^a-z]*$/g.test(word);
+        return UPPER_PYTHON_RE.test(word);
       }
     }
     return false;
@@ -7807,6 +7818,7 @@ function vaderLib() {
     constructor(text) {
       this.text = text;
       this.words_and_emoticons = this.get_words_and_emoticons();
+      this.lower = this.words_and_emoticons.map(word => word.toLowerCase());
       // doesn't separate words from adjacent punctuation (keeps emoticons & contractions)
       this.is_cap_diff = allcap_differential(this.words_and_emoticons);
     }
@@ -7844,16 +7856,31 @@ function vaderLib() {
         Removes leading and trailing puncutation
         Leaves contractions and most emoticons
         Does not preserve punc-plus-letter emoticons (e.g. :D)
+
+        Same result as looking each token up in get_words_plus_punc(), without building
+        every word x punctuation combination: a token that is a punctuation mark plus a
+        word of the text, or the other way round, becomes the word. Later marks win, and
+        mark + word after word + mark, as the dictionary's later writes did.
       */
 
       const tokens = this.text.split(/\s/);
-      const words_punc_dict = this.get_words_plus_punc();
       let words_only = tokens.filter(token => {
         return token.length > 1;
       });
+      let words = null;
       for (let i = 0; i < words_only.length; i++) {
-        if (words_punc_dict.hasOwnProperty(words_only[i])) {
-          words_only[i] = words_punc_dict[words_only[i]];
+        const token = words_only[i];
+        const first = token.charCodeAt(0);
+        const last = token.charCodeAt(token.length - 1);
+        if (!PUNC_CHARS.has(first) && !PUNC_CHARS.has(last)) continue;
+        if (!words) {
+          words = new Set(this.text.replace(REGEX_REMOVE_PUNCTUATION, '').split(/\s/).filter(word => word.length > 1));
+        }
+        for (let j = PUNC_LIST.length - 1; j >= 0; j--) {
+          const p = PUNC_LIST[j];
+          if (token.length <= p.length) continue;
+          if (token.endsWith(p) && words.has(token.slice(0, -p.length))) { words_only[i] = token.slice(0, -p.length); break; }
+          if (token.startsWith(p) && words.has(token.slice(p.length))) { words_only[i] = token.slice(p.length); break; }
         }
       }
       return words_only;
@@ -7885,14 +7912,15 @@ function vaderLib() {
       const sentiText = new SentiText(text);
       let sentiments = [];
       const words_and_emoticons = sentiText.words_and_emoticons;
+      const lower = sentiText.lower;
       for (let i = 0; i < words_and_emoticons.length; i++) {
         let valence = 0;
         const item = words_and_emoticons[i];
         if (
           (i < words_and_emoticons.length - 1 &&
-            item.toLowerCase() === 'kind' &&
-            words_and_emoticons[i + 1].toLowerCase() === 'of') ||
-          BOOSTER_DICT.hasOwnProperty(item.toLowerCase())
+            lower[i] === 'kind' &&
+            lower[i + 1] === 'of') ||
+          BOOSTER_DICT.hasOwnProperty(lower[i])
         ) {
           sentiments.push(valence);
           continue;
@@ -7914,7 +7942,8 @@ function vaderLib() {
     static sentiment_valence(valence, sentiText, item, index, sentiments) {
       const is_cap_diff = sentiText.is_cap_diff;
       const words_and_emoticons = sentiText.words_and_emoticons;
-      const item_lowercase = item.toLowerCase();
+      const lower = sentiText.lower;
+      const item_lowercase = lower[index];
       if (LEXICON.hasOwnProperty(item_lowercase)) {
         // get the sentiment valence
         valence = LEXICON[item_lowercase];
@@ -7930,12 +7959,12 @@ function vaderLib() {
         for (let start_i = 0; start_i < 3; start_i++) {
           if (
             index > start_i &&
-            LEXICON.hasOwnProperty(words_and_emoticons[index - (start_i + 1)].toLowerCase()) === false
+            LEXICON.hasOwnProperty(lower[index - (start_i + 1)]) === false
           ) {
             // dampen the scalar modifier of preceding words and emoticons
             // (excluding the ones that immediately preceed the item) based
             // on their distance from the current item.
-            let s = scalar_inc_dec(words_and_emoticons[index - (start_i + 1)], valence, is_cap_diff);
+            let s = scalar_inc_dec(words_and_emoticons[index - (start_i + 1)], lower[index - (start_i + 1)], valence, is_cap_diff);
             if (start_i === 1 && s !== 0) {
               s = s * 0.95;
             } else if (start_i === 2 && s !== 0) {
@@ -7949,33 +7978,33 @@ function vaderLib() {
           }
         }
 
-        valence = this.least_check(valence, words_and_emoticons, index);
+        valence = this.least_check(valence, lower, index);
       }
 
       sentiments.push(valence);
       return sentiments;
     }
 
-    static least_check(valence, words_and_emoticons, index) {
+    static least_check(valence, lower, index) {
       /**
         Check for negaion case using "least"
       */
 
       if (
         index > 1 &&
-        words_and_emoticons[index - 1].toLowerCase() === 'least' &&
-        LEXICON.hasOwnProperty(words_and_emoticons[index - 1].toLowerCase()) === false
+        lower[index - 1] === 'least' &&
+        LEXICON.hasOwnProperty(lower[index - 1]) === false
       ) {
         if (
-          words_and_emoticons[index - 2].toLowerCase() !== 'at' &&
-          words_and_emoticons[index - 2].toLowerCase() !== 'very'
+          lower[index - 2] !== 'at' &&
+          lower[index - 2] !== 'very'
         ) {
           valence = valence * N_SCALAR;
         }
       } else if (
         index > 0 &&
-        words_and_emoticons[index - 1].toLowerCase() === 'least' &&
-        LEXICON.hasOwnProperty(words_and_emoticons[index - 1].toLowerCase()) === false
+        lower[index - 1] === 'least' &&
+        LEXICON.hasOwnProperty(lower[index - 1]) === false
       ) {
         valence = valence * N_SCALAR;
       }
@@ -8008,6 +8037,15 @@ function vaderLib() {
     }
 
     static idioms_check(valence, words_and_emoticons, index) {
+      // Every sequence below is made of words index - 3 to index + 2: without an idiom's
+      // word among them, none can match.
+      let near = false;
+      for (let i = Math.max(0, index - 3); i <= index + 2 && i < words_and_emoticons.length; i++) {
+        if (IDIOM_WORDS.has(words_and_emoticons[i])) { near = true; break; }
+      }
+      if (!near) {
+        return valence;
+      }
       const onezero = `${words_and_emoticons[index - 1]} ${words_and_emoticons[index]}`;
       const twoonezero = `${words_and_emoticons[index - 2]} ${words_and_emoticons[index - 1]} ${
         words_and_emoticons[index]
@@ -8100,7 +8138,8 @@ function vaderLib() {
         Check for added emphasis resulting from exclamation points (up to 4 of them)
       */
 
-      let ep_count = text.replace(/[^!]/g, '').length;
+      let ep_count = 0;
+      for (let i = text.indexOf('!'); i >= 0; i = text.indexOf('!', i + 1)) ep_count++;
       if (ep_count > 4) {
         ep_count = 4;
       }
@@ -8114,7 +8153,8 @@ function vaderLib() {
         Check for added emphasis resulting from question marks (2 or 3+)
       */
 
-      let qm_count = text.replace(/[^?]/g, '').length;
+      let qm_count = 0;
+      for (let i = text.indexOf('?'); i >= 0; i = text.indexOf('?', i + 1)) qm_count++;
       let qm_amplifier = 0;
       if (qm_count > 1) {
         if (qm_count <= 3) {

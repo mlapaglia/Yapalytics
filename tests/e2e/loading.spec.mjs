@@ -85,19 +85,18 @@ test.describe('spec 016 loading screen', () => {
     expect(grow).toEqual(files.map((f) => f.buffer.length));
   });
 
-  test('AC2: the step line goes through each file, then sorting, owners and drawing', async ({ page }) => {
+  test('AC2: the step line names the files being read, then sorting, owners and drawing', async ({ page }) => {
     await record(page);
     const files = [sms(40), whatsApp()];
     await loadFiles(page, files);
     const n = await inApp(page, (app) => app.msgs.length);
-    expect((await recorded(page)).steps).toEqual([
-      'Checking files',
-      `Reading ${files[0].name}`,
-      'Reading WhatsApp Chat with Sam.txt',
-      `Sorting ${n} messages`,
-      "Working out who's you",
-      'Drawing the dashboard',
-    ]);
+    const steps = (await recorded(page)).steps;
+    // Different apps are read at the same time; whichever finishes first leaves the other named.
+    const reading = steps.slice(1, steps.indexOf(`Sorting ${n} messages`));
+    expect(reading[0]).toBe(`Reading ${files[0].name} and WhatsApp Chat with Sam.txt`);
+    for (const step of reading.slice(1)) expect([`Reading ${files[0].name}`, 'Reading WhatsApp Chat with Sam.txt']).toContain(step);
+    expect(steps[0]).toBe('Checking files');
+    expect(steps.slice(steps.indexOf(`Sorting ${n} messages`))).toEqual([`Sorting ${n} messages`, "Working out who's you", 'Drawing the dashboard']);
   });
 
   test('AC3: the counts match what was loaded', async ({ page }) => {
@@ -204,7 +203,8 @@ test.describe('spec 016 loading screen', () => {
       expect(stepWrites).toBe(steps.length);
       for (let i = 1; i < steps.length; i++) expect(steps[i]).not.toBe(steps[i - 1]);
       const jobs = (await inApp(page, (app) => app.loadSnapshot)).files.length;
-      expect(steps.length).toBeLessThanOrEqual(6 + jobs);
+      // Files of different apps are read at once (R7): each changes the line as it starts and as it ends.
+      expect(steps.length).toBeLessThanOrEqual(6 + 2 * jobs);
       await expect(page.locator('#loadStep')).toHaveAttribute('aria-live', 'polite');
     });
 
@@ -264,6 +264,45 @@ test.describe('spec 016 loading screen', () => {
       }
     });
   }
+
+  test('AC18: different apps are read at the same time, one app\'s files in order', async ({ page }) => {
+    const big = sms(30000, 'sms-big.xml');
+    const small = sms(5, 'sms-small.xml'); // the same 5 messages the big one starts with
+    await loadFiles(page, [big, small, whatsApp()]);
+    const { rows, jobs, workers } = await inApp(page, (app) => ({
+      rows: app.loadSnapshot.files.map((f) => ({ name: f.name, msgs: f.msgs })),
+      jobs: Object.fromEntries(LoadPerf.last.jobs.map((j) => [j.label, { start: j.t0, end: j.t0 + j.ms }])),
+      workers: PARSE_WORKERS(),
+    }));
+    expect(rows).toEqual([
+      { name: 'sms-big.xml', msgs: 30000 },
+      { name: 'sms-small.xml', msgs: 0 }, // its messages are the duplicates
+      { name: 'WhatsApp Chat with Sam.txt', msgs: 3 },
+    ]);
+    // The same app: the small backup only starts once the big one is done.
+    expect(jobs['sms-small.xml'].start).toBeGreaterThanOrEqual(jobs['sms-big.xml'].end);
+    // Another app: read while the big backup is (with a core to spare for a second worker).
+    if (workers > 1) expect(jobs['WhatsApp Chat with Sam.txt'].start).toBeLessThan(jobs['sms-big.xml'].end);
+  });
+
+  test.describe('a file that fails', () => {
+    test.use({ failOnConsoleError: false }); // the parse error is logged
+
+    test('AC19: stops the files still being read at once', async ({ page }) => {
+      const broken = { name: 'result.json', mimeType: 'application/json', buffer: Buffer.from('{oops') };
+      await page.goto('/');
+      await page.setInputFiles('#fileInput', [sms(60000, 'sms-big.xml'), broken]);
+      await expect(page.locator('#loadError, #dashErrorText').first()).toContainText(/Could not read that file: .*valid JSON/, { timeout: 60_000 });
+      const jobs = await inApp(page, () => LoadPerf.last.jobs.map((j) => ({ label: j.label, done: !!j.worker })));
+      // The first read of the SMS backup was stopped (its worker never reported), then it was read on its own.
+      expect(jobs).toEqual([
+        { label: 'sms-big.xml', done: false },
+        { label: 'result.json', done: true },
+        { label: 'sms-big.xml', done: true },
+      ]);
+      expect(await inApp(page, (app) => app.msgs.length)).toBe(60000);
+    });
+  });
 
   test('AC17: a conversation name with markup shows as text', async ({ page }) => {
     const name = '<img src=x onerror=alert(1)>';
