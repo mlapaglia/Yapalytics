@@ -115,8 +115,7 @@ const LoadScreen = {
   batch(i, res, found) {
     if (this.active) this.stats.batch(i, { msgs: Data.msgs, calls: Data.calls, reactions: Data.reactions }, res, found, this.now());
   },
-  /** Job `i` is over; `at` is when its worker finished, if that was before now. */
-  endJob(i, error, at = this.now()) { if (this.active) this.stats.endJob(i, { error }, at); },
+  endJob(i, error) { if (this.active) this.stats.endJob(i, { error }, this.now()); },
 
   /** Write `text` into `el` if it isn't there already. */
   put(el, text) {

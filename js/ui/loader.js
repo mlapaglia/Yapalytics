@@ -98,9 +98,9 @@ function hideProgress() {
  */
 async function readFiles(entries) {
   let badDates = ''; // an app's message when its dates couldn't be read
-  let job = null;
   const jobs = [];
   const abort = new AbortController(); // stops the other workers when a job fails
+  let failed = null; // { job, err }: the first job that failed
 
   try {
     // One job per file or per app (Sources: jobs). Attachments point at their file by
@@ -110,62 +110,88 @@ async function readFiles(entries) {
       if (!files.length) continue;
       for (const group of src.jobs === 'each' ? files.map((f) => [f]) : [files]) {
         const label = group.length > 1 ? `${group.length} ${src.name} files` : group[0].name;
-        const job = { files: group, src, label, queue: [], result: null };
+        const job = { i: jobs.length, files: group, src, label, done: null };
         if (src.archives) job.attBase = Data.archive(group);
         jobs.push(job);
       }
     }
+  } catch (err) {
+    console.error(err);
+    return { error: 'Could not read that file: ' + err.message, failed: entries.map((e) => e.file) };
+  }
 
-    LoadScreen.beginRead(entries);
+  LoadScreen.beginRead(entries);
 
-    // Jobs are parsed at the same time, a few workers at once, but their batches are
-    // added in job order, as if the jobs ran one after another: a message in two
-    // overlapping exports keeps the same copy whichever worker is faster. A later job's
-    // batches wait in its queue until the jobs before it are done.
-    let current = 0;
-    let started = 0;
-    const add = (i, msgs, calls, found) => {
-      const { perf, attBase } = jobs[i];
-      const t0 = performance.now();
-      const res = Data.addBatch(msgs, calls, attBase);
-      const t1 = performance.now();
-      LoadScreen.batch(i, res, found);
-      LoadPerf.add(perf, 'Data.addBatch', t1 - t0, msgs.length + calls.length);
-      LoadPerf.add(perf, 'LoadScreen.batch', performance.now() - t1, msgs.length + calls.length);
-    };
-    const startNext = () => {
-      if (started >= jobs.length || abort.signal.aborted) return;
-      const i = started++;
-      const job = jobs[i];
-      LoadScreen.startJob(i, job.files);
-      job.perf = LoadPerf.startJob(job.label);
-      job.result = job.src.parse(job.files, {
+  // An app's jobs run one after another, in order, in its own lane, so a message in two
+  // of its overlapping exports keeps the copy it would if the files were read one at a
+  // time. Lanes run at the same time, a few workers at once: messages of different apps
+  // can't be duplicates of each other (their keys carry the app). Batches are added as
+  // they arrive, so nothing waits in memory (spec 016 R7).
+  const lanes = [];
+  for (const job of jobs) {
+    const lane = lanes.find((l) => l[0].src === job.src);
+    if (lane) lane.push(job);
+    else lanes.push([job]);
+  }
+  // The step line names the jobs being read. Jobs starting together are written once, and
+  // a job ending waits a moment, so the next one in its lane taking its place changes
+  // nothing: the line, a live region, changes only when what's read does (AC12).
+  const reading = [];
+  const showReading = () => {
+    if (reading.length) LoadScreen.step('read', reading.length > 2 ? `${reading[0]} and ${reading.length - 1} more` : reading.join(' and '));
+  };
+  const add = (job, msgs, calls, found) => {
+    const t0 = performance.now();
+    const res = Data.addBatch(msgs, calls, job.attBase);
+    const t1 = performance.now();
+    LoadScreen.batch(job.i, res, found);
+    LoadPerf.add(job.perf, 'Data.addBatch', t1 - t0, msgs.length + calls.length);
+    LoadPerf.add(job.perf, 'LoadScreen.batch', performance.now() - t1, msgs.length + calls.length);
+  };
+  const run = async (job) => {
+    reading.push(job.label);
+    queueMicrotask(showReading);
+    LoadScreen.startJob(job.i, job.files);
+    job.perf = LoadPerf.startJob(job.label);
+    try {
+      job.done = await job.src.parse(job.files, {
         signal: abort.signal,
         perf: job.perf,
-        onBatch: (msgs, calls, found) => (i === current ? add(i, msgs, calls, found) : job.queue.push([msgs, calls, found])),
-        onProgress: (loaded, total) => LoadScreen.progress(i, loaded, total),
-      }).then((done) => ({ done, at: performance.now() }), (error) => ({ error, at: performance.now() }));
-      job.result.then(startNext); // registered before readFiles awaits it, so the next job starts first
-    };
-    for (let k = 0; k < PARSE_WORKERS(); k++) startNext();
-
-    for (let i = 0; i < jobs.length; i++) {
-      job = jobs[i];
-      current = i;
-      LoadScreen.step('read', job.label);
-      for (const batch of job.queue) add(i, ...batch);
-      job.queue = [];
-      const { done, error, at } = await job.result;
-      if (error) throw error;
-      LoadScreen.endJob(i, false, at);
-      Data.addContacts(done.contacts);
-      if (job.src.badDatesError && done.counts.badDates) badDates = job.src.badDatesError;
+        onBatch: (msgs, calls, found) => add(job, msgs, calls, found),
+        onProgress: (loaded, total) => LoadScreen.progress(job.i, loaded, total),
+      });
+      LoadScreen.endJob(job.i, false);
+    } catch (err) {
+      // The first failure stops every other worker at once. Theirs then fail as stopped,
+      // which isn't a failure of their files.
+      if (!abort.signal.aborted) {
+        failed = { job, err };
+        LoadScreen.endJob(job.i, true);
+        abort.abort();
+      }
+    } finally {
+      reading.splice(reading.indexOf(job.label), 1);
+      setTimeout(showReading, 0);
     }
-  } catch (err) {
-    abort.abort();
-    console.error(err);
-    if (job) LoadScreen.endJob(jobs.indexOf(job), true);
-    return { error: 'Could not read that file: ' + err.message, failed: job ? job.files : entries.map((e) => e.file) };
+  };
+  let nextLane = 0;
+  const worker = async () => {
+    while (nextLane < lanes.length && !abort.signal.aborted) {
+      for (const job of lanes[nextLane++]) {
+        if (abort.signal.aborted) break;
+        await run(job);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(PARSE_WORKERS(), lanes.length) }, worker));
+
+  if (failed) {
+    console.error(failed.err);
+    return { error: 'Could not read that file: ' + failed.err.message, failed: failed.job.files };
+  }
+  for (const job of jobs) {
+    Data.addContacts(job.done.contacts); // in job order, whichever finished first
+    if (job.src.badDatesError && job.done.counts.badDates) badDates = job.src.badDatesError;
   }
 
   if (!Data.msgs.length && !Data.calls.length) {
