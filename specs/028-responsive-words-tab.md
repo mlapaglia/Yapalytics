@@ -1,6 +1,6 @@
 # 028 Counting words without freezing the page
 
-Status: Approved · Author: · PR:
+Status: Implemented · Author: · PR: [#42](https://github.com/mlapaglia/Yapalytics/pull/42)
 
 ## Problem
 
