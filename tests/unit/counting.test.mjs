@@ -33,11 +33,26 @@ function messages() {
   return out;
 }
 
+/** A job of `n` steps, counting the steps it ran in `ran[i]`; each step takes `ms` (busy). */
+const job = (ran, i, n = 50, ms = 0) => (function* () {
+  for (let k = 0; k < n; k++) {
+    ran[i]++;
+    const until = performance.now() + ms;
+    while (performance.now() < until);
+    yield k / n;
+  }
+  return i;
+})();
+
 describe('spec 028 counting in slices', () => {
+  const schedule = Background.schedule;
   beforeEach(() => {
     Background.jobs.clear();
     Background.budget = 0; // a step per slice: as many slices as there can be
+    Background.schedule = schedule;
   });
+  /** Slices then run only when the test calls Background.slice(). */
+  const byHand = () => { Background.schedule = () => {}; };
 
   it('AC1: sliced counts equal counting in one go', async () => {
     const msgs = messages();
@@ -52,27 +67,57 @@ describe('spec 028 counting in slices', () => {
     }
   });
 
-  it('AC7: a dropped job never runs again; only the last one finishes', async () => {
-    const steps = [0, 0, 0];
-    const job = (i) => (function* () {
-      for (let k = 0; k < 50; k++) {
-        steps[i]++;
-        yield k / 50;
-      }
-      return i;
-    })();
+  it('AC1: buildDocFreq yields while adding up words too, with progress going up to 1', () => {
+    // 30 conversations of 1,000 words each that no other uses: 30,000 to add up after the last message.
+    const msgs = Array.from({ length: 3000 }, (_, i) => ({ k: `c${i % 30}`, b: Array.from({ length: 10 }, (_, w) => `w${i}x${w}`).join(' '), f: 0 }));
+    const seen = [];
+    const steps = buildDocFreqSteps(msgs);
+    let r;
+    while (!(r = steps.next()).done) seen.push(r.value);
+    assert.equal(r.value.df.size, 30000);
+    assert.ok(seen.length > 3, 'more yields than the 3 for messages');
+    assert.ok(seen.every((p, i) => p > 0 && p <= 1 && (i === 0 || p > seen[i - 1])), 'progress goes up, within 0–1');
+  });
+
+  it('AC7: a dropped job never runs again; only the last one finishes', () => {
+    byHand();
+    const ran = [0, 0, 0];
     const done = [];
-    Background.run('content', 'a', () => job(0), (v) => done.push(v));
-    await new Promise((r) => setTimeout(r, 20)); // let the first one get going
-    const first = steps[0];
-    assert.ok(first > 0 && first < 50, 'the first job was under way');
-    Background.run('content', 'b', () => job(1), (v) => done.push(v));
-    const last = new Promise((resolve) => Background.run('content', 'c', () => job(2), (v) => { done.push(v); resolve(); }));
-    await last;
-    await new Promise((r) => setTimeout(r, 20));
+    Background.run('content', 'a', () => job(ran, 0), (v) => done.push(v));
+    for (let i = 0; i < 3; i++) Background.slice();
+    assert.equal(ran[0], 3, 'the first job was under way');
+    Background.run('content', 'b', () => job(ran, 1), (v) => done.push(v));
+    Background.run('content', 'c', () => job(ran, 2), (v) => done.push(v));
+    while (Background.jobs.size) Background.slice();
     assert.deepEqual(done, [2]);
-    assert.equal(steps[0], first, 'the first job never ran again');
-    assert.equal(steps[1], 0, 'the second never started');
-    assert.equal(steps[2], 50);
+    assert.equal(ran[0], 3, 'the first job never ran again');
+    assert.equal(ran[1], 0, 'the second never started');
+    assert.equal(ran[2], 50);
+  });
+
+  it('AC9: small selections asked for in one turn are counted at once only until syncMs is spent', async () => {
+    byHand();
+    Background.syncMs = 25;
+    try {
+      const ran = [0, 0, 0, 0];
+      const done = [];
+      const ask = (i, steps) => {
+        Background.run(`terms:${i}`, i, () => job(ran, i, steps, 2), (v) => done.push(v));
+        Background.finishInTurn(`terms:${i}`, i);
+      };
+      ask(0, 5); // ~10 ms: done at once
+      ask(1, 15); // ~30 ms: stopped when the turn's 25 ms are spent
+      ask(2, 5); // nothing left this turn
+      assert.deepEqual(done, [0]);
+      assert.ok(ran[1] > 0 && ran[1] < 15, `the second ran part way (${ran[1]} of 15 steps)`);
+      assert.equal(ran[2], 0);
+      await null; // the next turn gets its own 25 ms
+      ask(3, 5);
+      assert.deepEqual(done, [0, 3]);
+      while (Background.jobs.size) Background.slice(); // the rest go on in slices
+      assert.deepEqual(done.sort(), [0, 1, 2, 3]);
+    } finally {
+      Background.syncMs = 50;
+    }
   });
 });

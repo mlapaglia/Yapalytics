@@ -640,6 +640,8 @@ let swearFamilyOf = null; // messageLib().swearFamily, created on first use
 
 /** Counting generators (spec 028) yield how far they are, 0–1, every this many messages. */
 const STEP_MSGS = 1000;
+/** …and every this many words where they add up words already counted (buildDocFreqSteps). */
+const STEP_WORDS = 20000;
 
 /** Runs a counting generator to the end and returns its result. */
 function runSteps(steps) {
@@ -819,19 +821,32 @@ function aggregatePhrase(msgs, re) {
   return P;
 }
 
+/** How much of buildDocFreqSteps' progress is the message loop: adding up takes about a tenth. */
+const DF_LOOP = 0.9;
+
 /** Number of conversations each word appears in (document frequency for TF-IDF), in slices (spec 028). */
 function* buildDocFreqSteps(msgs) {
   const perThread = new Map();
   let done = 0;
   for (const r of msgs) {
-    if (++done % STEP_MSGS === 0) yield done / msgs.length;
+    if (++done % STEP_MSGS === 0) yield DF_LOOP * done / msgs.length;
     if (!r.b || r.f & T_REACTION) continue;
     let set = perThread.get(r.k);
     if (!set) perThread.set(r.k, (set = new Set()));
     for (const tk of tokensOf(r.b)) set.add(tk);
   }
+  // Adding up the conversations' words: millions of them over a big archive, so in slices
+  // too. Counting them inside the loop instead would take longer (a has() per word).
+  let total = 0;
+  for (const set of perThread.values()) total += set.size;
   const df = new Map();
-  for (const set of perThread.values()) for (const tk of set) df.set(tk, (df.get(tk) || 0) + 1);
+  let added = 0;
+  for (const set of perThread.values()) {
+    for (const tk of set) {
+      df.set(tk, (df.get(tk) || 0) + 1);
+      if (++added % STEP_WORDS === 0) yield DF_LOOP + (1 - DF_LOOP) * added / total;
+    }
+  }
   return { df, docs: perThread.size };
 }
 

@@ -56,6 +56,13 @@ async function record(page) {
 }
 const recorded = (page) => page.evaluate(() => window.__rec);
 
+/**
+ * Pretends the computer has `cores` cores, before the page loads: the loader starts one
+ * parse worker fewer, up to 4 (PARSE_WORKERS), so 4 cores read three files at once and
+ * 2 cores read one at a time.
+ */
+const cores = (page, n) => page.addInitScript((c) => Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', { get: () => c, configurable: true }), n);
+
 async function loadDemoRecorded(page) {
   await page.goto('/');
   await page.click('#demoBtn');
@@ -86,6 +93,7 @@ test.describe('spec 016 loading screen', () => {
   });
 
   test('AC2: the step line names the files being read, then sorting, owners and drawing', async ({ page }) => {
+    await cores(page, 4);
     await record(page);
     const files = [sms(40), whatsApp()];
     await loadFiles(page, files);
@@ -97,6 +105,20 @@ test.describe('spec 016 loading screen', () => {
     for (const step of reading.slice(1)) expect([`Reading ${files[0].name}`, 'Reading WhatsApp Chat with Sam.txt']).toContain(step);
     expect(steps[0]).toBe('Checking files');
     expect(steps.slice(steps.indexOf(`Sorting ${n} messages`))).toEqual([`Sorting ${n} messages`, "Working out who's you", 'Drawing the dashboard']);
+  });
+
+  test('AC20: with one worker, the step line names one file at a time, in order', async ({ page }) => {
+    await cores(page, 2);
+    await record(page);
+    const files = [sms(40), whatsApp()];
+    await loadFiles(page, files);
+    const n = await inApp(page, (app) => app.msgs.length);
+    const { steps } = await recorded(page);
+    const reading = steps.slice(1, steps.indexOf(`Sorting ${n} messages`));
+    expect([...new Set(reading)]).toEqual([`Reading ${files[0].name}`, 'Reading WhatsApp Chat with Sam.txt']);
+    const jobs = await inApp(page, () => LoadPerf.last.jobs.map((j) => ({ label: j.label, start: j.t0, end: j.t0 + j.ms })));
+    expect(jobs.map((j) => j.label)).toEqual([files[0].name, 'WhatsApp Chat with Sam.txt']);
+    expect(jobs[1].start).toBeGreaterThanOrEqual(jobs[0].end);
   });
 
   test('AC3: the counts match what was loaded', async ({ page }) => {
@@ -268,11 +290,11 @@ test.describe('spec 016 loading screen', () => {
   test('AC18: different apps are read at the same time, one app\'s files in order', async ({ page }) => {
     const big = sms(30000, 'sms-big.xml');
     const small = sms(5, 'sms-small.xml'); // the same 5 messages the big one starts with
+    await cores(page, 4);
     await loadFiles(page, [big, small, whatsApp()]);
-    const { rows, jobs, workers } = await inApp(page, (app) => ({
+    const { rows, jobs } = await inApp(page, (app) => ({
       rows: app.loadSnapshot.files.map((f) => ({ name: f.name, msgs: f.msgs })),
       jobs: Object.fromEntries(LoadPerf.last.jobs.map((j) => [j.label, { start: j.t0, end: j.t0 + j.ms }])),
-      workers: PARSE_WORKERS(),
     }));
     expect(rows).toEqual([
       { name: 'sms-big.xml', msgs: 30000 },
@@ -281,8 +303,8 @@ test.describe('spec 016 loading screen', () => {
     ]);
     // The same app: the small backup only starts once the big one is done.
     expect(jobs['sms-small.xml'].start).toBeGreaterThanOrEqual(jobs['sms-big.xml'].end);
-    // Another app: read while the big backup is (with a core to spare for a second worker).
-    if (workers > 1) expect(jobs['WhatsApp Chat with Sam.txt'].start).toBeLessThan(jobs['sms-big.xml'].end);
+    // Another app: read while the big backup is.
+    expect(jobs['WhatsApp Chat with Sam.txt'].start).toBeLessThan(jobs['sms-big.xml'].end);
   });
 
   test.describe('a file that fails', () => {
@@ -290,6 +312,7 @@ test.describe('spec 016 loading screen', () => {
 
     test('AC19: stops the files still being read at once', async ({ page }) => {
       const broken = { name: 'result.json', mimeType: 'application/json', buffer: Buffer.from('{oops') };
+      await cores(page, 4);
       await page.goto('/');
       await page.setInputFiles('#fileInput', [sms(60000, 'sms-big.xml'), broken]);
       await expect(page.locator('#loadError, #dashErrorText').first()).toContainText(/Could not read that file: .*valid JSON/, { timeout: 60_000 });

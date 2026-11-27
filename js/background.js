@@ -9,7 +9,9 @@
  */
 const Background = {
   budget: 30, // ms of counting per slice (R1); tests lower it
-  syncBelow: 5000, // selections smaller than this are counted at once: a placeholder would only flash
+  syncBelow: 5000, // selections smaller than this are counted at once: a placeholder would only flash…
+  syncMs: 50, // …as long as counting at once takes this long at most in one turn, all asks together
+  syncUntil: 0, // when this turn's counting at once has to stop (0: none yet this turn)
   jobs: new Map(), // slot -> { slot, key, steps, onDone, progress, ms, slices, longest }
   last: [], // finished jobs: { slot, ms, slices, longest }, newest last
   timer: null,
@@ -26,9 +28,9 @@ const Background = {
     return job;
   },
 
-  /** Drop every job whose slot starts with `prefix`. */
-  drop(prefix) {
-    for (const slot of [...this.jobs.keys()]) if (slot.startsWith(prefix)) this.jobs.delete(slot);
+  /** Drop every job whose slot starts with `prefix`, except `keep`'s. */
+  drop(prefix, keep = null) {
+    for (const slot of [...this.jobs.keys()]) if (slot.startsWith(prefix) && slot !== keep) this.jobs.delete(slot);
   },
 
   /** How far `slot`'s job is, 0–1 (0 when there's none). */
@@ -40,6 +42,21 @@ const Background = {
   finish(slot, key) {
     const job = this.jobs.get(slot);
     if (job && job.key === key) this.advance(job, Infinity);
+  },
+
+  /**
+   * Run `slot`'s job for `key` to the end now if it fits in what's left of this turn's
+   * syncMs; if not, it goes on in slices. Every ask in one turn (one render) shares the
+   * syncMs, so several small selections asked for together can't freeze the page.
+   */
+  finishInTurn(slot, key) {
+    const job = this.jobs.get(slot);
+    if (!job || job.key !== key) return;
+    if (!this.syncUntil) {
+      this.syncUntil = performance.now() + this.syncMs;
+      queueMicrotask(() => { this.syncUntil = 0; }); // the turn is over
+    }
+    if (performance.now() < this.syncUntil) this.advance(job, this.syncUntil);
   },
 
   schedule() {

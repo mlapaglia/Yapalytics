@@ -63,7 +63,9 @@ functions (`aggregateContentSteps`, …) that `yield` every 1,000 messages with 
 are (0–1), and return their result. The existing names stay as wrappers that run the
 generator to the end, so the code that counts is one copy and R8 holds by construction.
 The work after the message loop (new words per month) is short and stays in the last
-slice.
+slice. `buildDocFreq` is the exception: adding up each conversation's words after the
+loop takes 50–120 ms over 345k messages, so it yields every 20,000 words too, as the
+last tenth of its progress.
 
 **Runner** (`js/background.js`). `Background.run(key, steps, onDone)` advances a generator
 until 30 ms have passed, then waits for the next task (`setTimeout(0)`, or
@@ -101,7 +103,15 @@ forgets it. When counts arrive, after the panels redraw, `Tabs.keepJump()` scrol
 remembered card again.
 
 **Small selections.** A selection of fewer than 5,000 messages (`Background.syncBelow`) is
-counted at once: it takes a few milliseconds, and a placeholder would only flash.
+counted at once: it takes a few milliseconds, and a placeholder would only flash. All
+the counting done at once in one turn shares 50 ms (`Background.syncMs`): All
+conversations' inside jokes ask for up to eight conversations in one render, each of
+which may be small. Whatever doesn't fit goes on in slices.
+
+**Picking another conversation** drops the inside jokes counts still waiting for the
+conversation picked before (one per busy conversation under All conversations), except
+the newly picked one's own, so they don't hold up the new selection's counts (R4).
+Counts already done are kept.
 
 **Timers.** `Background.last` keeps each finished job's total time, number of slices and
 longest slice; `?perf` prints them to the console.
@@ -122,8 +132,7 @@ later.
   reactions, emoji, corrections, several languages), the sliced counts equal counting in
   one go: `aggregateContent`, `buildDocFreq` and `conversationTerms`.
 - **AC2** With the time budget at 1 ms, opening the Words tab on the demo shows
-  "Counting words…" in its cards, the page draws at least two frames before the counts
-  appear, and then every card shows the same content as with counting in one go.
+  "Counting words…" in its cards, the page draws at least two frames while counting, and then every card shows the same content as with counting in one go.
 - **AC3** Picking another conversation while counting ends with the cards showing that
   conversation's counts, and no card ever shows the earlier selection's.
 - ~~**AC4** After a load, with the Overview tab open, counting runs and finishes on its own.~~
@@ -136,6 +145,10 @@ later.
   last selection's job finishes.
 - **AC8** Jumping to Swearing while the Mood & emoji counts are being counted leaves the
   card 12 px under the sticky bars once they've arrived.
+- **AC9** Small selections asked for in one turn are counted at once until that turn's
+  syncMs is spent, and the rest go on in slices; the next turn gets its own.
+- **AC10** Picking a conversation while All conversations' inside jokes are being counted
+  drops every other conversation's inside jokes count at once; none of them finishes.
 
 ## Decisions
 

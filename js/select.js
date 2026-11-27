@@ -80,9 +80,9 @@ function cache() {
 /**
  * A one-value cache filled by counting in slices (spec 028): `get(deps, makeSteps)` is
  * the value for `deps`, or null while it's being counted in `slot` (the job is started,
- * or left running). Asking for other deps drops the job under way. With `now`, or when
- * `size` (a number, or a function giving it) is under Background.syncBelow messages, it's
- * counted at once.
+ * or left running). Asking for other deps drops the job under way. With `now` it's
+ * counted at once; when `size` (a number, or a function giving it) is under
+ * Background.syncBelow messages, at once if this turn's Background.syncMs allows.
  */
 function slowCache(slot) {
   let deps = null;
@@ -105,7 +105,8 @@ function slowCache(slot) {
         ready = true;
         Background.changed();
       });
-      if (now || (typeof size === 'function' ? size() : size) < Background.syncBelow) Background.finish(slot, mine);
+      if (now) Background.finish(slot, mine);
+      else if ((typeof size === 'function' ? size() : size) < Background.syncBelow) Background.finishInTurn(slot, mine);
       return ready ? value : null;
     },
   };
@@ -152,6 +153,7 @@ const Select = {
    * counted (spec 028). `now` counts it at once.
    */
   content({ now = false } = {}) {
+    this.termsFor(View.filter.contact);
     const msgs = this.range();
     return this.caches.content.get([...this.rangeDeps(), View.moodScorer, AiMood.scoresVersion], () => aggregateContentSteps(msgs, View.moodScorer), { now, size: msgs.length });
   },
@@ -245,6 +247,7 @@ const Select = {
       this.termsByKey = new Map();
       Background.drop('terms:');
     }
+    this.termsFor(View.filter.contact);
     const df = this.docFreq({ now });
     if (!df) return null;
     let t = this.termsByKey.get(k);
@@ -252,8 +255,19 @@ const Select = {
     const msgs = this.messagesOf(k);
     return t.get([df], () => conversationTermsSteps(msgs, df), { now, size: msgs.length });
   },
+  /**
+   * Terms still being counted were asked for while `contact` was picked: picking another
+   * conversation (or All) drops them, except the newly picked conversation's own, so they
+   * don't hold up the new selection's counting (R4). Terms already counted are kept.
+   */
+  termsFor(contact) {
+    if (this.termsContact === contact) return;
+    this.termsContact = contact;
+    Background.drop('terms:', this.termsSlot(contact));
+  },
   /** The background slot counting terms(k). */
   termsSlot: (k) => 'terms:' + k,
+  termsContact: null,
   termsDeps: null,
   termsByKey: new Map(),
 };

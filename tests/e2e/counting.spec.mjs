@@ -9,10 +9,13 @@ const slowly = (page) => page.evaluate(() => {
 });
 const counted = (page) => page.waitForFunction(() => !Background.jobs.size && !Counting.shown.size);
 
-/** Counts frames from now on; read them back with frames(page). */
+/** From now on, counts the frames drawn while there's counting to do, in window.__frames. */
 const countFrames = (page) => page.evaluate(() => {
   window.__frames = 0;
-  const tick = () => { window.__frames++; requestAnimationFrame(tick); };
+  const tick = () => {
+    if (Background.jobs.size) window.__frames++;
+    requestAnimationFrame(tick);
+  };
   requestAnimationFrame(tick);
 });
 
@@ -82,6 +85,24 @@ test.describe('spec 028 counting words in slices', () => {
     const want = await page.evaluate((k) => distinctiveWords(Data.messagesOf(k), buildDocFreq(Data.msgs), 15).map((w) => w.w), key);
     expect(want.length).toBeGreaterThan(0);
     await expect(page.locator('#profile .chips .chip')).toHaveText(want);
+  });
+
+  test('AC10: picking a conversation while All conversations\' inside jokes are counted drops the others\'', async ({ page }) => {
+    await page.evaluate(() => { Background.syncBelow = 0; }); // count every conversation in slices
+    await openTab(page, 'sec-content');
+    const termsJobs = () => page.evaluate(() => [...Background.jobs.keys()].filter((s) => s.startsWith('terms:')));
+    await expect.poll(async () => (await termsJobs()).length).toBeGreaterThan(2);
+    // The last of the busiest conversations: its count hasn't started yet.
+    const key = (await termsJobs()).at(-1).slice('terms:'.length);
+    await page.selectOption('#contactSel', key);
+    // The picked conversation's own is kept, the rest are dropped at once.
+    const left = await termsJobs();
+    expect(left.every((s) => s === `terms:${key}`)).toBe(true);
+    const finished = await page.evaluate(() => Background.last.length);
+    await counted(page);
+    const after = await page.evaluate((n) => Background.last.slice(n).map((j) => j.slot), finished);
+    expect(after.filter((s) => s.startsWith('terms:') && s !== `terms:${key}`)).toEqual([]);
+    await expect(page.locator('#jokesBox')).not.toContainText('Counting words');
   });
 
   test('AC8: a card jumped to while counting stays in view when the counts arrive', async ({ page }) => {

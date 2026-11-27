@@ -196,8 +196,9 @@ pulse and transitions (R12).
 - **AC1** Given a load of an SMS backup and a WhatsApp chat, the screen
   shows two file rows with their app logos and sizes, and two bar segments sized by
   their bytes.
-- **AC2** During that load, the current step names the files being read, both at once
-  ("Reading sms-….xml and WhatsApp Chat with Sam.txt") since they're of different apps,
+- **AC2** During that load on a 4-core computer, the current step names the files being
+  read, both at once ("Reading sms-….xml and WhatsApp Chat with Sam.txt") since they're
+  of different apps,
   then "Sorting … messages", "Working out who's you" and "Drawing the dashboard", in
   that order.
 - **AC3** When reading ends, the Messages, Calls and Conversations counts equal
@@ -229,14 +230,16 @@ pulse and transitions (R12).
 - **AC17** A conversation named `<img src=x onerror=alert(1)>` shows as that text in
   Conversations found, and no script runs.
 - **AC18** Given a large SMS backup, a small one that repeats its first messages and a
-  WhatsApp chat, loaded in that order: the WhatsApp chat is read while the large backup
+  WhatsApp chat, loaded in that order on a 4-core computer: the WhatsApp chat is read while the large backup
   is (different apps), the small backup only once the large one is done (the same app),
   and the large one's row counts every message and the small one's counts none: its
   messages are the duplicates.
 - **AC19** Given a large SMS backup and a Telegram `result.json` that isn't valid JSON,
-  loaded together, the SMS backup's worker is stopped as soon as the Telegram file fails,
+  loaded together on a 4-core computer, the SMS backup's worker is stopped as soon as the Telegram file fails,
   before it finishes; the SMS backup is then read again on its own and the error names
   the Telegram file.
+- **AC20** On a 2-core computer (one worker), AC1's SMS backup and WhatsApp chat are read
+  one after another, in order, and the current step names one file at a time.
 
 ## Decisions
 
