@@ -51,11 +51,16 @@ async function openMood(page) {
   await page.waitForFunction(() => echarts.getInstanceByDom(document.getElementById('c-mood'))?.getOption().series?.length === 4);
 }
 
-/** Choose "AI model", accept the download notice, and wait for the run to finish. */
+/**
+ * Choose "AI model", accept the download notice, and wait for the run to finish and the
+ * Mood card to redraw with the new scores: it counts them again in slices (spec 028), so
+ * on a slow machine it still shows its placeholder note just after the switch.
+ */
 async function scoreWithAi(page) {
   await page.click('#moodScorerSeg [data-scorer="ai"]');
   await page.click('[data-ai-mood="start"]');
   await expect.poll(() => inApp(page, (app) => app.moodScorer), { timeout: 30_000 }).toBe('ai');
+  await expect(page.locator('#moodNote')).toContainText('scored with the AI model');
 }
 
 test.describe('spec 001: AI mood scoring', () => {
