@@ -59,13 +59,14 @@ is sent or stored.
 ## Design
 
 **Slices.** `aggregateContent`, `buildDocFreq` and `conversationTerms` become generator
-functions (`aggregateContentSteps`, …) that `yield` every 1,000 messages with how far they
+functions (`aggregateContentSteps`, …) that `yield` every 200 messages with how far they
 are (0–1), and return their result. The existing names stay as wrappers that run the
 generator to the end, so the code that counts is one copy and R8 holds by construction.
-The work after the message loop (new words per month) is short and stays in the last
-slice. `buildDocFreq` is the exception: adding up each conversation's words after the
-loop takes 50–120 ms over 345k messages, so it yields every 20,000 words too, as the
-last tenth of its progress.
+A step can't be cut short, so it's kept small: 1,000 messages of 40 words took up to
+60 ms, 200 take about 10. The work after the message loop yields too, every 20,000
+words, as the last tenth of the progress: new words per month in `aggregateContent`
+(up to 47 ms over 40,000 wordy messages) and adding up each conversation's words in
+`buildDocFreq` (50–120 ms over 345k messages).
 
 **Runner** (`js/background.js`). `Background.run(key, steps, onDone)` advances a generator
 until 30 ms have passed, then waits for the next task (`setTimeout(0)`, or
@@ -106,7 +107,8 @@ remembered card again.
 counted at once: it takes a few milliseconds, and a placeholder would only flash. All
 the counting done at once in one turn shares 50 ms (`Background.syncMs`): All
 conversations' inside jokes ask for up to eight conversations in one render, each of
-which may be small. Whatever doesn't fit goes on in slices.
+which may be small. Whatever doesn't fit goes on in slices. The 50 ms can be passed by
+the step under way when it runs out (about 10 ms).
 
 **Picking another conversation** drops the inside jokes counts still waiting for the
 conversation picked before (one per busy conversation under All conversations), except

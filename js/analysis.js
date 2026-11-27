@@ -638,10 +638,16 @@ function domainOf(host) {
 
 let swearFamilyOf = null; // messageLib().swearFamily, created on first use
 
-/** Counting generators (spec 028) yield how far they are, 0–1, every this many messages. */
-const STEP_MSGS = 1000;
-/** …and every this many words where they add up words already counted (buildDocFreqSteps). */
+/**
+ * Counting generators (spec 028) yield how far they are, 0–1, every this many messages:
+ * a step is what a slice can't cut short, so it's kept to a few milliseconds even when
+ * messages are long (200 messages of 40 words: about 10 ms).
+ */
+const STEP_MSGS = 200;
+/** …and every this many words where they go over words already counted, after the messages. */
 const STEP_WORDS = 20000;
+/** How much of aggregateContentSteps' progress is the message loop: new words per month are the rest. */
+const CONTENT_LOOP = 0.9;
 
 /** Runs a counting generator to the end and returns its result. */
 function runSteps(steps) {
@@ -700,7 +706,7 @@ function* aggregateContentSteps(msgs, scorer = 'vader', { phrases = true, phrase
   const lastBy = new Map(); // conversation + sender -> { t, words } of their previous message (corrections)
   let done = 0;
   for (const r of msgs) {
-    if (++done % STEP_MSGS === 0) yield done / msgs.length;
+    if (++done % STEP_MSGS === 0) yield CONTENT_LOOP * done / msgs.length;
     const o = r.o;
     if (r.e) {
       let em = C.emojiMonths.get(r.mo);
@@ -760,15 +766,22 @@ function* aggregateContentSteps(msgs, scorer = 'vader', { phrases = true, phrase
     }
     countPatterns(C, r, text, plain, who, lastBy);
   }
-  // Month by month, each side's words that it hadn't used earlier in the selection.
+  // Month by month, each side's words that it hadn't used earlier in the selection. A
+  // month's words for each side: over a long, wordy selection that's millions in all, so
+  // it yields too, as the last tenth of the progress.
   const seen = [new Set(), new Set()];
-  for (const mo of [...vocabCounts.keys()].sort((a, b) => a - b)) {
+  const months = [...vocabCounts.keys()].sort((a, b) => a - b);
+  let looked = 0;
+  for (let i = 0; i < months.length; i++) {
+    const mo = months[i];
     const counts = vocabCounts.get(mo);
     C.vocab.set(mo, [counts[0].size, counts[1].size]);
-    C.vocabNew.set(mo, counts.map((words, o) => {
+    const fresh = [];
+    for (let o = 0; o < 2; o++) {
       let n = 0;
       const top = [];
-      for (const [w, uses] of words) {
+      for (const [w, uses] of counts[o]) {
+        if (++looked % STEP_WORDS === 0) yield CONTENT_LOOP + (1 - CONTENT_LOOP) * i / months.length;
         if (seen[o].has(w)) continue;
         seen[o].add(w);
         if (w.length < 3 || STOPWORDS.has(w) || /\d/.test(w)) continue;
@@ -776,8 +789,9 @@ function* aggregateContentSteps(msgs, scorer = 'vader', { phrases = true, phrase
         top.push([w, uses]);
       }
       top.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
-      return { n, top: top.slice(0, VOCAB_NEW_TOP) };
-    }));
+      fresh.push({ n, top: top.slice(0, VOCAB_NEW_TOP) });
+    }
+    C.vocabNew.set(mo, fresh);
   }
   return C;
 }

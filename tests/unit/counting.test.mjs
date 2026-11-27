@@ -1,7 +1,7 @@
 /*
  * Spec 028: words are counted in slices (Background) with the same results as in one go.
  */
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadApp, messageLib, makeMessage } from '../helpers/load.mjs';
 
@@ -33,12 +33,11 @@ function messages() {
   return out;
 }
 
-/** A job of `n` steps, counting the steps it ran in `ran[i]`; each step takes `ms` (busy). */
-const job = (ran, i, n = 50, ms = 0) => (function* () {
+/** A job of `n` steps, counting the steps it ran in `ran[i]`; each step moves `clock` on by `ms`. */
+const job = (ran, i, n = 50, clock = null, ms = 0) => (function* () {
   for (let k = 0; k < n; k++) {
     ran[i]++;
-    const until = performance.now() + ms;
-    while (performance.now() < until);
+    if (clock) clock.t += ms;
     yield k / n;
   }
   return i;
@@ -75,8 +74,20 @@ describe('spec 028 counting in slices', () => {
     let r;
     while (!(r = steps.next()).done) seen.push(r.value);
     assert.equal(r.value.df.size, 30000);
-    assert.ok(seen.length > 3, 'more yields than the 3 for messages');
+    assert.ok(seen.some((p) => p > 0.9 && p < 1), 'a yield while adding up, after the messages');
     assert.ok(seen.every((p, i) => p > 0 && p <= 1 && (i === 0 || p > seen[i - 1])), 'progress goes up, within 0–1');
+  });
+
+  it('AC1: aggregateContent yields while working out new words per month too', () => {
+    // 30,000 words used once each, over a year: 30,000 to go through after the last message.
+    const msgs = Array.from({ length: 3000 }, (_, i) => makeMessage(lib, { at: new Date(Date.UTC(2023, 0, 1) + i * 3 * 3600e3).toISOString(), k: 'alex', o: i % 2, body: Array.from({ length: 10 }, (_, w) => `w${i}x${w}`).join(' ') }));
+    const seen = [];
+    const steps = aggregateContentSteps(msgs, 'vader');
+    let r;
+    while (!(r = steps.next()).done) seen.push(r.value);
+    assert.deepStrictEqual(r.value, aggregateContent(msgs, 'vader'));
+    assert.ok(seen.some((p) => p > 0.9 && p < 1), 'a yield after the messages');
+    assert.ok(seen.every((p, i) => p > 0 && p <= 1 && (i === 0 || p >= seen[i - 1])), 'progress goes up, within 0–1');
   });
 
   it('AC7: a dropped job never runs again; only the last one finishes', () => {
@@ -98,25 +109,31 @@ describe('spec 028 counting in slices', () => {
   it('AC9: small selections asked for in one turn are counted at once only until syncMs is spent', async () => {
     byHand();
     Background.syncMs = 25;
+    // A clock that only the jobs move: each of their steps takes 2 ms.
+    const clock = { t: 1000 };
+    mock.method(performance, 'now', () => clock.t);
     try {
       const ran = [0, 0, 0, 0];
       const done = [];
       const ask = (i, steps) => {
-        Background.run(`terms:${i}`, i, () => job(ran, i, steps, 2), (v) => done.push(v));
+        Background.run(`terms:${i}`, i, () => job(ran, i, steps, clock, 2), (v) => done.push(v));
         Background.finishInTurn(`terms:${i}`, i);
       };
-      ask(0, 5); // ~10 ms: done at once
-      ask(1, 15); // ~30 ms: stopped when the turn's 25 ms are spent
+      ask(0, 5); // 10 ms: done at once
+      ask(1, 15); // 30 ms: stopped at the first step that ends past the turn's 25 ms
       ask(2, 5); // nothing left this turn
       assert.deepEqual(done, [0]);
-      assert.ok(ran[1] > 0 && ran[1] < 15, `the second ran part way (${ran[1]} of 15 steps)`);
+      assert.equal(ran[1], 8, 'the second ran from 10 ms to 26 ms');
       assert.equal(ran[2], 0);
-      await null; // the next turn gets its own 25 ms
+      await null; // the turn is over: the next one gets its own 25 ms
       ask(3, 5);
       assert.deepEqual(done, [0, 3]);
+      assert.equal(ran[2], 0, 'a job left to slices waits for them');
       while (Background.jobs.size) Background.slice(); // the rest go on in slices
-      assert.deepEqual(done.sort(), [0, 1, 2, 3]);
+      assert.deepEqual(done, [0, 3, 1, 2]);
+      assert.deepEqual(ran, [5, 15, 5, 5], 'nothing ran twice');
     } finally {
+      mock.restoreAll();
       Background.syncMs = 50;
     }
   });

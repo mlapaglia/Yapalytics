@@ -88,17 +88,34 @@ test.describe('spec 028 counting words in slices', () => {
   });
 
   test('AC10: picking a conversation while All conversations\' inside jokes are counted drops the others\'', async ({ page }) => {
-    await page.evaluate(() => { Background.syncBelow = 0; }); // count every conversation in slices
-    await openTab(page, 'sec-content');
     const termsJobs = () => page.evaluate(() => [...Background.jobs.keys()].filter((s) => s.startsWith('terms:')));
-    await expect.poll(async () => (await termsJobs()).length).toBeGreaterThan(2);
+    // Count every conversation in slices, and stop slicing as soon as three or more
+    // conversations' counts are waiting, until the test goes on (window.__resume).
+    const waiting = page.evaluate(() => new Promise((resolve) => {
+      Background.syncBelow = 0;
+      const slice = Background.slice;
+      Background.slice = function () {
+        slice.call(this);
+        const terms = [...this.jobs.keys()].filter((s) => s.startsWith('terms:'));
+        if (terms.length < 3) return;
+        this.slice = () => {};
+        window.__resume = () => {
+          Background.slice = slice;
+          Background.schedule();
+        };
+        resolve(terms);
+      };
+    }));
+    await openTab(page, 'sec-content');
+    const pending = await waiting;
     // The last of the busiest conversations: its count hasn't started yet.
-    const key = (await termsJobs()).at(-1).slice('terms:'.length);
+    const key = pending.at(-1).slice('terms:'.length);
+    expect(await termsJobs()).toEqual(pending); // nothing has moved since
     await page.selectOption('#contactSel', key);
     // The picked conversation's own is kept, the rest are dropped at once.
-    const left = await termsJobs();
-    expect(left.every((s) => s === `terms:${key}`)).toBe(true);
+    expect(await termsJobs()).toEqual([`terms:${key}`]);
     const finished = await page.evaluate(() => Background.last.length);
+    await page.evaluate(() => window.__resume());
     await counted(page);
     const after = await page.evaluate((n) => Background.last.slice(n).map((j) => j.slot), finished);
     expect(after.filter((s) => s.startsWith('terms:') && s !== `terms:${key}`)).toEqual([]);
