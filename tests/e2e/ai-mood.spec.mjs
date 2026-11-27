@@ -2,6 +2,8 @@
  * specs/001-ai-mood-scoring.md in the browser. Transformers.js is replaced by a small
  * fake module served at its CDN URL, so the real worker, batching and UI run without
  * downloading the 126 MB model. The fake reads tone from a few keywords.
+ * How a run follows the date range (AC11–AC14) and keeps scores across a Files change
+ * (spec 006 AC13) is unit-tested with the model stubbed (ai-mood.test.mjs).
  */
 import { test, expect, loadDemo, scrollTo, openTab, addFiles } from './fixtures.mjs';
 import { inApp } from './state.mjs';
@@ -190,87 +192,6 @@ test.describe('spec 001: AI mood scoring', () => {
     });
   });
 
-  test('AC11: with a date range selected, only the messages in it are scored', async ({ page }) => {
-    await serveFake(page);
-    await openMood(page);
-    await page.click('#presets button[data-preset="30"]');
-    await spyOnScoring(page);
-    await scoreWithAi(page);
-    const s = await inApp(page, (app) => {
-      const sel = app.selection();
-      const inSel = new Set(sel);
-      const selTexts = new Set(sel.filter((m) => m.v != null).map((m) => aiMoodText(m.b)));
-      return {
-        selMissing: sel.filter(aiMoodMissing).length,
-        outside: app.msgs.filter((m) => !inSel.has(m) && m.v != null).length,
-        outsideScored: app.msgs.filter((m) => !inSel.has(m) && m.ai).length,
-        sent: window.__sent.length,
-        unique: new Set(window.__sent).size,
-        selTexts: selTexts.size,
-        stray: window.__sent.filter((t) => !selTexts.has(t)).length,
-      };
-    });
-    expect(s.outside).toBeGreaterThan(0);
-    expect(s).toMatchObject({ selMissing: 0, outsideScored: 0, stray: 0 });
-    expect(s.sent).toBe(s.unique);
-    expect(s.sent).toBe(s.selTexts);
-    expect(await state(page)).toMatchObject({ scorer: 'ai', on: 'ai' });
-    await expect(page.locator('#moodNote')).toContainText('scored with the AI model');
-  });
-
-  test('AC12: widening the range with AI on scores the new messages, sending no text twice', async ({ page }) => {
-    await serveFake(page);
-    await openMood(page);
-    await page.click('#presets button[data-preset="30"]');
-    await spyOnScoring(page);
-    await scoreWithAi(page);
-    expect((await state(page)).missing).toBeGreaterThan(0);
-    await page.click('#presets button[data-preset="all"]');
-    await expect.poll(async () => (await state(page)).missing, { timeout: 30_000 }).toBe(0);
-    await expect(page.locator('#aiMoodStatus')).toBeHidden();
-    const sent = await page.evaluate(() => ({ n: window.__sent.length, unique: new Set(window.__sent).size }));
-    expect(sent.n).toBe(sent.unique);
-    expect(await state(page)).toMatchObject({ scorer: 'ai', on: 'ai' });
-    await expect(page.locator('#moodNote')).toContainText('scored with the AI model');
-  });
-
-  test('AC13: narrowing the range during a run switches the run to the new range', async ({ page }) => {
-    await serveFake(page, 500);
-    await openMood(page);
-    await spyOnScoring(page);
-    await page.click('#moodScorerSeg [data-scorer="ai"]');
-    await page.click('[data-ai-mood="start"]');
-    await expect.poll(() => page.evaluate(() => window.__sent.length)).toBeGreaterThan(0); // batch 1 is out
-    const atNarrow = await page.evaluate(() => window.__sent.length);
-    await page.click('#presets button[data-preset="30"]');
-    await expect.poll(() => inApp(page, (app) => app.moodScorer), { timeout: 30_000 }).toBe('ai');
-    const s = await inApp(page, (app, from) => {
-      const sel = app.selection();
-      const selTexts = new Set(sel.filter((m) => m.v != null).map((m) => aiMoodText(m.b)));
-      return {
-        selMissing: sel.filter(aiMoodMissing).length,
-        stray: window.__sent.slice(from).filter((t) => !selTexts.has(t)).length,
-      };
-    }, atNarrow);
-    expect(s).toEqual({ selMissing: 0, stray: 0 });
-  });
-
-  test('AC14: Stop while scoring a widened range with AI on switches to VADER', async ({ page }) => {
-    await serveFake(page, 500);
-    await openMood(page);
-    await page.click('#presets button[data-preset="30"]');
-    await page.click('#moodScorerSeg [data-scorer="ai"]');
-    await page.click('[data-ai-mood="start"]');
-    await expect.poll(() => inApp(page, (app) => app.moodScorer), { timeout: 30_000 }).toBe('ai');
-    await page.click('#presets button[data-preset="all"]');
-    await expect(page.locator('#aiMoodStatus')).toContainText(/Scoring [\d,]+ of [\d,]+ messages/);
-    await page.click('[data-ai-mood="stop"]');
-    await expect(page.locator('#aiMoodStatus')).toBeHidden();
-    const s = await state(page);
-    expect(s).toMatchObject({ scorer: 'vader', on: 'vader' });
-    expect(s.note).toContain('scored with VADER');
-  });
-
   test('AC9: files added while AI is on are scored, and the chart stays on AI', async ({ page }) => {
     await serveFake(page);
     await openMood(page);
@@ -282,26 +203,5 @@ test.describe('spec 001: AI mood scoring', () => {
     const s = await state(page);
     expect(s.ai).toBeGreaterThan(before);
     expect(s).toMatchObject({ scorer: 'ai', on: 'ai' });
-  });
-});
-
-test.describe('spec 006: managing loaded files', () => {
-  test('AC13: AI mood scores survive leaving a file out, without the model running again', async ({ page }) => {
-    await serveFake(page);
-    await openMood(page);
-    await scoreWithAi(page);
-    await spyOnScoring(page);
-    await page.click('#filesBtn');
-    await page.locator('#filesList li', { has: page.locator('use[href="#logo-telegram"]') }).locator('input').uncheck();
-    await page.click('#filesApply');
-    await expect(page.locator('#landing')).toBeHidden({ timeout: 60_000 });
-    await expect(page.locator('#dash')).toBeVisible();
-    await expect.poll(() => inApp(page, (app) => app.msgs.some((m) => m.s === 4))).toBe(false);
-    await scrollTo(page, '#c-mood');
-    const s = await state(page);
-    expect(s.missing).toBe(0);
-    expect(s.ai).toBe(s.vader);
-    expect(s).toMatchObject({ scorer: 'ai', on: 'ai' });
-    expect(await page.evaluate(() => window.__sent)).toEqual([]);
   });
 });

@@ -52,7 +52,9 @@ test.describe('word tracker', () => {
     await expect(page.locator('#phraseNote')).toContainText('“love you”');
   });
 
-  test('keeps the totals at every granularity', async ({ page }) => {
+  // The buckets, totals, slider and Auto's choice are unit tests (charts.test.mjs:
+  // phraseOption, autoGran); this checks the buttons redraw the chart with them.
+  test('each granularity keeps the totals, a long daily view has a slider, and Auto shows days for a short range', async ({ page }) => {
     await page.fill('#phraseInput', 'lol');
     await expect(page.locator('#phraseNote')).toContainText('“lol”');
     const { uses } = await expected(page);
@@ -60,27 +62,17 @@ test.describe('word tracker', () => {
       await page.click(`#phraseGranSeg button[data-gran="${gran}"]`);
       await expect(page.locator(`#phraseGranSeg button[data-gran="${gran}"]`)).toHaveClass(/on/);
       expect(await barSums(page), gran).toEqual([uses[1], uses[0]]);
+      if (gran === 'day') {
+        const opt = await chartOption(page, 'c-phrase');
+        expect(opt.series[0].data.length).toBeGreaterThan(150);
+        expect(opt.dataZoom.some((z) => z.type === 'slider')).toBe(true);
+      }
     }
-  });
-
-  test('a long daily view opens on the latest days with a slider', async ({ page }) => {
-    await page.fill('#phraseInput', 'lol');
-    await expect(page.locator('#phraseNote')).toContainText('“lol”');
-    await page.click('#phraseGranSeg button[data-gran="day"]');
-    const opt = await chartOption(page, 'c-phrase');
-    expect(opt.series[0].data.length).toBeGreaterThan(150);
-    expect(opt.dataZoom.some((z) => z.type === 'slider')).toBe(true);
-  });
-
-  test('auto shows days for a short range', async ({ page }) => {
-    await page.fill('#phraseInput', 'lol');
-    await expect(page.locator('#phraseNote')).toContainText('“lol”');
     await page.click('#presets button[data-preset="30"]');
     await scrollTo(page, '#phraseCard');
     const bars = async () => (await chartOption(page, 'c-phrase'))?.series?.[0]?.data?.length ?? Infinity;
     await expect.poll(bars).toBeLessThanOrEqual(31);
-    const opt = await chartOption(page, 'c-phrase');
-    expect(opt.series[0].data.length).toBeGreaterThanOrEqual(28);
+    expect(await bars()).toBeGreaterThanOrEqual(28);
   });
 
   test('follows the conversation filter', async ({ page }) => {

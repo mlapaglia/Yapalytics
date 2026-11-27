@@ -75,6 +75,7 @@ describe('conversation gap helpers', () => {
     const labels = (g) => replyBins(g).map((b) => b.label);
     assert.deepEqual(labels(30 * 60e3), ['< 1 min', '1–5 min', '5–15 min', '15–30 min']);
     assert.deepEqual(labels(HOUR), ['< 1 min', '1–5 min', '5–15 min', '15–60 min']);
+    assert.deepEqual(labels(3 * HOUR), ['< 1 min', '1–5 min', '5–15 min', '15–60 min', '1–3 h']);
     assert.deepEqual(labels(6 * HOUR), ['< 1 min', '1–5 min', '5–15 min', '15–60 min', '1–3 h', '3–6 h']);
     assert.deepEqual(labels(12 * HOUR), ['< 1 min', '1–5 min', '5–15 min', '15–60 min', '1–3 h', '3–8 h', '8–12 h']);
     assert.deepEqual(labels(24 * HOUR), ['< 1 min', '1–5 min', '5–15 min', '15–60 min', '1–3 h', '3–8 h', '8–24 h']);
@@ -120,6 +121,11 @@ describe('aggregateMessages', () => {
 
   it('accounts for every message as a starter, a reply or a double text, at any gap', () => {
     for (const g of CONVO_GAPS) assert.equal(accounted(aggregateMessages(thread, g)), thread.length, `gap ${g}`);
+  });
+
+  it('a longer cutoff means fewer, longer conversations', () => {
+    const sessions = CONVO_GAPS.map((g) => aggregateMessages(thread, g).sessions);
+    assert.deepEqual(sessions, [3, 3, 2, 2, 1, 1]); // breaks at the 2 h and 7 h quiets
   });
 
   it('keeps separate threads apart', () => {

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { runParser } from '../helpers/worker.mjs';
+import { runParser, sentAs } from '../helpers/worker.mjs';
 import { asFile, metaJson } from '../helpers/instagram.mjs';
 import {
   ALEX, ALEX_MEDIA, ME, alexEncrypted, e2eeMessage, encryptedExport, encryptedThread, facebookExport,
@@ -74,6 +74,11 @@ describe('spec 009 Messenger: Facebook DYI export', () => {
 
   it('rejects a zip with no Messenger messages in it', async () => {
     await assert.rejects(parse({ name: 'photos.zip', mimeType: 'application/zip', buffer: (await import('../helpers/zip.mjs')).makeZip([{ name: 'a.jpg', data: 'x' }]) }), /no Messenger messages/);
+  });
+
+  it('AC6: picking another name under You on Messenger swaps sent and received', async () => {
+    const out = await parse(facebookExport());
+    assert.equal(sentAs(out, 6, 'Alex Rivera'), 3);
   });
 });
 

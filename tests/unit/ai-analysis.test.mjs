@@ -121,6 +121,7 @@ describe('spec 002: parseAnalysis', () => {
     assert.equal(r.summary, 'Planning a trip.');
   });
   it('AC11: rejects replies that are not JSON or lack a summary and answer', () => {
+    assert.throws(() => parseAnalysis('Sorry, I cannot help with that.'), { name: 'Error', message: "The model's reply wasn't a report. Try again, or try another model." });
     assert.throws(() => parseAnalysis('Sorry, I cannot help with that.'), AiError);
     assert.throws(() => parseAnalysis('{"summary": "unfinished'), AiError);
     assert.throws(() => parseAnalysis('{"topics": ["a"]}'), /missing the summary/);
@@ -293,5 +294,126 @@ describe('spec 002: LM Studio', () => {
     assert.match(lmstudioScopeNote(REAL, 'llama3'), /LM Studio doesn't list a model called "llama3" \(loaded now: qwen\/qwen3\.8-27b\)$/);
     assert.match(lmstudioScopeNote(REAL, ''), /Pick a model/);
     assert.match(lmstudioScopeNote(null, 'qwen/qwen3.8-27b'), /^as much as fits LM Studio's usual 4,096-token context\. Load the model/);
+  });
+});
+
+/*
+ * The Ollama and LM Studio runners as the card calls them, against a fake fetch: what they
+ * send, what they make of the reply, and the errors they explain. A fresh AiAnalysis per
+ * test, over an in-memory localStorage; ai-analysis.spec.mjs keeps the card itself.
+ */
+const PAGE = 'http://127.0.0.1:4173';
+const OLLAMA = 'http://localhost:11434';
+const LMSTUDIO = 'http://localhost:1234';
+const refused = async () => { throw new TypeError('Failed to fetch'); };
+
+function analysisWith(fetch, data = new Map()) {
+  const localStorage = { getItem: (k) => (data.has(k) ? data.get(k) : null), setItem: (k, v) => data.set(k, String(v)), removeItem: (k) => data.delete(k) };
+  const app = loadApp(['AiRunners', 'AiAnalysis', 'AiError'], { fetch, localStorage, location: { origin: PAGE, search: '' } });
+  app.AiAnalysis.load();
+  /** Runs `backend`'s runner the way AiAnalysis.send does, with `settings` over the saved ones. */
+  app.run = (backend, settings = {}, user = 'transcript') => app.AiRunners[backend]({
+    system: 'sys', user, schema: ANALYSIS_SCHEMA, settings: { ...app.AiAnalysis.settings, ...settings }, onStatus() {}, signal: new AbortController().signal,
+  });
+  return { ...app, data };
+}
+
+const REPORT = JSON.stringify({ summary: 'Mostly weekend plans.', tone: [], moments: [], topics: [], answer: '' });
+// What an LM Studio server lists: a loaded qwen3-8b with a 32K context, and an unloaded gemma.
+const lmListing = ({ thinking = false } = {}) => lmstudioModels({ models: [
+  { type: 'llm', key: 'google/gemma-3-4b', loaded_instances: [], max_context_length: 131072 },
+  { type: 'llm', key: 'qwen/qwen3-8b', variants: ['qwen/qwen3-8b@q4_k_m'], loaded_instances: [{ id: 'qwen/qwen3-8b', config: { context_length: 32768 } }], max_context_length: 40960,
+    ...(thinking ? { capabilities: { reasoning: { allowed_options: ['off', 'low', 'medium', 'xhigh', 'on'], default: 'xhigh' } } } : {}) },
+] });
+
+/**
+ * LM Studio's chat endpoint. A thinking model that isn't told not to reason (or, with
+ * thinking: 'always', any model) writes its JSON into reasoning_content, as the real
+ * server does. With charsPerToken it reports usage, so the app can calibrate.
+ */
+function fakeLmStudio({ thinking = false, charsPerToken = null } = {}) {
+  const chats = [];
+  const fetch = async (url, init) => {
+    const body = JSON.parse(init.body);
+    chats.push({ url, body });
+    const inThinking = thinking === 'always' || (thinking && body.reasoning_effort !== 'none');
+    const message = inThinking ? { role: 'assistant', content: '', reasoning_content: REPORT } : { role: 'assistant', content: REPORT };
+    const chars = body.messages.reduce((n, m) => n + m.content.length, 0);
+    const usage = charsPerToken ? { prompt_tokens: Math.round(chars / charsPerToken), completion_tokens: 300 } : undefined;
+    return Response.json({ choices: [{ index: 0, finish_reason: 'stop', message }], usage });
+  };
+  return { fetch, chats };
+}
+
+describe('spec 002: the runners', () => {
+  it('AC6: an unreachable Ollama explains OLLAMA_ORIGINS for this page', async () => {
+    const { run, AiError } = analysisWith(refused);
+    await assert.rejects(run('ollama', { ollamaModel: 'llama3.2' }), (err) => {
+      assert.ok(err instanceof AiError);
+      assert.match(err.message, new RegExp(`^Couldn't reach Ollama at ${OLLAMA}`));
+      assert.match(err.message, /OLLAMA_ORIGINS=http:\/\/127\.0\.0\.1:4173/);
+      return true;
+    });
+  });
+
+  it('AC15: an unreachable LM Studio says to start the server and enable CORS', async () => {
+    const { run, AiError } = analysisWith(refused);
+    await assert.rejects(run('lmstudio', { lmstudioModel: 'qwen/qwen3-8b' }), (err) => {
+      assert.ok(err instanceof AiError);
+      assert.match(err.message, new RegExp(`^Couldn't reach LM Studio at ${LMSTUDIO}`));
+      assert.match(err.message, /Enable CORS/);
+      return true;
+    });
+  });
+
+  it('AC17: a reasoning model gets reasoning turned off, and its report reads', async () => {
+    const lm = fakeLmStudio({ thinking: true });
+    const { run, AiAnalysis } = analysisWith(lm.fetch);
+    AiAnalysis.lmModels = lmListing({ thinking: true });
+    const raw = await run('lmstudio', { lmstudioModel: 'qwen/qwen3-8b' });
+    assert.equal(lm.chats[0].url, `${LMSTUDIO}/v1/chat/completions`);
+    assert.equal(lm.chats[0].body.reasoning_effort, 'none');
+    assert.equal(parseAnalysis(raw).summary, 'Mostly weekend plans.');
+  });
+
+  it('AC17: a reply with the JSON only in reasoning_content still reads', async () => {
+    // An older server that doesn't say the model reasons, and a model that always does.
+    const lm = fakeLmStudio({ thinking: 'always' });
+    const { run, AiAnalysis } = analysisWith(lm.fetch);
+    AiAnalysis.lmModels = lmListing();
+    const raw = await run('lmstudio', { lmstudioModel: 'google/gemma-3-4b' });
+    assert.equal('reasoning_effort' in lm.chats[0].body, false);
+    assert.equal(parseAnalysis(raw).summary, 'Mostly weekend plans.');
+  });
+
+  it('AC19: after an analysis the budget uses the measured characters per token, remembered across visits', async () => {
+    const lm = fakeLmStudio({ charsPerToken: 3.1 });
+    const { run, AiAnalysis, data } = analysisWith(lm.fetch);
+    AiAnalysis.backend = 'lmstudio';
+    AiAnalysis.settings.lmstudioModel = 'qwen/qwen3-8b';
+    AiAnalysis.lmModels = lmListing();
+    const before = AiAnalysis.budget();
+    assert.equal(before, lmstudioBudget(32768));
+    await run('lmstudio', {}, 'x'.repeat(40000)); // a transcript long enough to measure by
+    const ratio = AiAnalysis.lmstudioRatio();
+    assert.ok(Math.abs(ratio - 3.1) < 0.05, `ratio ${ratio}`);
+    assert.equal(AiAnalysis.budget(), lmstudioBudget(32768, ratio));
+    assert.ok(AiAnalysis.budget() > before);
+
+    const next = analysisWith(lm.fetch, data); // a new visit
+    assert.ok(Math.abs(next.AiAnalysis.settings.lmRatios['qwen/qwen3-8b'] - 3.1) < 0.05);
+  });
+
+  it('AC20: a variant or other capitals still get the loaded context, reasoning setting and ratio', async () => {
+    const lm = fakeLmStudio({ thinking: true, charsPerToken: 3.1 });
+    const { run, AiAnalysis } = analysisWith(lm.fetch);
+    AiAnalysis.backend = 'lmstudio';
+    AiAnalysis.lmModels = lmListing({ thinking: true });
+    AiAnalysis.settings.lmstudioModel = 'QWEN/qwen3-8b@Q4_K_M'; // as LM Studio's UI shows it, typed loosely
+    assert.equal(AiAnalysis.lmstudioContext(), 32768);
+    await run('lmstudio', {}, 'x'.repeat(40000));
+    assert.equal(lm.chats[0].body.model, 'QWEN/qwen3-8b@Q4_K_M', 'sent as typed: LM Studio accepts it');
+    assert.equal(lm.chats[0].body.reasoning_effort, 'none');
+    assert.deepEqual(Object.keys(AiAnalysis.settings.lmRatios), ['qwen/qwen3-8b']);
   });
 });

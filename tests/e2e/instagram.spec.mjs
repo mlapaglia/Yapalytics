@@ -22,13 +22,6 @@ test.describe('Instagram', () => {
     expect(options.some((o) => o.includes('Spam Bot')), 'message requests are skipped').toBe(false);
   });
 
-  test('picking a different owner swaps sent and received', async ({ page }) => {
-    await loadFiles(page, zippedExport());
-    const picker = await ownerPicker(page, 'Instagram');
-    await picker.selectOption('Alex Rivera');
-    await expect.poll(async () => (await instagramCounts(page)).sent).toBe(4);
-  });
-
   test('opens a photo from another part of a split export', async ({ page }) => {
     await loadFiles(page, splitExport());
     await scrollTo(page, '#galleryCard');

@@ -2,6 +2,8 @@
  * specs/002-ai-conversation-analysis.md in the browser. Nothing real is called: Ollama is
  * answered by a route on localhost:11434, and the Anthropic SDK and WebLLM are replaced
  * by small fake modules served at their CDN URLs, which record what they were asked.
+ * The runners' requests, replies and errors are unit tests (ai-analysis.test.mjs: AC6,
+ * AC8, AC11, AC15, AC17, AC19, AC20); these keep the card and one run per backend.
  */
 import { test, expect, loadDemo, scrollTo, openTab } from './fixtures.mjs';
 import { inApp } from './state.mjs';
@@ -169,30 +171,6 @@ test.describe('spec 002: AI conversation analysis', () => {
     expect(sent).toContain('# Conversation with Them');
   });
 
-  test.describe('when Ollama is unreachable', () => {
-    test.use({ failOnConsoleError: false }); // the refused request logs a network error
-
-    test('AC6: the error explains OLLAMA_ORIGINS for this page', async ({ page }) => {
-      await page.route(`${OLLAMA}/**`, (route) => route.abort('connectionrefused'));
-      await openCard(page, 'ollama');
-      await page.fill('#aiOllamaModel', 'llama3.2');
-      await page.click('#aiRun');
-      const status = page.locator('#aiStatus');
-      await expect(status).toContainText(`Couldn't reach Ollama at ${OLLAMA}`);
-      await expect(status).toContainText('OLLAMA_ORIGINS=http://127.0.0.1:4173');
-      await expect(page.locator('#aiRun')).toBeEnabled();
-    });
-  });
-
-  test('AC11: a reply that isn’t a report shows an error, not a broken report', async ({ page }) => {
-    await fakeOllama(page, 'I am sorry, I cannot do that.');
-    await openCard(page, 'ollama');
-    await page.fill('#aiOllamaModel', 'llama3.2');
-    await page.click('#aiRun');
-    await expect(page.locator('#aiStatus .ai-error')).toContainText("wasn't a report");
-    await expect(reportText(page)).toBeHidden();
-  });
-
   test.describe('Claude', () => {
     test.beforeEach(async ({ page }) => {
       await page.route(SDK_URL, (route) => route.fulfill({ body: FAKE_SDK, contentType: 'text/javascript' }));
@@ -238,21 +216,6 @@ test.describe('spec 002: AI conversation analysis', () => {
       const stored = await page.evaluate(() => Object.keys(localStorage).map((k) => localStorage.getItem(k)).join('\n'));
       expect(stored).not.toContain('sk-ant-test-key');
       expect(stored).toContain('"backend":"claude"');
-    });
-
-    test('AC8: Haiku goes through the plain endpoint, without fallbacks', async ({ page }) => {
-      const c = await openCard(page, 'claude');
-      await page.evaluate((r) => { window.__claudeReport = r; }, report(c.first, c.last));
-      await page.fill('#aiClaudeKey', 'sk-ant-test-key');
-      await page.selectOption('#aiClaudeModel', 'claude-haiku-5-5');
-      await page.click('#aiRun');
-      await expect(page.locator('#aiStatus .ai-confirm')).toContainText('with Claude Haiku 5.5');
-      await page.click('[data-ai="send"]');
-      await expect(reportText(page)).toContainText('By Claude Haiku 5.5');
-      const { beta, params } = (await page.evaluate(() => window.__claude))[0];
-      expect(beta).toBe(false);
-      expect(params.model).toBe('claude-haiku-5-5');
-      expect(params.fallbacks).toBeUndefined();
     });
 
     test('AC9: a rejected key and a refusal each explain themselves', async ({ page }) => {
@@ -305,7 +268,7 @@ const LMSTUDIO = 'http://localhost:1234';
  * 32K context) and an embedding model; /v1/chat/completions replies with `content`.
  * With `token`, requests without "Bearer <token>" get a 401. Records chat requests.
  */
-async function fakeLmStudio(page, { content, token = null, thinking = false, charsPerToken = null } = {}) {
+async function fakeLmStudio(page, { content, token = null } = {}) {
   const chats = [];
   await page.route(`${LMSTUDIO}/**`, async (route) => {
     const req = route.request();
@@ -317,20 +280,12 @@ async function fakeLmStudio(page, { content, token = null, thinking = false, cha
       return route.fulfill({ headers: CORS, json: { models: [
         { type: 'llm', key: 'google/gemma-3-4b', loaded_instances: [], max_context_length: 131072 },
         { type: 'embedding', key: 'nomic-ai/nomic-embed-text-v1.5', loaded_instances: [] },
-        { type: 'llm', key: 'qwen/qwen3-8b', variants: ['qwen/qwen3-8b@q4_k_m'], loaded_instances: [{ id: 'qwen/qwen3-8b', config: { context_length: 32768 } }], max_context_length: 40960,
-          ...(thinking ? { capabilities: { reasoning: { allowed_options: ['off', 'low', 'medium', 'xhigh', 'on'], default: 'xhigh' } } } : {}) },
+        { type: 'llm', key: 'qwen/qwen3-8b', variants: ['qwen/qwen3-8b@q4_k_m'], loaded_instances: [{ id: 'qwen/qwen3-8b', config: { context_length: 32768 } }], max_context_length: 40960 },
       ] } });
     }
     const body = req.postDataJSON();
     chats.push({ body, auth: req.headers().authorization });
-    // A thinking model, unless told not to reason, writes the constrained JSON into
-    // reasoning_content and leaves content empty: what a real LM Studio server does.
-    const inThinking = thinking === 'always' || (thinking && body.reasoning_effort !== 'none');
-    const message = inThinking ? { role: 'assistant', content: '', reasoning_content: content() } : { role: 'assistant', content: content() };
-    // With charsPerToken, report usage the way LM Studio does, so the app can calibrate.
-    const chars = body.messages.reduce((n, m) => n + m.content.length, 0);
-    const usage = charsPerToken ? { prompt_tokens: Math.round(chars / charsPerToken), completion_tokens: 300 } : undefined;
-    return route.fulfill({ headers: CORS, json: { choices: [{ index: 0, finish_reason: 'stop', message }], usage } });
+    return route.fulfill({ headers: CORS, json: { choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: content() } }] } });
   });
   return chats;
 }
@@ -363,29 +318,6 @@ test.describe('spec 002: LM Studio', () => {
     expect(budget).toBe(await page.evaluate(() => lmstudioBudget(32768)));
   });
 
-  test('AC20: a variant or other capitals still get the loaded context, reasoning setting and ratio', async ({ page }) => {
-    let c;
-    const chats = await fakeLmStudio(page, { thinking: true, charsPerToken: 3.1, content: () => JSON.stringify(report(c.first, c.last)) });
-    c = await openCard(page, 'lmstudio');
-    await expect(page.locator('#aiLmstudioModel')).toHaveValue('qwen/qwen3-8b');
-    await page.fill('#aiLmstudioModel', 'QWEN/qwen3-8b@Q4_K_M'); // as LM Studio's UI shows it, typed loosely
-    await page.locator('#aiLmstudioModel').blur();
-    await expect(page.locator('#aiScope')).toContainText("the model's 32,768-token context in LM Studio");
-    await page.click('#aiRun');
-    await expect(reportText(page)).toContainText('Mostly weekend plans and running jokes.');
-    expect(chats[0].body.model).toBe('QWEN/qwen3-8b@Q4_K_M'); // sent as typed: LM Studio accepts it
-    expect(chats[0].body.reasoning_effort).toBe('none');
-    expect(await page.evaluate(() => Object.keys(AiAnalysis.settings.lmRatios))).toEqual(['qwen/qwen3-8b']);
-
-    // Names that don't match a loaded model say so.
-    await page.fill('#aiLmstudioModel', 'llama3');
-    await page.locator('#aiLmstudioModel').blur();
-    await expect(page.locator('#aiScope')).toContainText('LM Studio doesn\'t list a model called "llama3" (loaded now: qwen/qwen3-8b)');
-    await page.fill('#aiLmstudioModel', 'google/gemma-3-4b');
-    await page.locator('#aiLmstudioModel').blur();
-    await expect(page.locator('#aiScope')).toContainText('"google/gemma-3-4b" isn\'t loaded');
-  });
-
   test('AC21: a model the server doesn’t have is swapped for the loaded one; an unloaded listed one is kept', async ({ page }) => {
     let c;
     const chats = await fakeLmStudio(page, { content: () => JSON.stringify(report(c.first, c.last)) });
@@ -415,23 +347,6 @@ test.describe('spec 002: LM Studio', () => {
     await expect(page.locator('#aiLmstudioModel')).toHaveValue('google/gemma-3-4b');
   });
 
-  test('AC19: after an analysis the budget uses the measured characters per token, remembered across visits', async ({ page }) => {
-    let c;
-    await fakeLmStudio(page, { charsPerToken: 3.1, content: () => JSON.stringify(report(c.first, c.last)) });
-    c = await openCard(page, 'lmstudio');
-    await expect(page.locator('#aiScope')).toContainText('32,768-token context');
-    const before = await page.evaluate(() => AiAnalysis.budget());
-    await page.click('#aiRun');
-    await expect(reportText(page)).toContainText('Mostly weekend plans and running jokes.');
-    const after = await page.evaluate(() => ({ budget: AiAnalysis.budget(), ratio: AiAnalysis.lmstudioRatio(), expected: lmstudioBudget(32768, AiAnalysis.lmstudioRatio()) }));
-    expect(after.ratio).toBeCloseTo(3.1, 1);
-    expect(after.budget).toBe(after.expected);
-    expect(after.budget).toBeGreaterThan(before);
-    // A new visit starts from the measured ratio.
-    await page.reload();
-    expect(await page.evaluate(() => AiAnalysis.settings.lmRatios['qwen/qwen3-8b'])).toBeCloseTo(3.1, 1);
-  });
-
   test('AC14: Analyze posts the transcript with the schema as response_format, and the report renders', async ({ page }) => {
     let c;
     const chats = await fakeLmStudio(page, { content: () => JSON.stringify(report(c.first, c.last)) });
@@ -450,27 +365,6 @@ test.describe('spec 002: LM Studio', () => {
     // The 32K context was picked up on Analyze, so it read more than the 4K default allows.
     const sent = Number(body.messages[1].content.match(/· ([\d]+) messages/)[1]);
     expect(sent).toBeGreaterThan(await page.evaluate(() => buildTranscript(AiAnalysis.conversation().msgs, { budgetChars: lmstudioBudget(4096) }).count));
-  });
-
-  test('AC17: a reasoning model gets reasoning turned off, and its report renders', async ({ page }) => {
-    let c;
-    const chats = await fakeLmStudio(page, { thinking: true, content: () => JSON.stringify(report(c.first, c.last)) });
-    c = await openCard(page, 'lmstudio');
-    await page.fill('#aiLmstudioModel', 'qwen/qwen3-8b');
-    await page.click('#aiRun');
-    await expect(reportText(page)).toContainText('Mostly weekend plans and running jokes.');
-    expect(chats[0].body.reasoning_effort).toBe('none');
-  });
-
-  test('AC17: a reply with the JSON only in reasoning_content still renders', async ({ page }) => {
-    let c;
-    // An older server that doesn't say the model reasons, and a model that always does.
-    const chats = await fakeLmStudio(page, { thinking: 'always', content: () => JSON.stringify(report(c.first, c.last)) });
-    c = await openCard(page, 'lmstudio');
-    await page.fill('#aiLmstudioModel', 'google/gemma-3-4b'); // listed without reasoning
-    await page.click('#aiRun');
-    await expect(reportText(page)).toContainText('Mostly weekend plans and running jokes.');
-    expect('reasoning_effort' in chats[0].body).toBe(false);
   });
 
   test.describe('with a token required', () => {
@@ -493,21 +387,6 @@ test.describe('spec 002: LM Studio', () => {
       const stored = await page.evaluate(() => Object.keys(localStorage).map((k) => localStorage.getItem(k)).join('\n'));
       expect(stored).not.toContain('lm-secret');
       expect(stored).toContain('"lmstudioModel":"qwen/qwen3-8b"');
-    });
-  });
-
-  test.describe('when LM Studio is unreachable', () => {
-    test.use({ failOnConsoleError: false }); // the refused requests log network errors
-
-    test('AC15: the error says to start the server and enable CORS', async ({ page }) => {
-      await page.route(`${LMSTUDIO}/**`, (route) => route.abort('connectionrefused'));
-      await openCard(page, 'lmstudio');
-      await page.fill('#aiLmstudioModel', 'qwen/qwen3-8b');
-      await page.click('#aiRun');
-      const status = page.locator('#aiStatus');
-      await expect(status).toContainText(`Couldn't reach LM Studio at ${LMSTUDIO}`);
-      await expect(status).toContainText('Enable CORS');
-      await expect(page.locator('#aiRun')).toBeEnabled();
     });
   });
 });
