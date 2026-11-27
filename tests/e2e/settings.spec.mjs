@@ -1,5 +1,5 @@
 /* specs/015-settings-dialog.md in the browser. */
-import { test, expect, loadDemo, loadFiles, openTab, scrollTo, openSettings, closeSettings, openLinkPeople } from './fixtures.mjs';
+import { test, expect, loadDemo, loadFiles, openTab, scrollTo, openSettings, closeSettings, openLinkPeople, chartOption } from './fixtures.mjs';
 import { inApp } from './state.mjs';
 import { zippedExport } from '../helpers/instagram.mjs';
 import { smsBackup } from '../helpers/sms.mjs';
@@ -50,6 +50,7 @@ test.describe('spec 015 settings dialog', () => {
       await expect(page.locator('#replyNote')).toHaveText('How quickly each side answers (within 1 hour)');
       await expect(page.locator('#sessionNote')).toContainText('A conversation ends after 1 hour of quiet');
       await expect(page.locator('#habitsNote')).toContainText('Conversation starters (after 1h of quiet)');
+      await expect.poll(async () => (await chartOption(page, 'c-reply'))?.xAxis[0].data.at(-1)).toBe('15–60 min');
       await openTab(page, 'sec-glance');
       await expect(page.locator('.kpi', { hasText: 'reply time' })).toHaveAttribute('title', 'Median time to answer, within 1 hour');
     });
@@ -179,23 +180,21 @@ test.describe('spec 015 settings dialog', () => {
     });
   });
 
-  // One test per value, each with a small backup: three demo loads in one test ran past
-  // the 30 s test timeout on CI.
-  for (const saved of ['abc', '0', '7200000']) {
-    test(`AC7: an unusable saved gap (${saved}) falls back to 6 hours`, async ({ page }) => {
-      await page.addInitScript((v) => localStorage.setItem('yapa-convo-gap', v), saved);
-      await loadFiles(page, smsOnly());
-      expect(await inApp(page, (app) => app.convoGap)).toBe(6 * HOUR);
-      await openSettings(page);
-      await expect(page.locator('#gapSeg button.on')).toHaveText('6h');
-    });
-  }
+  // Which saved values are unusable is a unit test (store.test.mjs AC7); this one checks
+  // the dialog shows the fallback.
+  test('AC7: an unusable saved gap falls back to 6 hours', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('yapa-convo-gap', '7200000'));
+    await loadFiles(page, smsOnly());
+    expect(await inApp(page, (app) => app.convoGap)).toBe(6 * HOUR);
+    await openSettings(page);
+    await expect(page.locator('#gapSeg button.on')).toHaveText('6h');
+  });
 
   test('AC8: with storage unavailable, picking a gap still applies it', async ({ page }) => {
     await page.addInitScript(() => {
       for (const k of ['getItem', 'setItem', 'removeItem']) Storage.prototype[k] = () => { throw new Error('blocked'); };
     });
-    await loadDemo(page);
+    await loadFiles(page, smsOnly());
     await pickGap(page, '12h');
     expect(await inApp(page, (app) => app.convoGap)).toBe(12 * HOUR);
   });

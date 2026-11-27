@@ -3,7 +3,7 @@
  * In the page each one is serialized into a Web Worker; here it gets a fake `self` and
  * the same lib (messageLib without VADER, plus zipLib), and its messages are collected.
  */
-import { loadScripts, messageLib } from './load.mjs';
+import { loadApp, loadScripts, messageLib } from './load.mjs';
 
 const { zipLib } = loadScripts(['zip.js'], ['zipLib']);
 const { vaderLib } = loadScripts(['vendor/vader.js'], ['vaderLib']);
@@ -28,4 +28,19 @@ export function runParser(file, workerName, payload, { vader = false } = {}) {
     worker(self, lib);
     self.onmessage({ data: payload });
   });
+}
+
+/**
+ * How many of a parse's messages are yours once `name` is picked as you for app `s`: what
+ * the page does with them (createDataset: add, finish, rederive with that owner).
+ */
+export function sentAs(out, s, name) {
+  const { createDataset } = loadApp(['createDataset']);
+  const D = createDataset();
+  D.addBatch(out.msgs, []);
+  D.addContacts(out.contacts);
+  D.finish();
+  const owners = { 2: { name: '' }, 3: { name: '' }, 4: { name: '' }, 5: { name: '' }, 6: { name: '' }, [s]: { name } };
+  D.rederive({ owners, people: new Map() });
+  return D.msgs.filter((m) => m.s === s && m.o === 1).length;
 }

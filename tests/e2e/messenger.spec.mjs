@@ -32,12 +32,6 @@ test.describe('spec 009 Messenger', () => {
     expect(opts.some((o) => o.includes('Spam Bot') || o.includes('Crypto Deals')), 'requests and filtered chats are skipped').toBe(false);
   });
 
-  test('AC6: picking another name under You on Messenger swaps sent and received', async ({ page }) => {
-    await loadFiles(page, facebookExport());
-    await (await picker(page)).selectOption('Alex Rivera');
-    await expect.poll(async () => (await countsOf(page)).sent).toBe(3);
-  });
-
   test('AC2: opens a photo from another part of a split export', async ({ page }) => {
     await loadFiles(page, splitFacebookExport());
     await scrollTo(page, '#galleryCard');

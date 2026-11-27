@@ -224,6 +224,12 @@ const AiMood = {
     this.render();
   },
 
+  /** The Stop button. With AI on, part of the selection would be unscored: back to VADER. */
+  stopClicked() {
+    this.stop();
+    if (View.moodScorer === 'ai') this.setScorer('vader');
+  },
+
   /**
    * The dashboard is being drawn for `msgs` (the selection): new dates, filters or files.
    * A run in progress re-plans for it. With the AI scorer on, texts scored before are
@@ -333,11 +339,7 @@ const AiMood = {
       const action = e.target.dataset.aiMood;
       if (action === 'start') this.start();
       else if (action === 'cancel') this.cancel();
-      else if (action === 'stop') {
-        // With AI on, part of the selection would be unscored: back to VADER.
-        this.stop();
-        if (View.moodScorer === 'ai') this.setScorer('vader');
-      }
+      else if (action === 'stop') this.stopClicked();
     });
     this.render();
   },

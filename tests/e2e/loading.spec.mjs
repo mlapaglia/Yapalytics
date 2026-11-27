@@ -182,8 +182,12 @@ test.describe('spec 016 loading screen', () => {
       await record(page);
     });
 
-    test('AC9: every step ticks off with a time, starting with Preparing the demo', async ({ page }) => {
+    // One demo load, recorded, checked for each of these.
+    test('AC9, AC10, AC11, AC12, AC15: the steps, the text and the drawing of one demo load', async ({ page }) => {
       await loadDemoRecorded(page);
+      const rec = await recorded(page);
+
+      // AC9: every step ticks off with a time, starting with Preparing the demo.
       const snap = await inApp(page, (app) => app.loadSnapshot);
       expect(snap.steps.map((x) => x.id)).toEqual(['demo', 'check', 'read', 'merge', 'owners', 'draw']);
       for (const x of snap.steps) {
@@ -196,17 +200,12 @@ test.describe('spec 016 loading screen', () => {
       const takeout = page.locator('#loadFiles li', { hasText: 'takeout-' });
       await expect(takeout).toHaveCount(2);
       for (const row of await takeout.all()) await expect(row.locator('.load-file-state')).toContainText('from these 2 files');
-    });
 
-    test('AC10: the loading screen shows before the demo data exists', async ({ page }) => {
-      await loadDemoRecorded(page);
-      expect((await recorded(page)).demoMsgsAtStart).toBe(0);
-    });
+      // AC10: the loading screen shows before the demo data exists.
+      expect(rec.demoMsgsAtStart, 'AC10').toBe(0);
 
-    test('AC11: no message text or sender names on the loading screen', async ({ page }) => {
-      await loadDemoRecorded(page);
-      const { texts } = await recorded(page);
-      expect(texts.length).toBeGreaterThan(0);
+      // AC11: no message text or sender names on the loading screen.
+      expect(rec.texts.length).toBeGreaterThan(0);
       const { bodies, senders } = await inApp(page, (app) => {
         const convo = new Set([...app.contacts.values()].flatMap((c) => [c.name, c.title, c.addr]).filter(Boolean));
         return {
@@ -214,20 +213,21 @@ test.describe('spec 016 loading screen', () => {
           senders: [...new Set(app.msgs.map((m) => m.sn).filter((n) => n && !convo.has(n) && ![...convo].some((c) => c.includes(n))))],
         };
       });
-      const all = texts.join('\n');
-      expect(bodies.filter((b) => all.includes(b))).toEqual([]);
-      expect(senders.filter((n) => all.includes(n))).toEqual([]);
-    });
+      const all = rec.texts.join('\n');
+      expect(bodies.filter((b) => all.includes(b)), 'AC11 message text').toEqual([]);
+      expect(senders.filter((n) => all.includes(n)), 'AC11 sender names').toEqual([]);
 
-    test('AC12: the live region changes only when the step does', async ({ page }) => {
-      await loadDemoRecorded(page);
-      const { steps, stepWrites } = await recorded(page);
-      expect(stepWrites).toBe(steps.length);
-      for (let i = 1; i < steps.length; i++) expect(steps[i]).not.toBe(steps[i - 1]);
-      const jobs = (await inApp(page, (app) => app.loadSnapshot)).files.length;
+      // AC12: the live region changes only when the step does.
+      expect(rec.stepWrites, 'AC12').toBe(rec.steps.length);
+      for (let i = 1; i < rec.steps.length; i++) expect(rec.steps[i], 'AC12').not.toBe(rec.steps[i - 1]);
       // Files of different apps are read at once (R7): each changes the line as it starts and as it ends.
-      expect(steps.length).toBeLessThanOrEqual(6 + 2 * jobs);
+      expect(rec.steps.length, 'AC12').toBeLessThanOrEqual(6 + 2 * snap.files.length);
       await expect(page.locator('#loadStep')).toHaveAttribute('aria-live', 'polite');
+
+      // AC15: the screen draws at most once per animation frame.
+      expect(await inApp(page, (app) => app.loadDraws), 'AC15 draws').toBeGreaterThan(0);
+      expect(rec.framesWithDraws, 'AC15 frames that drew').toBeGreaterThan(0);
+      expect(rec.maxDrawsPerFrame, 'AC15 draws in any one frame').toBe(1);
     });
 
     test('AC13: with reduced motion nothing on the loading screen animates', async ({ page }) => {
@@ -247,14 +247,6 @@ test.describe('spec 016 loading screen', () => {
       });
     }
 
-    test('AC15: the screen draws at most once per animation frame', async ({ page }) => {
-      await loadDemoRecorded(page);
-      const draws = await inApp(page, (app) => app.loadDraws);
-      const rec = await recorded(page);
-      expect(draws).toBeGreaterThan(0);
-      expect(rec.framesWithDraws, 'frames that drew').toBeGreaterThan(0);
-      expect(rec.maxDrawsPerFrame, 'draws in any one frame').toBe(1);
-    });
   });
 
   test('AC16: SMS conversation names show while the file is still being read, 8 at most', async ({ page }) => {

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { runParser } from '../helpers/worker.mjs';
+import { runParser, sentAs } from '../helpers/worker.mjs';
 import {
   asFile, fullExport, resultJson, singleChatExport, singleGroupExport,
   zippedFullExport, zippedHtmlExport, zippedSingleChatExport,
@@ -67,6 +67,13 @@ describe('Telegram parser: full export', () => {
   it("can't link attachments from result.json alone", async () => {
     const out = await parse(resultJson(fullExport()));
     assert.ok(out.msgs.every((m) => !m.att));
+  });
+
+  it('picking a different owner swaps sent and received', async () => {
+    const out = await parse(resultJson(fullExport()));
+    assert.equal(sentAs(out, 4, 'Jamie Park'), 6); // Jamie Park sent 6 of the 14 kept messages
+    // Alex Rivera's kept messages: 3 in your chat (the empty one is skipped) and 1 in the group.
+    assert.equal(sentAs(out, 4, 'Alex Rivera'), 4);
   });
 });
 

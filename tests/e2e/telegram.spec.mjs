@@ -20,14 +20,6 @@ test.describe('Telegram', () => {
     expect(options.some((o) => /Tech News|BotFather/.test(o) && o.includes('Tech News')), 'channels are skipped').toBe(false);
   });
 
-  test('picking a different owner swaps sent and received', async ({ page }) => {
-    await loadFiles(page, resultJson(fullExport()));
-    const picker = await ownerPicker(page, 'Telegram');
-    await picker.selectOption('Alex Rivera');
-    // Alex Rivera's kept messages: 3 in your chat (the empty one is skipped) and 1 in the group.
-    await expect.poll(async () => (await telegramCounts(page)).sent).toBe(4);
-  });
-
   test('opens a photo from the zipped export in the viewer', async ({ page }) => {
     await loadFiles(page, zippedFullExport());
     await scrollTo(page, '#galleryCard');

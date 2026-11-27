@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { runParser } from '../helpers/worker.mjs';
+import { runParser, sentAs } from '../helpers/worker.mjs';
 import { asFile, igMessage, looseThread, splitExport, threadOf, zippedExport, zippedHtmlExport } from '../helpers/instagram.mjs';
 import { loadApp } from '../helpers/load.mjs';
 
@@ -72,6 +72,11 @@ describe('Instagram parser: zipped export', () => {
     assert.deepEqual(photos.att.map((a) => [a.n, a.z]), [['1801_1.jpg', 1]], 'the second photo is in neither part');
     assert.equal(photos.ph, 2);
     assert.equal(out.contacts[0].owner, 'Jamie Park');
+  });
+
+  it('picking a different owner swaps sent and received', async () => {
+    const out = await parse(zippedExport());
+    assert.equal(sentAs(out, 5, 'Alex Rivera'), 4);
   });
 });
 
