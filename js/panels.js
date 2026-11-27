@@ -13,7 +13,7 @@
  * those with `tab: null` (filter bar, scope line, which tabs exist). The rest are drawn
  * when their tab opens (R9).
  *
- * Topics: 'data' (a load, owners, links), 'selection' plus 'filter.contact',
+ * Topics: 'content' (word counts arrived, spec 028), 'data' (a load, owners, links), 'selection' plus 'filter.contact',
  * 'filter.source', 'filter.groups' and 'filter.dates', 'gap', 'appsGap', 'theme',
  * 'scorer', 'aiScores', and one per panel control ('gran', 'leader', 'calendar', 'otd',
  * 'phrase', 'vocab', 'wrapped', 'browser', 'compare').
@@ -64,9 +64,17 @@ const Panels = {
     for (const p of this.list) if (p.dirty && p.tab === id) this.draw(p);
   },
 
+  drawing: null, // the panel being drawn, so its counting placeholders are its own
+
   draw(p) {
     p.dirty = false;
-    p.render(this.ctx);
+    Counting.forget(p);
+    this.drawing = p;
+    try {
+      p.render(this.ctx);
+    } finally {
+      this.drawing = null;
+    }
   },
 
   /** What panels draw from. Everything comes from caches (Select), worked out on first use. */
@@ -75,7 +83,12 @@ const Panels = {
     base: () => Select.base(),
     msgs: () => Select.range(),
     agg: () => Select.agg(),
+    /** The selection's word counts, or null while they're being counted (spec 028). */
     content: () => Select.content(),
+    /** "Counting words… 40%" in chart `id` while `slot` counts (spec 028 R2). */
+    countingChart: (id, slot = 'content', on = {}) => Counting.chart(id, slot, on),
+    /** The same in element `id`, a box of text or a table. */
+    countingBox: (id, slot = 'content') => Counting.box(id, slot),
     cross: () => Select.cross(),
     /** "All conversations" is picked. */
     get all() { return View.filter.contact === 'all'; },

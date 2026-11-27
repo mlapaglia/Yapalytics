@@ -77,9 +77,44 @@ function cache() {
   };
 }
 
+/**
+ * A one-value cache filled by counting in slices (spec 028): `get(deps, makeSteps)` is
+ * the value for `deps`, or null while it's being counted in `slot` (the job is started,
+ * or left running). Asking for other deps drops the job under way. With `now` it's
+ * counted at once; when `size` (a number, or a function giving it) is under
+ * Background.syncBelow messages, at once if this turn's Background.syncMs allows.
+ */
+function slowCache(slot) {
+  let deps = null;
+  let value = null;
+  let ready = false;
+  let token = 0;
+  return {
+    get(next, makeSteps, { now = false, size = Infinity } = {}) {
+      if (!deps || next.length !== deps.length || next.some((d, i) => d !== deps[i])) {
+        deps = next;
+        value = null;
+        ready = false;
+        token++;
+      }
+      if (ready) return value;
+      const mine = token;
+      Background.run(slot, mine, makeSteps, (v) => {
+        if (mine !== token) return; // the selection changed meanwhile (R4)
+        value = v;
+        ready = true;
+        Background.changed();
+      });
+      if (now) Background.finish(slot, mine);
+      else if ((typeof size === 'function' ? size() : size) < Background.syncBelow) Background.finishInTurn(slot, mine);
+      return ready ? value : null;
+    },
+  };
+}
+
 const Select = {
   caches: {
-    base: cache(), range: cache(), calls: cache(), agg: cache(), content: cache(), cross: cache(), docFreq: cache(),
+    base: cache(), range: cache(), calls: cache(), agg: cache(), content: slowCache('content'), cross: cache(), docFreq: slowCache('docFreq'),
     periods: cache(), compareRange: cache(), compareAgg: cache(),
     rhythm: cache(), unusual: cache(), reactions: cache(),
   },
@@ -113,9 +148,14 @@ const Select = {
     return this.caches.agg.get([...this.rangeDeps(), View.convoGap], () => aggregateMessages(this.range(), View.convoGap));
   },
 
-  /** aggregateContent over range(), by the picked mood scorer. */
-  content() {
-    return this.caches.content.get([...this.rangeDeps(), View.moodScorer, AiMood.scoresVersion], () => aggregateContent(this.range(), View.moodScorer));
+  /**
+   * aggregateContent over range(), by the picked mood scorer, or null while it's being
+   * counted (spec 028). `now` counts it at once.
+   */
+  content({ now = false } = {}) {
+    this.termsFor(View.filter.contact);
+    const msgs = this.range();
+    return this.caches.content.get([...this.rangeDeps(), View.moodScorer, AiMood.scoresVersion], () => aggregateContentSteps(msgs, View.moodScorer), { now, size: msgs.length });
   },
 
   /** aggregateCrossApp over range() (spec 007). */
@@ -176,10 +216,15 @@ const Select = {
     ));
   },
 
-  /** How many conversations in the picked app use each word (for "What you talk about"). */
-  docFreq() {
+  /**
+   * How many conversations in the picked app use each word (for "What you talk about"),
+   * or null while it's being counted (spec 028). `now` counts it at once.
+   */
+  docFreq({ now = false } = {}) {
     const { source, groups } = View.filter;
-    return this.caches.docFreq.get([Data.version, source, groups], () => buildDocFreq(selectMessages(Data, { contact: 'all', source, groups })));
+    let msgs = null; // picked only when there's counting to do
+    const pick = () => (msgs = msgs || selectMessages(Data, { contact: 'all', source, groups }));
+    return this.caches.docFreq.get([Data.version, source, groups], () => buildDocFreqSteps(pick()), { now, size: () => pick().length });
   },
 
   /** One conversation's messages in the picked app and dates. */
@@ -191,19 +236,38 @@ const Select = {
   /**
    * conversationTerms of a conversation in the picked app and dates (spec 019): its words
    * and rare phrases, for inside jokes and "What you talk about". Kept per conversation
-   * until the data, app, groups or dates change.
+   * until the data, app, groups or dates change. Null while it's being counted, or while
+   * docFreq() is, which it needs first (spec 028). `now` counts both at once.
    */
-  terms(k) {
+  terms(k, { now = false } = {}) {
     const { source, groups, from, to } = View.filter;
     const deps = [Data.version, source, groups, from, to].join('\n');
     if (this.termsDeps !== deps) {
       this.termsDeps = deps;
       this.termsByKey = new Map();
+      Background.drop('terms:');
     }
+    this.termsFor(View.filter.contact);
+    const df = this.docFreq({ now });
+    if (!df) return null;
     let t = this.termsByKey.get(k);
-    if (!t) this.termsByKey.set(k, (t = conversationTerms(this.messagesOf(k), this.docFreq())));
-    return t;
+    if (!t) this.termsByKey.set(k, (t = slowCache(this.termsSlot(k))));
+    const msgs = this.messagesOf(k);
+    return t.get([df], () => conversationTermsSteps(msgs, df), { now, size: msgs.length });
   },
+  /**
+   * Terms still being counted were asked for while `contact` was picked: picking another
+   * conversation (or All) drops them, except the newly picked conversation's own, so they
+   * don't hold up the new selection's counting (R4). Terms already counted are kept.
+   */
+  termsFor(contact) {
+    if (this.termsContact === contact) return;
+    this.termsContact = contact;
+    Background.drop('terms:', this.termsSlot(contact));
+  },
+  /** The background slot counting terms(k). */
+  termsSlot: (k) => 'terms:' + k,
+  termsContact: null,
   termsDeps: null,
   termsByKey: new Map(),
 };

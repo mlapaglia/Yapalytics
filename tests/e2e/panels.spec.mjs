@@ -31,6 +31,18 @@ const countTokenizing = (page) => page.evaluate(() => {
     inside = true;
     try { return content(...args); } finally { inside = false; }
   };
+  // The dashboard counts in slices (spec 028): each slice is inside the pass too.
+  const steps = aggregateContentSteps;
+  window.aggregateContentSteps = function* (...args) {
+    const it = steps(...args);
+    for (;;) {
+      inside = true;
+      let r;
+      try { r = it.next(); } finally { inside = false; }
+      if (r.done) return r.value;
+      yield r.value;
+    }
+  };
 });
 const tokenized = (page) => page.evaluate(() => window.__tokenized);
 const tokenizedInContent = (page) => page.evaluate(() => window.__inContent);

@@ -4,6 +4,10 @@
 function renderVocab(ui = currentTheme()) {
   const C = Select.content();
   const box = $('#vocabWords');
+  if (!C) {
+    box.innerHTML = '';
+    return Counting.chart('c-vocab', 'content', { 'zr:click': pickVocabMonth });
+  }
   const months = [...C.vocab.keys()].sort((a, b) => a - b);
   if (!months.length) {
     Charts.set('c-vocab', emptyOption(ui, 'No messages with words in this selection'));
@@ -104,7 +108,9 @@ function pickVocabMonth(e, chart) {
   const pt = [e.offsetX, e.offsetY];
   if (!chart.containPixel('grid', pt)) return;
   const d = new Date(chart.convertFromPixel({ gridIndex: 0 }, pt)[0] + 15 * DAY_MS);
-  const keys = [...Select.content().vocab.keys()];
+  const C = Select.content();
+  if (!C) return;
+  const keys = [...C.vocab.keys()];
   const want = d.getFullYear() * 12 + d.getMonth();
   View.set({ vocabMo: keys.reduce((best, k) => (Math.abs(k - want) < Math.abs(best - want) ? k : best), keys[0]) });
 }
@@ -118,13 +124,15 @@ function trackPhrase(text) {
 Panels.register({
   id: 'words',
   tab: 'sec-content',
-  topics: ['data', 'selection', 'theme'],
+  topics: ['data', 'selection', 'theme', 'content'],
   render(ctx) {
     const { ui } = ctx;
     const A = ctx.agg();
     ctx.put('c-length', () => lengthOption(ui, A));
     ctx.put('c-length-trend', () => lengthTrendOption(ui, A));
-    const wd = wordsOption(ui, ctx.content());
+    const C = ctx.content();
+    if (!C) return ctx.countingChart('c-words');
+    const wd = wordsOption(ui, C);
     Charts.set('c-words', wd.empty ? emptyOption(ui, 'No words in this selection') : wd.opt);
   },
 });
@@ -132,11 +140,16 @@ Panels.register({
 Panels.register({
   id: 'distinct',
   tab: 'sec-content',
-  topics: ['data', 'selection', 'theme'],
+  topics: ['data', 'selection', 'theme', 'content'],
   render(ctx) {
     if (ctx.all) return;
-    const rows = ctx.none ? [] : distinctiveWords(ctx.msgs(), Select.docFreq(), 25, Select.terms(View.filter.contact));
-    $('#distinctNote').textContent = `Words that set ${labelFor(View.filter.contact)} apart from your other conversations`;
+    const k = View.filter.contact;
+    $('#distinctNote').textContent = `Words that set ${labelFor(k)} apart from your other conversations`;
+    const df = ctx.none ? null : Select.docFreq();
+    if (!ctx.none && !df) return ctx.countingChart('c-distinct', 'docFreq');
+    const terms = df && Select.terms(k);
+    if (df && !terms) return ctx.countingChart('c-distinct', Select.termsSlot(k));
+    const rows = ctx.none ? [] : distinctiveWords(ctx.msgs(), df, 25, terms);
     Charts.set('c-distinct', rows.length ? distinctiveOption(ctx.ui, rows) : emptyOption(ctx.ui, 'Not enough words to compare yet'));
   },
 });
@@ -190,16 +203,17 @@ function phrasePerson(P, id) {
 Panels.register({
   id: 'phrases',
   tab: 'sec-content',
-  topics: ['data', 'selection', 'theme'],
+  topics: ['data', 'selection', 'theme', 'content'],
   render(ctx) {
     const box = $('#phrasesBox');
     if (ctx.none) {
       box.innerHTML = html`<p class="muted">No messages in this selection</p>`;
       return;
     }
-    const C = ctx.content();
-    const sig = signaturePhrases(C.phrases);
     $('#phrasesNote').textContent = `Phrases each person uses far more than everyone else here, ${PHRASE_MIN_USES}+ times on ${PHRASE_MIN_DAYS}+ days. Click one to track it.`;
+    const C = ctx.content();
+    if (!C) return ctx.countingBox('phrasesBox');
+    const sig = signaturePhrases(C.phrases);
     box.innerHTML = html`<div class="people-cols">${sig.map(({ id, phrases }) => html`<div class="people-col ${id === 'You' ? 'sent' : 'recv'}">
       <div class="vocab-col-head"><b>${phrasePerson(C.phrases, id)}</b></div>
       <div class="vocab-chips">${phrases.length ? phrases.map((p) => trackChip(p.term, p.n)) : html`<span class="muted">Nothing stands out</span>`}</div>
@@ -216,15 +230,19 @@ const jokeFirst = (j) => `${j.first.o ? 'You' : momentSender(j.first)} · ${fmtD
 Panels.register({
   id: 'jokes',
   tab: 'sec-content',
-  topics: ['data', 'selection', 'theme'],
+  topics: ['data', 'selection', 'theme', 'content'],
   render(ctx) {
     const box = $('#jokesBox');
     const none = (text) => (box.innerHTML = html`<p class="muted">${text}</p>`);
     if (ctx.none) return none('No messages in this selection');
     const df = Select.docFreq();
     if (!ctx.all) {
-      const jokes = insideJokes(Select.terms(View.filter.contact), df);
       $('#jokesNote').textContent = `Words and phrases used ${JOKE_MIN_USES}+ times by both sides, on ${JOKE_MIN_DAYS}+ days over 2+ weeks, that hardly come up in your other conversations. Click one to track it.`;
+      if (!df) return ctx.countingBox('jokesBox', 'docFreq');
+      const k = View.filter.contact;
+      const terms = Select.terms(k);
+      if (!terms) return ctx.countingBox('jokesBox', Select.termsSlot(k));
+      const jokes = insideJokes(terms, df);
       if (!jokes.length) return none('No inside jokes here yet');
       box.innerHTML = html`<div class="table-wrap"><table class="vs jokes-table">
         <thead><tr><th scope="col">Joke</th><th scope="col">Uses</th><th scope="col">First</th><th scope="col">Last used</th></tr></thead>
@@ -233,13 +251,17 @@ Panels.register({
       return;
     }
     $('#jokesNote').textContent = 'The top inside joke of each of your busiest conversations: used by both sides over weeks, and hardly anywhere else. Click one to track it there.';
-    const rows = [...ctx.agg().byContact.entries()]
+    if (!df) return ctx.countingBox('jokesBox', 'docFreq');
+    const keys = [...ctx.agg().byContact.entries()]
       .map(([k, bc]) => ({ k, n: bc.n[0] + bc.n[1] }))
       .filter((x) => x.n >= 200)
       .sort((a, b) => b.n - a.n)
       .slice(0, 8)
-      .map(({ k }) => ({ k, joke: insideJokes(Select.terms(k), df, 1)[0] }))
-      .filter((x) => x.joke);
+      .map(({ k }) => k);
+    const terms = keys.map((k) => Select.terms(k)); // starts counting each, one after another
+    const wait = terms.findIndex((t) => !t);
+    if (wait >= 0) return ctx.countingBox('jokesBox', Select.termsSlot(keys[wait]));
+    const rows = keys.map((k, i) => ({ k, joke: insideJokes(terms[i], df, 1)[0] })).filter((x) => x.joke);
     if (!rows.length) return none('No inside jokes found in your busiest conversations');
     box.innerHTML = html`<div class="table-wrap"><table class="vs jokes-table">
       <thead><tr><th scope="col">Conversation</th><th scope="col">Joke</th><th scope="col">Uses</th><th scope="col">Last used</th></tr></thead>
@@ -254,12 +276,17 @@ Panels.register({
 Panels.register({
   id: 'corrections',
   tab: 'sec-content',
-  topics: ['data', 'selection', 'theme'],
+  topics: ['data', 'selection', 'theme', 'content'],
   render(ctx) {
     const { ui } = ctx;
     const C = ctx.content();
-    const t = C.correctionsTotal;
     const box = $('#correctedWords');
+    if (!C) {
+      box.innerHTML = '';
+      $('#correctionsNote').textContent = 'Messages like “*there” that fix a typo, per 1,000 messages';
+      return ctx.countingChart('c-corrections');
+    }
+    const t = C.correctionsTotal;
     if (ctx.none || !(t[0] + t[1])) {
       Charts.set('c-corrections', emptyOption(ui, ctx.none ? 'No messages in this selection' : 'No corrections (*word) in this selection'));
       box.innerHTML = '';
@@ -278,13 +305,17 @@ Panels.register({
 Panels.register({
   id: 'languages',
   tab: 'sec-content',
-  topics: ['data', 'selection', 'theme'],
+  topics: ['data', 'selection', 'theme', 'content'],
   render(ctx) {
     const { ui } = ctx;
     const C = ctx.content();
-    const L = languageSummary(C);
     const list = $('#langConvos');
     list.innerHTML = '';
+    if (!C) {
+      $('#languagesNote').textContent = 'Messages by the language they’re in';
+      return ctx.countingChart('c-languages');
+    }
+    const L = languageSummary(C);
     const unclear = C.langNone[0] + C.langNone[1];
     $('#languagesNote').textContent = L.total
       ? `Messages by the language they’re in, worked out in this browser from common words and alphabets. ${fmtNum(unclear)} were too short or unclear to tell.`
@@ -305,7 +336,7 @@ Panels.register({
 Panels.register({
   id: 'vocab',
   tab: 'sec-content',
-  topics: ['data', 'selection', 'vocab', 'theme'],
+  topics: ['data', 'selection', 'vocab', 'theme', 'content'],
   render: (ctx) => renderVocab(ctx.ui),
   init() {
     $('#vocabWords').addEventListener('click', (e) => {

@@ -639,6 +639,25 @@ function domainOf(host) {
 let swearFamilyOf = null; // messageLib().swearFamily, created on first use
 
 /**
+ * Counting generators (spec 028) yield how far they are, 0–1, every this many messages:
+ * a step is what a slice can't cut short, so it's kept to a few milliseconds even when
+ * messages are long (200 messages of 40 words: about 10 ms).
+ */
+const STEP_MSGS = 200;
+/** …and every this many words where they go over words already counted, after the messages. */
+const STEP_WORDS = 20000;
+/** How much of aggregateContentSteps' progress is the message loop: new words per month are the rest. */
+const CONTENT_LOOP = 0.9;
+
+/** Runs a counting generator to the end and returns its result. */
+function runSteps(steps) {
+  for (;;) {
+    const r = steps.next();
+    if (r.done) return r.value;
+  }
+}
+
+/**
  * Second pass for the text-heavy views: the most used words, emoji per month, shared
  * link domains, vocabulary (unique words) per month, mood (positive / negative share) per
  * month, scored by `scorer` ('vader' or 'ai'), and swearing; and (spec 019) signature
@@ -646,8 +665,10 @@ let swearFamilyOf = null; // messageLib().swearFamily, created on first use
  * dashboard's selection that splits message text into words (spec 014 R10): once per
  * message, and a message with a link once more without its links. `phrases: false`
  * skips counting phrases (Year in review shows none); `phraseCap` bounds each phrase counter.
+ * A generator (spec 028): it yields how far it is and returns the counts; aggregateContent
+ * runs it in one go.
  */
-function aggregateContent(msgs, scorer = 'vader', { phrases = true, phraseCap = PHRASE_CAP } = {}) {
+function* aggregateContentSteps(msgs, scorer = 'vader', { phrases = true, phraseCap = PHRASE_CAP } = {}) {
   const C = {
     wordFreq: new Map(), // word -> [r, s], filler words left out
     emojiMonths: new Map(), // mo -> Map(emoji -> n)
@@ -683,7 +704,9 @@ function aggregateContent(msgs, scorer = 'vader', { phrases = true, phraseCap = 
     C.phrases = { mode: pw.mode, people: pw.people, who: new Map(pw.people.map((id) => [id, phraseCounter(phraseCap)])), all: phraseCounter(phraseCap) };
   }
   const lastBy = new Map(); // conversation + sender -> { t, words } of their previous message (corrections)
+  let done = 0;
   for (const r of msgs) {
+    if (++done % STEP_MSGS === 0) yield CONTENT_LOOP * done / msgs.length;
     const o = r.o;
     if (r.e) {
       let em = C.emojiMonths.get(r.mo);
@@ -743,15 +766,22 @@ function aggregateContent(msgs, scorer = 'vader', { phrases = true, phraseCap = 
     }
     countPatterns(C, r, text, plain, who, lastBy);
   }
-  // Month by month, each side's words that it hadn't used earlier in the selection.
+  // Month by month, each side's words that it hadn't used earlier in the selection. A
+  // month's words for each side: over a long, wordy selection that's millions in all, so
+  // it yields too, as the last tenth of the progress.
   const seen = [new Set(), new Set()];
-  for (const mo of [...vocabCounts.keys()].sort((a, b) => a - b)) {
+  const months = [...vocabCounts.keys()].sort((a, b) => a - b);
+  let looked = 0;
+  for (let i = 0; i < months.length; i++) {
+    const mo = months[i];
     const counts = vocabCounts.get(mo);
     C.vocab.set(mo, [counts[0].size, counts[1].size]);
-    C.vocabNew.set(mo, counts.map((words, o) => {
+    const fresh = [];
+    for (let o = 0; o < 2; o++) {
       let n = 0;
       const top = [];
-      for (const [w, uses] of words) {
+      for (const [w, uses] of counts[o]) {
+        if (++looked % STEP_WORDS === 0) yield CONTENT_LOOP + (1 - CONTENT_LOOP) * i / months.length;
         if (seen[o].has(w)) continue;
         seen[o].add(w);
         if (w.length < 3 || STOPWORDS.has(w) || /\d/.test(w)) continue;
@@ -759,10 +789,16 @@ function aggregateContent(msgs, scorer = 'vader', { phrases = true, phraseCap = 
         top.push([w, uses]);
       }
       top.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
-      return { n, top: top.slice(0, VOCAB_NEW_TOP) };
-    }));
+      fresh.push({ n, top: top.slice(0, VOCAB_NEW_TOP) });
+    }
+    C.vocabNew.set(mo, fresh);
   }
   return C;
+}
+
+/** aggregateContent in one go: what aggregateContentSteps works out, without slices. */
+function aggregateContent(...args) {
+  return runSteps(aggregateContentSteps(...args));
 }
 
 /**
@@ -799,18 +835,38 @@ function aggregatePhrase(msgs, re) {
   return P;
 }
 
-/** Number of conversations each word appears in (document frequency for TF-IDF). */
-function buildDocFreq(msgs) {
+/** How much of buildDocFreqSteps' progress is the message loop: adding up takes about a tenth. */
+const DF_LOOP = 0.9;
+
+/** Number of conversations each word appears in (document frequency for TF-IDF), in slices (spec 028). */
+function* buildDocFreqSteps(msgs) {
   const perThread = new Map();
+  let done = 0;
   for (const r of msgs) {
+    if (++done % STEP_MSGS === 0) yield DF_LOOP * done / msgs.length;
     if (!r.b || r.f & T_REACTION) continue;
     let set = perThread.get(r.k);
     if (!set) perThread.set(r.k, (set = new Set()));
     for (const tk of tokensOf(r.b)) set.add(tk);
   }
+  // Adding up the conversations' words: millions of them over a big archive, so in slices
+  // too. Counting them inside the loop instead would take longer (a has() per word).
+  let total = 0;
+  for (const set of perThread.values()) total += set.size;
   const df = new Map();
-  for (const set of perThread.values()) for (const tk of set) df.set(tk, (df.get(tk) || 0) + 1);
+  let added = 0;
+  for (const set of perThread.values()) {
+    for (const tk of set) {
+      df.set(tk, (df.get(tk) || 0) + 1);
+      if (++added % STEP_WORDS === 0) yield DF_LOOP + (1 - DF_LOOP) * added / total;
+    }
+  }
   return { df, docs: perThread.size };
+}
+
+/** buildDocFreq in one go. */
+function buildDocFreq(msgs) {
+  return runSteps(buildDocFreqSteps(msgs));
 }
 
 /**

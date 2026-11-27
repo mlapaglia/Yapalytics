@@ -44,7 +44,7 @@ function VIEW() {
     get browserShown() { return Shown.msgs; },
     get browserMood() { return View.browser.mood; },
     get phraseMsgs() { return Select.range(); },
-    get vocab() { return Select.content(); },
+    get vocab() { return Select.content({ now: true }); },
     /** The Export dialog's files as it would save them (spec 026): [{ file, csv }]. */
     get exportFiles() { return ExportDlg.tables.map((t) => ({ file: t.file, csv: toCsv(t.header, t.rows) })); },
 
