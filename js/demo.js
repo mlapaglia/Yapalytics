@@ -7,6 +7,7 @@
  * through the real parsers.
  */
 function buildDemoFiles() {
+  demoPng.pool = new Map(); // so every build is the same
   let seed = 20240611;
   const rand = () => {
     seed = (seed * 1664525 + 1013904223) >>> 0;
@@ -809,8 +810,31 @@ function buildDemoChatZips(rand, pick, lines, startT, endT, stamp) {
   ];
 }
 
-/** A small landscape-ish PNG (sky gradient, sun, hills), uncompressed, for demo photo attachments. */
+/**
+ * A small landscape-ish PNG (sky gradient, sun, hills), uncompressed, for demo photo
+ * attachments. Drawing one pixel by pixel is slow and the demo has over a thousand, so
+ * after DEMO_PNG_POOL of a size it reuses one of those. It reads as many random numbers
+ * either way, so the rest of the demo doesn't change.
+ */
+const DEMO_PNG_POOL = 8;
 function demoPng(rand, w = 160, h = 120) {
+  const pools = (demoPng.pool ??= new Map());
+  const key = `${w}x${h}`;
+  if (!pools.has(key)) pools.set(key, []);
+  const pool = pools.get(key);
+  if (pool.length < DEMO_PNG_POOL) {
+    pool.push(drawDemoPng(rand, w, h));
+    return pool.at(-1);
+  }
+  const pick = rand();
+  for (let i = 1; i < DEMO_PNG_RANDS; i++) rand();
+  return pool[Math.floor(pick * pool.length)];
+}
+
+/** How many random numbers drawDemoPng reads. */
+const DEMO_PNG_RANDS = 6;
+
+function drawDemoPng(rand, w, h) {
   const hue = rand() * 360;
   const rgb = (hh, sat, light) => {
     const k = (n) => (n + hh / 30) % 12;
